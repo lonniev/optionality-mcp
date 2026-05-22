@@ -38,7 +38,7 @@ async def _get_api_key() -> str | None:
     should treat that as the "operator credentials not delivered" lifecycle
     state per CLAUDE.md, not as a hard error.
     """
-    from optionality_mcp.server import runtime
+    from server import runtime
 
     try:
         creds = await runtime.load_credentials(["anthropic_api_key"])

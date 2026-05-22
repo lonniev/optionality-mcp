@@ -14,7 +14,7 @@ import json
 import logging
 from typing import Any
 
-from optionality_mcp.persistence.neon import execute, fetch, fetchrow
+from db.neon import execute, fetch, fetchrow
 
 logger = logging.getLogger(__name__)
 

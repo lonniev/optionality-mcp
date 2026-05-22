@@ -2,14 +2,14 @@
 
 A FastMCP SSE server that backs the Optionality options-trading drill UI.
 All eleven domain tools are registered below; per-tool logic lives in
-``optionality_mcp.tools.*``. Auth, balance, pricing, and proof verification
+``tools.*``. Auth, balance, pricing, and proof verification
 come from the wheel via ``register_standard_tools`` and ``@runtime.paid_tool``.
 
 Run locally:
-    python -m optionality_mcp.server
+    python -m server
 
 Deploy on FastMCP Cloud:
-    See ../fastmcp.json at the repo root.
+    See ./fastmcp.json at the repo root.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-from optionality_mcp import __version__
+__version__ = "0.1.0"
 
 logger = logging.getLogger(__name__)
 
@@ -179,7 +179,7 @@ tool = register_standard_tools(
 
 
 # ---------------------------------------------------------------------------
-# Domain tools — thin shells that delegate to optionality_mcp.tools.*
+# Domain tools — thin shells that delegate to tools.*
 # ---------------------------------------------------------------------------
 
 
@@ -199,7 +199,7 @@ async def deal_scenario(
             web_search tool and costs more tokens.
         difficulty: ``apprentice`` | ``journeyman`` | ``adept`` | ``sovereign``.
     """
-    from optionality_mcp.tools.dealer import deal_scenario as _impl
+    from tools.dealer import deal_scenario as _impl
     return await _impl(npub=npub, mode=mode, difficulty=difficulty)
 
 
@@ -212,7 +212,7 @@ async def ask_tip(
     proof: str = "",
 ) -> dict[str, Any]:
     """Get a non-spoiler Socratic hint for an open journal entry."""
-    from optionality_mcp.tools.dealer import ask_tip as _impl
+    from tools.dealer import ask_tip as _impl
     return await _impl(npub=npub, entry_id=entry_id, question=question)
 
 
@@ -225,7 +225,7 @@ async def judge_trade(
     proof: str = "",
 ) -> dict[str, Any]:
     """Evaluate the trainee's trade. Persists evaluation, parses legs, recomputes leaderboard."""
-    from optionality_mcp.tools.judge import judge_trade as _impl
+    from tools.judge import judge_trade as _impl
     return await _impl(npub=npub, entry_id=entry_id, trade_proposal=trade_proposal)
 
 
@@ -238,7 +238,7 @@ async def save_draft(
     proof: str = "",
 ) -> dict[str, Any]:
     """Persist a draft trade proposal without running the judge."""
-    from optionality_mcp.tools.journal import save_draft as _impl
+    from tools.journal import save_draft as _impl
     return await _impl(npub=npub, entry_id=entry_id, trade_proposal=trade_proposal)
 
 
@@ -258,7 +258,7 @@ async def list_journal(
         limit:   1..200 (default 50).
         before:  Optional ISO timestamp for "load more" pagination.
     """
-    from optionality_mcp.tools.journal import list_journal as _impl
+    from tools.journal import list_journal as _impl
     return await _impl(npub=npub, status=status or None, limit=limit, before=before or None)
 
 
@@ -270,7 +270,7 @@ async def get_journal(
     proof: str = "",
 ) -> dict[str, Any]:
     """Return the full journal entry including scenario + evaluation."""
-    from optionality_mcp.tools.journal import get_journal as _impl
+    from tools.journal import get_journal as _impl
     return await _impl(npub=npub, entry_id=entry_id)
 
 
@@ -282,7 +282,7 @@ async def delete_journal(
     proof: str = "",
 ) -> dict[str, Any]:
     """Hard-delete a journal entry and recompute the leaderboard cache."""
-    from optionality_mcp.tools.journal import delete_journal as _impl
+    from tools.journal import delete_journal as _impl
     return await _impl(npub=npub, entry_id=entry_id)
 
 
@@ -303,7 +303,7 @@ async def get_leaderboard(
         scope:   Optional filter ``"mode=historical"`` or
             ``"difficulty=adept"`` to restrict to one bucket of the cache.
     """
-    from optionality_mcp.tools.leaderboard import get_leaderboard as _impl
+    from tools.leaderboard import get_leaderboard as _impl
     return await _impl(npub=npub, sort_by=sort_by, limit=limit, scope=scope)
 
 
@@ -315,7 +315,7 @@ async def get_my_rank(
     proof: str = "",
 ) -> dict[str, Any]:
     """The caller's leaderboard row plus their ordinal rank under ``sort_by``."""
-    from optionality_mcp.tools.leaderboard import get_my_rank as _impl
+    from tools.leaderboard import get_my_rank as _impl
     return await _impl(npub=npub, sort_by=sort_by)
 
 
@@ -327,7 +327,7 @@ async def set_display_name(
     proof: str = "",
 ) -> dict[str, Any]:
     """Set the caller's display name on the leaderboard. 1..32 chars, unicode allowed."""
-    from optionality_mcp.tools.leaderboard import set_display_name as _impl
+    from tools.leaderboard import set_display_name as _impl
     return await _impl(npub=npub, name=name)
 
 

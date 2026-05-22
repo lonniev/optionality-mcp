@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import logging
 
-from optionality_mcp.persistence.neon import execute, fetchrow
+from db.neon import execute, fetchrow
 
 logger = logging.getLogger(__name__)
 
