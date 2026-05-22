@@ -1,6 +1,6 @@
 {
   "name": "Optionality MCP",
-  "server": "mcp/src/optionality_mcp/server.py",
+  "server": "server.py",
   "deployment": {
     "env": {
       "TOLLBOOTH_NOSTR_OPERATOR_NSEC": "${TOLLBOOTH_NOSTR_OPERATOR_NSEC}"

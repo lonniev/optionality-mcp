@@ -44,7 +44,7 @@ async def _get_vault() -> Any:
     """Obtain the operator's NeonVault, lazy-initializing schema on first use."""
     global _vault, _schema_done
     if _vault is None:
-        from optionality_mcp.server import runtime
+        from server import runtime
 
         _vault = await runtime.vault()
         logger.info(

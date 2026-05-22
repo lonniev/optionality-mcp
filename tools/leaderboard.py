@@ -5,8 +5,8 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-from optionality_mcp.persistence import leaderboard as lb
-from optionality_mcp.persistence import patrons
+from db import leaderboard as lb
+from db import patrons
 
 logger = logging.getLogger(__name__)
 

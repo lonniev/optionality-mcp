@@ -6,9 +6,9 @@ import json
 import logging
 from typing import Any
 
-from optionality_mcp import prompts
-from optionality_mcp.claude import call_claude, extract_json, ClaudeError
-from optionality_mcp.persistence import journal, leaderboard
+import prompts
+from claude import call_claude, extract_json, ClaudeError
+from db import journal, leaderboard
 
 logger = logging.getLogger(__name__)
 
