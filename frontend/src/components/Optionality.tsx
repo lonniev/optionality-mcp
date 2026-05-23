@@ -12,7 +12,7 @@ import type {
   Stats,
   TabId,
 } from "../types";
-import { dealScenario, judgeTrade } from "../lib/mcp";
+import { dealScenario, judgeTrade, ProofRequiredError } from "../lib/mcp";
 import ModeIcon from "./ModeIcon";
 import DifficultyAvatar from "./DifficultyAvatar";
 import RiskProfileChart from "./RiskProfileChart";
@@ -397,7 +397,11 @@ const styles = `
 //  Main component
 // ============================================================
 
-export default function Optionality() {
+interface OptionalityProps {
+  onSignOut?: () => void;
+}
+
+export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [tab, setTab] = useState<TabId>("play");
   const [mode, setMode] = useState<Mode>("historical");
   const [difficulty, setDifficulty] = useState<Difficulty>("journeyman");
@@ -443,6 +447,10 @@ export default function Optionality() {
       setEntryId(result.entry_id);
       setTimeout(() => answerRef.current?.focus(), 100);
     } catch (e) {
+      if (e instanceof ProofRequiredError) {
+        onSignOut?.();
+        return;
+      }
       setError("Could not generate scenario. " + (e as Error).message);
     } finally {
       setLoading(false);
@@ -489,6 +497,10 @@ export default function Optionality() {
       setHistory(nextHistory);
       void persist(nextStats, nextHistory);
     } catch (e) {
+      if (e instanceof ProofRequiredError) {
+        onSignOut?.();
+        return;
+      }
       setError("Evaluation failed. " + (e as Error).message);
     } finally {
       setLoading(false);
@@ -517,6 +529,25 @@ export default function Optionality() {
           <div>Avg Score<b>{stats.avg}</b></div>
           <div>Best<b>{stats.best}</b></div>
           <div>Streak<b>{stats.streak}</b></div>
+          {onSignOut && (
+            <button
+              onClick={onSignOut}
+              title="Sign out — clear stored npub and proof token"
+              style={{
+                background: "transparent",
+                border: "none",
+                color: "var(--ink-faint)",
+                fontFamily: "inherit",
+                fontSize: 11,
+                letterSpacing: "0.15em",
+                textTransform: "uppercase",
+                cursor: "pointer",
+                alignSelf: "center",
+              }}
+            >
+              Sign Out
+            </button>
+          )}
         </div>
       </header>
 

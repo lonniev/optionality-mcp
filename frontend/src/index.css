@@ -1,6 +1,26 @@
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
+
 :root {
-  color-scheme: light dark;
+  --bg: #0d0b08;
+  --bg-soft: #14110c;
+  --panel: #1a1610;
+  --panel-edge: #2a2218;
+  --ink: #efe7d6;
+  --ink-soft: #b8ad96;
+  --ink-faint: #6e6553;
+  --amber: #d4a35b;
+  --amber-bright: #f0c272;
+  --amber-glow: rgba(212, 163, 91, 0.18);
+  --ivory: #c8b88a;
+  --ivory-bright: #e6d9b3;
+  --bronze: #a08862;
+  --rust: #b8553a;
+  --jade: #6b8e6b;
+  --crimson: #a4453a;
+  color-scheme: dark;
 }
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root {
   margin: 0;
@@ -9,13 +29,11 @@ html, body, #root {
 }
 
 body {
-  background: #fafafa;
-  color: #111;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-size: 14px;
+  line-height: 1.55;
 }
 
-@media (prefers-color-scheme: dark) {
-  body {
-    background: #111;
-    color: #eee;
-  }
-}
+.serif { font-family: 'Fraunces', Georgia, serif; }
