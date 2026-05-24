@@ -111,16 +111,27 @@ export class ProofRequiredError extends Error {
   }
 }
 
+/// Bootstrap / login tools — wheel signatures take only `patron_npub`, no
+/// `npub`/`proof` envelope. Listing them explicitly avoids the noise of
+/// injecting empty pre-login values that Pydantic rejects as unexpected
+/// keyword arguments.
+const BOOTSTRAP_TOOLS = new Set([
+  "request_npub_proof",
+  "receive_npub_proof",
+]);
+
 async function callTool<T = unknown>(
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<T> {
   const c = await getClient();
-  const merged: Record<string, unknown> = {
-    npub: getStoredNpub(),
-    proof: getStoredProof(),
-    ...args,
-  };
+  const merged: Record<string, unknown> = BOOTSTRAP_TOOLS.has(toolName)
+    ? { ...args }
+    : {
+        npub: getStoredNpub(),
+        proof: getStoredProof(),
+        ...args,
+      };
   let result: ToolResult;
   try {
     result = (await c.callTool(
