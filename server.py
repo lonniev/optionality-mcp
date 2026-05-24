@@ -113,10 +113,11 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         category="write",
         intent="Set the caller's display name on the leaderboard",
     ),
-    # ---- Transparency
+    # ---- Transparency — free so checking the usage view doesn't itself
+    # cost sats. Matches taxsort-mcp's pricing for the parallel tool.
     ToolIdentity(
         capability="get_api_usage_stats",
-        category="read",
+        category="free",
         intent="Aggregated Claude API token usage per model, scoped to the caller",
     ),
 ]
