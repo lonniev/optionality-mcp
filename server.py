@@ -242,6 +242,32 @@ async def _debug_pricing_seed() -> dict[str, Any]:
     out["4_reread_multipliers"] = repr(getattr(deal_tp2, "multipliers", "TP_MISSING"))
     out["4_to_dict"] = deal_tp2.to_dict() if deal_tp2 else None
 
+    # Step 4b: read the ACTIVE pricing model row raw, see if multipliers exist there
+    try:
+        vault = await runtime.vault()
+        from tollbooth.pricing_store import PricingModelStore
+        store = PricingModelStore(neon_vault=vault)
+        raw = await vault._execute(
+            f"SELECT id, name, model_json, is_active FROM {store._t('operator_pricing_models')} "
+            "WHERE operator = $1 AND is_active = true LIMIT 1",
+            [runtime.operator_npub()],
+        )
+        rows = raw.get("rows", [])
+        if not rows:
+            out["4b_no_active_row"] = True
+        else:
+            row = rows[0]
+            out["4b_active_id"] = row["id"]
+            out["4b_active_name"] = row["name"]
+            mj = row["model_json"]
+            out["4b_model_json_type"] = type(mj).__name__
+            parsed = json.loads(mj) if isinstance(mj, str) else mj
+            active_deal = next((t for t in parsed.get("tools", []) if t.get("tool_id") == deal_id), None)
+            out["4b_active_deal_entry"] = active_deal
+            out["4b_active_deal_has_multipliers"] = bool(active_deal and active_deal.get("multipliers"))
+    except Exception as e:
+        out["4b_error"] = f"{type(e).__name__}: {e}"
+
     # Step 5: write to Neon via the pricing store, read back, compare
     try:
         vault = await runtime.vault()
