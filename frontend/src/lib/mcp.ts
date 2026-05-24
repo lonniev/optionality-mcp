@@ -266,6 +266,33 @@ export async function getApiUsageStats(): Promise<import("../types").ApiUsageRes
   return callTool<import("../types").ApiUsageResult>("get_api_usage_stats", {});
 }
 
+export interface CheckPriceResult {
+  success: boolean;
+  tool_id?: string;
+  tool_name?: string;
+  base_cost?: number;
+  effective_cost?: number;
+  cost?: number;       // alternate field name some wheel versions return
+  error?: string;
+  error_code?: string;
+}
+
+/// Preview the effective cost of a tool call before invoking it. The
+/// wheel computes ``base × multipliers`` server-side; the FE reads the
+/// authoritative number here and displays it on the setup screen.
+/// `toolCapability` is the bare capability ("deal_scenario") which the
+/// wheel resolves to a tool_id internally. `toolKwargs` is a JSON-able
+/// object — for deal_scenario, ``{mode, difficulty}``.
+export async function checkPrice(
+  toolCapability: string,
+  toolKwargs: Record<string, unknown>,
+): Promise<CheckPriceResult> {
+  return callTool<CheckPriceResult>("check_price", {
+    tool_id: toolCapability,
+    tool_kwargs: JSON.stringify(toolKwargs),
+  });
+}
+
 // ─── Login / auth — free tools, no proof required ─────────────────────────
 
 export interface ServiceStatus {

@@ -20,6 +20,7 @@ import type {
 } from "../types";
 import {
   askTip,
+  checkPrice,
   dealScenario,
   getApiUsageStats,
   getLeaderboard,
@@ -507,6 +508,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Profile/Usage state (TaxSort-style transparency view).
   const [apiUsage, setApiUsage] = useState<ApiUsageResult | null>(null);
   const [apiUsageLoading, setApiUsageLoading] = useState<boolean>(false);
+  // Effective price preview for the current (mode, difficulty) selection.
+  // null = not yet looked up; -1 = lookup failed (e.g. pricing model has no
+  // multipliers configured yet). Positive integers are the wheel's authoritative
+  // sats cost. Recomputed when either selector changes.
+  const [dealPrice, setDealPrice] = useState<number | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -724,6 +730,27 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
+  // Preview the deal_scenario price for the current (mode, difficulty)
+  // pair. Re-runs when either selection changes. Skipped while a
+  // scenario is active (the patron has already paid for that one).
+  useEffect(() => {
+    if (scenario || loading) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const r = await checkPrice("deal_scenario", { mode, difficulty });
+        if (cancelled) return;
+        const eff = r.effective_cost ?? r.cost
+          ?? ((r as unknown as { effective_cost_api_sats?: number }).effective_cost_api_sats)
+          ?? ((r as unknown as { base_cost_api_sats?: number }).base_cost_api_sats);
+        setDealPrice(typeof eff === "number" ? eff : -1);
+      } catch {
+        if (!cancelled) setDealPrice(-1);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [mode, difficulty, scenario, loading]);
+
   return (
     <div className="opt-root">
       <style>{styles}</style>
@@ -831,8 +858,37 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     </button>
                   ))}
                 </div>
-                <div className="actions">
+                <div className="actions" style={{ alignItems: "center" }}>
                   <button className="btn" onClick={generateScenario}>Deal the Scenario</button>
+                  {dealPrice !== null && dealPrice > 0 && (
+                    <div style={{
+                      fontSize: 12,
+                      color: "var(--ink-soft)",
+                      letterSpacing: "0.1em",
+                      textTransform: "uppercase",
+                    }}>
+                      Toll
+                      <span style={{
+                        marginLeft: 8,
+                        fontFamily: "Fraunces, serif",
+                        fontSize: 18,
+                        color: "var(--amber-bright)",
+                        fontWeight: 500,
+                        letterSpacing: 0,
+                        textTransform: "none",
+                      }}>
+                        {dealPrice} sat{dealPrice === 1 ? "" : "s"}
+                      </span>
+                      <span style={{ marginLeft: 6, color: "var(--ink-faint)", fontSize: 10 }}>
+                        ({difficulty} × {MODES.find((m) => m.id === mode)?.label.toLowerCase()})
+                      </span>
+                    </div>
+                  )}
+                  {dealPrice === -1 && (
+                    <div style={{ fontSize: 11, color: "var(--ink-faint)", fontStyle: "italic" }}>
+                      Pricing model has no multipliers yet — run reset_pricing_model on this operator.
+                    </div>
+                  )}
                 </div>
                 {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
               </div>
