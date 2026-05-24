@@ -370,7 +370,7 @@ const styles = `
   textarea:focus { outline: none; border-color: var(--amber); }
   textarea::placeholder { color: var(--ink-faint); font-style: italic;}
 
-  .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap;}
+  .actions { display: flex; gap: 10px; margin-top: 16px; flex-wrap: wrap; align-items: center; justify-content: flex-end;}
 
   .score-banner {
     display: flex; align-items: center; gap: 20px;
@@ -933,8 +933,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   Optional. When set, the dealer sizes the scenario&apos;s account and constraints so a well-chosen structure fits your envelope. The judge will score down trades whose worst case exceeds it.
                 </div>
 
-                <div className="actions" style={{ alignItems: "center" }}>
-                  <button className="btn" onClick={generateScenario}>Deal the Scenario</button>
+                <div className="actions">
                   {dealPrice !== null && dealPrice > 0 && (
                     <div style={{
                       fontSize: 12,
@@ -964,6 +963,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       Pricing model has no multipliers yet — run reset_pricing_model on this operator.
                     </div>
                   )}
+                  <button className="btn" onClick={generateScenario}>Deal the Scenario</button>
                 </div>
                 {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
               </div>
@@ -1043,7 +1043,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           placeholder="e.g. Sell the 30-day 95/90 put spread for 1.20 credit, sized to risk 0.5% of NAV. The Fed's hawkish hold puts a floor under the dollar but the equity is bid on insider buying; collecting premium below the 200d feels asymmetric…"
                         />
                         <div className="actions">
-                          <button className="btn" onClick={submitTrade} disabled={loading}>Submit Trade</button>
+                          <button className="btn btn-ghost" onClick={nextRound}>Discard, deal another</button>
                           <button
                             className="btn btn-ghost"
                             onClick={handleSaveDraft}
@@ -1052,7 +1052,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           >
                             {savingDraft ? "Saving…" : "Save Draft"}
                           </button>
-                          <button className="btn btn-ghost" onClick={nextRound}>Discard, deal another</button>
+                          <button className="btn" onClick={submitTrade} disabled={loading}>Submit Trade</button>
                         </div>
                         {draftSavedAt && !savingDraft && (
                           <div style={{ fontSize: 11, color: "var(--jade)", marginTop: 8, letterSpacing: "0.1em" }}>
@@ -1150,8 +1150,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <div className="deeper">{evaluation.deeper_context}</div>
 
                 <div className="actions" style={{ marginTop: 22 }}>
-                  <button className="btn" onClick={() => { nextRound(); void generateScenario(); }}>Deal Another</button>
                   <button className="btn btn-ghost" onClick={nextRound}>Back to setup</button>
+                  <button className="btn" onClick={() => { nextRound(); void generateScenario(); }}>Deal Another</button>
                 </div>
               </div>
             )}
