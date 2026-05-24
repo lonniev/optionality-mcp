@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 
 import type {
+  ActiveSession,
   Difficulty,
   DifficultyDef,
   Evaluation,
@@ -27,6 +28,9 @@ import FactsLedger from "./FactsLedger";
 // ============================================================
 
 const STORAGE_KEY = "optionality:state:v1";
+/// Separate from stats/history. The patron paid for this scenario; it
+/// must survive a page reload until they explicitly finish the round.
+const SESSION_KEY = "optionality:session:v1";
 
 const DIFFICULTIES: DifficultyDef[] = [
   {
@@ -106,6 +110,32 @@ async function saveState(state: PersistedState): Promise<void> {
   }
 }
 
+function loadSession(): ActiveSession | null {
+  try {
+    const raw = window.localStorage.getItem(SESSION_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as ActiveSession;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(s: ActiveSession): void {
+  try {
+    window.localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+  } catch (e) {
+    console.error("session save failed", e);
+  }
+}
+
+function clearSession(): void {
+  try {
+    window.localStorage.removeItem(SESSION_KEY);
+  } catch {
+    /* noop */
+  }
+}
+
 const styles = `
   @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
@@ -140,12 +170,16 @@ const styles = `
     background-image:
       radial-gradient(ellipse at top left, rgba(212,163,91,0.05), transparent 50%),
       radial-gradient(ellipse at bottom right, rgba(164,69,58,0.04), transparent 50%);
-    padding: 32px 24px 80px;
+    padding: 24px clamp(16px, 3vw, 40px) 80px;
   }
   .serif { font-family: 'Fraunces', Georgia, serif; }
+  /* Container widths scale with viewport. iPad landscape (~1180-1366px)
+     gets a wide layout where the scenario can read in two columns
+     without horizontal scroll. Phone widths fall back to centered
+     single column at the original 980px. */
   .header {
-    max-width: 980px;
-    margin: 0 auto 32px;
+    max-width: min(1400px, 100%);
+    margin: 0 auto 24px;
     border-bottom: 1px solid var(--panel-edge);
     padding-bottom: 20px;
     display: flex; align-items: baseline; justify-content: space-between;
@@ -178,7 +212,22 @@ const styles = `
   }
   .stats b { display:block; font-family:'Fraunces',serif; font-size:22px; color: var(--amber-bright); letter-spacing:0; text-transform:none; margin-top:2px; font-weight:500;}
 
-  .container { max-width: 980px; margin: 0 auto; }
+  .container { max-width: min(1400px, 100%); margin: 0 auto; }
+
+  /* Two-column layout for the scenario card on landscape iPad / desktop.
+     Left column: macro/asset/catalyst/levels/constraints/sources.
+     Right column: the question + answer textarea + actions.
+     Falls back to single column under 900px (phones, portrait iPad mini). */
+  .scenario-grid {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 22px 32px;
+  }
+  @media (min-width: 900px) {
+    .scenario-grid { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
+    .scenario-grid > .scenario-prompt { padding-left: 8px; border-left: 1px solid var(--panel-edge); }
+  }
+  .scenario-prompt textarea { min-height: 220px; }
 
   .panel {
     background: var(--panel);
@@ -335,7 +384,7 @@ const styles = `
 
   .error { color: var(--crimson); background: rgba(164,69,58,0.08); border-left: 2px solid var(--crimson); padding: 10px 14px; font-size: 12px; }
 
-  .tab-bar { display:flex; gap:0; border-bottom:1px solid var(--panel-edge); margin-bottom: 20px; max-width: 980px; margin-left:auto; margin-right:auto;}
+  .tab-bar { display:flex; gap:0; border-bottom:1px solid var(--panel-edge); margin-bottom: 20px; max-width: min(1400px, 100%); margin-left:auto; margin-right:auto;}
   .tab { padding: 10px 16px; cursor:pointer; font-size:11px; letter-spacing:0.2em; text-transform:uppercase; color: var(--ink-faint); border-bottom:2px solid transparent; background:none; border-top:none; border-left:none; border-right:none; font-family:inherit;}
   .tab:hover { color: var(--ink-soft);}
   .tab.active { color: var(--amber-bright); border-bottom-color: var(--amber); }
@@ -423,8 +472,35 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         setStats(s.stats || { played: 0, avg: 0, best: 0, streak: 0 });
         setHistory(s.history || []);
       }
+      // Hydrate active session — the patron paid for this scenario; a
+      // page reload must put them back on the same board with their
+      // draft answer / evaluation intact.
+      const sess = loadSession();
+      if (sess && sess.scenario) {
+        setScenario(sess.scenario);
+        setEntryId(sess.entryId);
+        setAnswer(sess.answer || "");
+        if (sess.evaluation) setEvaluation(sess.evaluation);
+        if (sess.mode) setMode(sess.mode);
+        if (sess.difficulty) setDifficulty(sess.difficulty);
+      }
     })();
   }, []);
+
+  // Persist active session whenever the play state changes. The clear
+  // path is `nextRound()`, which removes the row; otherwise this keeps
+  // the patron's paid-for scenario alive across reloads.
+  useEffect(() => {
+    if (!scenario || !entryId) return;
+    saveSession({
+      scenario,
+      entryId,
+      answer,
+      mode,
+      difficulty,
+      evaluation: evaluation ?? undefined,
+    });
+  }, [scenario, entryId, answer, evaluation, mode, difficulty]);
 
   async function persist(nextStats: Stats, nextHistory: JournalEntry[]): Promise<void> {
     await saveState({ stats: nextStats, history: nextHistory });
@@ -513,6 +589,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     setEntryId(null);
     setAnswer("");
     setError("");
+    // User explicitly moved past this card — drop the paid-for session
+    // so the next reload lands on the setup screen, not on this stale
+    // board. (Pre-judge "Discard, deal another" also flows through here.)
+    clearSession();
   }
 
   return (
@@ -641,64 +721,74 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             {scenario && !loading && (
               <div className="panel">
                 <span className="panel-label">{scenario.asset?.ticker} · {MODES.find((m) => m.id === (scenario.mode || mode))?.label} · {difficulty}</span>
-                <div className="scenario-meta">{scenario.date_context}</div>
-                <h2 className="serif">{scenario.asset?.name}</h2>
-                <div className="scenario-quote">{scenario.macro_backdrop}</div>
 
-                <div className="data-row">
-                  <div className="data-cell"><label>Spot</label><b>${scenario.asset?.spot}</b></div>
-                  <div className="data-cell"><label>IV 30d</label><b>{scenario.asset?.iv_30d}%</b></div>
-                  <div className="data-cell"><label>IV Rank</label><b>{scenario.asset?.iv_rank}</b></div>
-                </div>
-                {scenario.asset?.skew_note && (
-                  <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 12 }}>
-                    <span style={{ color: "var(--ink-faint)", textTransform: "uppercase", letterSpacing: "0.15em", fontSize: 10 }}>Skew · </span>
-                    {scenario.asset.skew_note}
-                  </div>
-                )}
+                <div className="scenario-grid">
+                  {/* LEFT — the facts */}
+                  <div>
+                    <div className="scenario-meta">{scenario.date_context}</div>
+                    <h2 className="serif">{scenario.asset?.name}</h2>
+                    <div className="scenario-quote">{scenario.macro_backdrop}</div>
 
-                <h3 className="serif">Catalyst</h3>
-                <div style={{ color: "var(--ink-soft)", fontSize: 13 }}>{scenario.catalyst}</div>
-
-                <h3 className="serif">Key Levels</h3>
-                <div style={{ color: "var(--ink-soft)", fontSize: 13 }}>{scenario.key_levels}</div>
-
-                <h3 className="serif">Constraints</h3>
-                <div style={{ color: "var(--ink-soft)", fontSize: 13 }}>{scenario.constraints}</div>
-
-                {Array.isArray(scenario.sources) && scenario.sources.length > 0 && (
-                  <>
-                    <h3 className="serif">Sources</h3>
-                    <ul style={{ listStyle: "none", padding: 0, fontSize: 12, color: "var(--ink-soft)" }}>
-                      {scenario.sources.map((s, i) => (
-                        <li key={i} style={{ padding: "3px 0 3px 14px", position: "relative" }}>
-                          <span style={{ position: "absolute", left: 0, color: "var(--amber)" }}>·</span>
-                          {String(s).startsWith("http") ? (
-                            <a href={s} target="_blank" rel="noreferrer" style={{ color: "var(--amber)", textDecoration: "none", borderBottom: "1px solid var(--panel-edge)" }}>{s}</a>
-                          ) : s}
-                        </li>
-                      ))}
-                    </ul>
-                  </>
-                )}
-
-                <div className="question">→ {scenario.the_question}</div>
-
-                {!evaluation && (
-                  <>
-                    <textarea
-                      ref={answerRef}
-                      value={answer}
-                      onChange={(e) => setAnswer(e.target.value)}
-                      placeholder="e.g. Sell the 30-day 95/90 put spread for 1.20 credit, sized to risk 0.5% of NAV. The Fed's hawkish hold puts a floor under the dollar but the equity is bid on insider buying; collecting premium below the 200d feels asymmetric…"
-                    />
-                    <div className="actions">
-                      <button className="btn" onClick={submitTrade} disabled={loading}>Submit Trade</button>
-                      <button className="btn btn-ghost" onClick={nextRound}>Discard, deal another</button>
+                    <div className="data-row">
+                      <div className="data-cell"><label>Spot</label><b>${scenario.asset?.spot}</b></div>
+                      <div className="data-cell"><label>IV 30d</label><b>{scenario.asset?.iv_30d}%</b></div>
+                      <div className="data-cell"><label>IV Rank</label><b>{scenario.asset?.iv_rank}</b></div>
                     </div>
-                    {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
-                  </>
-                )}
+                    {scenario.asset?.skew_note && (
+                      <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 12 }}>
+                        <span style={{ color: "var(--ink-faint)", textTransform: "uppercase", letterSpacing: "0.15em", fontSize: 10 }}>Skew · </span>
+                        {scenario.asset.skew_note}
+                      </div>
+                    )}
+
+                    <h3 className="serif">Catalyst</h3>
+                    <div style={{ color: "var(--ink-soft)", fontSize: 13 }}>{scenario.catalyst}</div>
+
+                    <h3 className="serif">Key Levels</h3>
+                    <div style={{ color: "var(--ink-soft)", fontSize: 13 }}>{scenario.key_levels}</div>
+
+                    <h3 className="serif">Constraints</h3>
+                    <div style={{ color: "var(--ink-soft)", fontSize: 13 }}>{scenario.constraints}</div>
+
+                    {Array.isArray(scenario.sources) && scenario.sources.length > 0 && (
+                      <>
+                        <h3 className="serif">Sources</h3>
+                        <ul style={{ listStyle: "none", padding: 0, fontSize: 12, color: "var(--ink-soft)" }}>
+                          {scenario.sources.map((s, i) => (
+                            <li key={i} style={{ padding: "3px 0 3px 14px", position: "relative" }}>
+                              <span style={{ position: "absolute", left: 0, color: "var(--amber)" }}>·</span>
+                              {String(s).startsWith("http") ? (
+                                <a href={s} target="_blank" rel="noreferrer" style={{ color: "var(--amber)", textDecoration: "none", borderBottom: "1px solid var(--panel-edge)" }}>{s}</a>
+                              ) : s}
+                            </li>
+                          ))}
+                        </ul>
+                      </>
+                    )}
+                  </div>
+
+                  {/* RIGHT — the question + answer (or empty if already judged
+                      so the evaluation panel below takes over) */}
+                  <div className="scenario-prompt">
+                    <div className="question">→ {scenario.the_question}</div>
+
+                    {!evaluation && (
+                      <>
+                        <textarea
+                          ref={answerRef}
+                          value={answer}
+                          onChange={(e) => setAnswer(e.target.value)}
+                          placeholder="e.g. Sell the 30-day 95/90 put spread for 1.20 credit, sized to risk 0.5% of NAV. The Fed's hawkish hold puts a floor under the dollar but the equity is bid on insider buying; collecting premium below the 200d feels asymmetric…"
+                        />
+                        <div className="actions">
+                          <button className="btn" onClick={submitTrade} disabled={loading}>Submit Trade</button>
+                          <button className="btn btn-ghost" onClick={nextRound}>Discard, deal another</button>
+                        </div>
+                        {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
+                      </>
+                    )}
+                  </div>
+                </div>
               </div>
             )}
 

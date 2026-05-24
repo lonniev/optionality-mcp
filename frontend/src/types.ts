@@ -86,6 +86,21 @@ export interface PersistedState {
   history?: JournalEntry[];
 }
 
+/// Active play session — the scenario a patron has paid for and is
+/// currently working through. Persisted separately from stats/history
+/// so a page reload restores the exact game board (scenario, draft
+/// answer, evaluation if already judged) without losing the patron's
+/// purchase. Cleared on `nextRound()` when the user explicitly moves
+/// past the current card.
+export interface ActiveSession {
+  scenario: Scenario;
+  entryId: string;
+  answer: string;
+  mode: Mode;
+  difficulty: Difficulty;
+  evaluation?: Evaluation;
+}
+
 export interface DifficultyDef {
   id: Difficulty;
   label: string;
