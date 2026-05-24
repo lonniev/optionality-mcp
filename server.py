@@ -208,6 +208,32 @@ tool = register_standard_tools(
 
 
 # ---------------------------------------------------------------------------
+# Temporary diagnostic — remove after multiplier seed bug is resolved
+# ---------------------------------------------------------------------------
+
+
+@tool
+async def _debug_pricing_seed() -> dict[str, Any]:
+    """One-shot diagnostic: dump the in-memory deal_scenario hints + seed JSON."""
+    import json
+    from tollbooth.runtime import _build_initial_pricing_model
+    deal_id = capability_uuid("deal_scenario")
+    identity = runtime._tool_registry.get(deal_id)
+    seed = _build_initial_pricing_model(runtime, "optionality-mcp")
+    seed_deal = next(
+        (t for t in json.loads(seed)["tools"] if t["tool_id"] == deal_id),
+        None,
+    )
+    return {
+        "registry_has_deal": identity is not None,
+        "identity_class": type(identity).__name__ if identity else None,
+        "pricing_hint_value": getattr(identity, "pricing_hint_value", None),
+        "pricing_hint_multipliers_repr": repr(getattr(identity, "pricing_hint_multipliers", "ATTR_MISSING")),
+        "seed_deal_entry": seed_deal,
+    }
+
+
+# ---------------------------------------------------------------------------
 # Domain tools — thin shells that delegate to tools.*
 # ---------------------------------------------------------------------------
 
