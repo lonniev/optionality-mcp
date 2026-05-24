@@ -38,6 +38,10 @@ export interface Scenario {
   relevant_facts?: string[];
   red_herrings?: string[];
   hidden_considerations?: string[];
+  // Echoed back by the dealer when the patron set a per-trade risk
+  // envelope. Drives the "fits the envelope?" check in the judge's
+  // risk_reward dimension. Absent on scenarios dealt without a budget.
+  max_loss_usd?: number;
 }
 
 export interface DimensionResult {
@@ -98,6 +102,7 @@ export interface ActiveSession {
   answer: string;
   mode: Mode;
   difficulty: Difficulty;
+  maxLossUsd?: number;
   evaluation?: Evaluation;
   tips?: TipExchange[];
   draftSavedAt?: number;

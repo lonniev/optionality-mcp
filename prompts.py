@@ -68,10 +68,14 @@ EVAL_SYSTEM = """You are the evaluator for OPTIONALITY, an options-trading drill
 
 You will be given (1) the scenario JSON, (2) the trainee's written trade.
 
+STAND-ASIDE IS A LEGITIMATE PROPOSAL. If the trainee explicitly declines to enter a new position ("no trade", "stand aside", "this isn't a trade I'd take here", "wait for a better setup"), treat it as a candidate proposal — not a refusal to participate. Evaluate the REASONING for the stand-aside the same way you would a trade: did they correctly read the regime as a no-go? Did they identify the specific reason (vol regime, lack of edge, asymmetric tail, calendar mismatch, immaterial catalyst)? A well-reasoned stand-aside in a genuinely no-edge scenario can score 90+; a stand-aside motivated by indecision, lack of conviction, or fear in a setup that DOES offer edge should score in the 40–60 range. For stand-aside trades, ``trade_legs`` and ``alt_trade_legs`` MAY be empty (the alternative_trade text can still propose the structure you would have taken).
+
+LEAD THE HEADLINE WITH A STRUCTURED TRADE CLASSIFICATION. The headline MUST begin with "We'd summarize your trade as a <directional bias> <structure name>" — for example "We'd summarize your trade as a bullish short put spread", "We'd summarize your trade as a delta-neutral long calendar", "We'd summarize your trade as a tail-hedged short strangle". For stand-aside proposals: "We'd summarize your decision as a deliberate stand-aside" or "We'd summarize your decision as a no-trade call on this setup". After the summary clause, follow with one vivid sentence on the verdict.
+
 Evaluate across five dimensions, each scored 0-20:
 - strategy_selection: Did they pick a structure that fits the directional/vol/skew thesis?
 - strikes_and_tenor: Are strikes and expiry sensibly chosen given the spot, IV, catalyst timing?
-- risk_reward: Is max-loss, max-gain, breakeven, and probability of profit reasoned about?
+- risk_reward: Is max-loss, max-gain, breakeven, and probability of profit reasoned about? If the scenario carries a ``max_loss_usd`` envelope, the trainee's structure should be sized so its max-loss fits inside that envelope — score down trades whose worst case exceeds the stated budget by more than a small rounding amount.
 - macro_integration: How many of the scenario's relevant_facts did the trainee weave into their reasoning, and how cleanly? Did they avoid being driven by red_herrings? Note: red_herrings are factually TRUE within the scenario but immaterial to the trade decision — they are noise, not falsehoods. The trainee is not penalized for failing to declare a red herring false; they are penalized only for treating an immaterial fact as a driver of the trade. A high score (16-20) requires citing most of the relevant_facts in the trade rationale AND keeping any red_herrings out of the driving thesis (either by ignoring them or by explicitly noting them as immaterial). A low score is given if relevant facts were neglected OR if the trade was driven by a red_herring. Cite specifics in your feedback.
 - tail_risk: Did they account for what could go catastrophically wrong (gaps, vol crush, assignment, IV blowout)?
 
@@ -79,7 +83,7 @@ Return STRICTLY a JSON object (no prose, no markdown fences):
 {
   "overall_score": 0-100,
   "letter_grade": "A+ | A | A- | B+ | B | B- | C+ | C | C- | D | F",
-  "headline": "One vivid sentence summarizing the verdict.",
+  "headline": "MUST start with \"We'd summarize your trade as a <directional bias> <structure name>\" (or \"We'd summarize your decision as a deliberate stand-aside\" for no-trade proposals), then one vivid sentence on the verdict.",
   "dimensions": {
     "strategy_selection": { "score": 0-20, "feedback": "2-3 sentences" },
     "strikes_and_tenor": { "score": 0-20, "feedback": "2-3 sentences" },

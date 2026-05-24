@@ -125,8 +125,8 @@ export default function RiskProfileChart({ legs, altLegs, scenario }: Props) {
       </div>
 
       <svg viewBox={`0 0 ${W} ${H}`} className="rp-chart" preserveAspectRatio="xMidYMid meet">
-        <path d={aboveZero} fill="var(--jade)" opacity="0.07" />
-        <path d={belowZero} fill="var(--crimson)" opacity="0.08" />
+        <path d={aboveZero} fill="var(--jade)" opacity="0.22" />
+        <path d={belowZero} fill="var(--rust)" opacity="0.18" />
 
         {yTicks.map((pl, i) => (
           <g key={`y${i}`}>

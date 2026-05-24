@@ -219,6 +219,7 @@ async def deal_scenario(
     difficulty: str,
     npub: NpubField = "",
     proof: str = "",
+    max_loss_usd: int | None = None,
 ) -> dict[str, Any]:
     """Generate a fresh options trading scenario and open a journal entry.
 
@@ -227,9 +228,13 @@ async def deal_scenario(
             dealer LLM grounds the scenario. ``live`` uses Anthropic's
             web_search tool and costs more tokens.
         difficulty: ``apprentice`` | ``journeyman`` | ``adept`` | ``sovereign``.
+        max_loss_usd: Optional per-trade risk envelope in USD. When set, the
+            dealer scales the constraints (account size, sizing limits) so a
+            thoughtful structure can fit the budget. Useful for trainees who
+            reason better about $250 than $10,000 versions of the same trade.
     """
     from tools.dealer import deal_scenario as _impl
-    return await _impl(npub=npub, mode=mode, difficulty=difficulty)
+    return await _impl(npub=npub, mode=mode, difficulty=difficulty, max_loss_usd=max_loss_usd)
 
 
 @tool

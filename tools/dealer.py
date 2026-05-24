@@ -20,21 +20,50 @@ _VALID_MODES = ("historical", "fiction", "live")
 _VALID_DIFFICULTIES = ("apprentice", "journeyman", "adept", "sovereign")
 
 
-async def deal_scenario(npub: str, mode: str, difficulty: str) -> dict[str, Any]:
-    """Generate one scenario and open a journal entry. Returns scenario JSON + entry_id."""
+async def deal_scenario(
+    npub: str,
+    mode: str,
+    difficulty: str,
+    max_loss_usd: int | None = None,
+) -> dict[str, Any]:
+    """Generate one scenario and open a journal entry. Returns scenario JSON + entry_id.
+
+    Args:
+        max_loss_usd: Optional risk envelope. When provided, the dealer scales
+            account size and constraints so a thoughtful structure can be
+            sized to fit. Some trainees reason more crisply about a $250
+            trade than a $10,000 one; this lets them shape the scenario.
+    """
     if mode not in _VALID_MODES:
         return {"error": f"invalid mode: {mode!r}. Choose one of {_VALID_MODES}"}
     if difficulty not in _VALID_DIFFICULTIES:
         return {"error": f"invalid difficulty: {difficulty!r}. Choose one of {_VALID_DIFFICULTIES}"}
+    if max_loss_usd is not None and max_loss_usd <= 0:
+        return {"error": f"max_loss_usd must be positive when provided; got {max_loss_usd!r}"}
 
     await patrons.upsert_patron(npub)
 
     mode_instr = prompts.MODE_INSTRUCTIONS[mode]
+    risk_clause = ""
+    if max_loss_usd is not None:
+        risk_clause = (
+            f"\n\nRISK ENVELOPE: The trainee has declared a max-loss budget "
+            f"of ${max_loss_usd:,} for this trade. Build the scenario so a "
+            f"well-chosen structure can be sized to fit that envelope. The "
+            f'"constraints" field MUST state this max-loss budget explicitly '
+            f"and pair it with a plausible account size (typical convention: "
+            f"max-loss per trade ≈ 1–3% of account, so an account around "
+            f"${max(max_loss_usd * 33, max_loss_usd + 5000):,} fits). "
+            f"Don't reduce difficulty just because the budget is small — "
+            f"keep the macro, the catalyst, and the red-herring mechanic "
+            f"as challenging as the persona demands."
+        )
     prompt = (
         f"{mode_instr}\n\n"
         f'Generate ONE options drill scenario at difficulty level: "{difficulty}". '
         f'Set the "mode" field to "{mode}". Vary the asset class from any prior attempts. '
         f"Return JSON only."
+        f"{risk_clause}"
     )
     enable_web_search = mode == "live"
     max_tokens = 4000 if enable_web_search else 2500
@@ -57,6 +86,10 @@ async def deal_scenario(npub: str, mode: str, difficulty: str) -> dict[str, Any]
         return {"error": str(e)}
 
     scenario["mode"] = mode  # belt-and-suspenders: ensure mode round-trips
+    # Echo the operator-supplied risk budget into the scenario JSON so the
+    # FE, the judge, and the journal all see the same envelope.
+    if max_loss_usd is not None:
+        scenario["max_loss_usd"] = max_loss_usd
 
     entry_id = await journal.open_entry(
         npub=npub,

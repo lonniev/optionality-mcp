@@ -482,6 +482,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [tab, setTab] = useState<TabId>("play");
   const [mode, setMode] = useState<Mode>("historical");
   const [difficulty, setDifficulty] = useState<Difficulty>("journeyman");
+  // Per-trade max-loss envelope in USD. Empty string = no constraint.
+  // Some trainees reason more crisply about a $250 trade than a $10,000
+  // version of the same setup; this lets them shape the scenario.
+  const [maxLossInput, setMaxLossInput] = useState<string>("");
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [answer, setAnswer] = useState<string>("");
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
@@ -532,6 +536,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         if (sess.evaluation) setEvaluation(sess.evaluation);
         if (sess.mode) setMode(sess.mode);
         if (sess.difficulty) setDifficulty(sess.difficulty);
+        if (typeof sess.maxLossUsd === "number") setMaxLossInput(String(sess.maxLossUsd));
         if (Array.isArray(sess.tips)) setTips(sess.tips);
         if (sess.draftSavedAt) setDraftSavedAt(sess.draftSavedAt);
       }
@@ -543,17 +548,19 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // the patron's paid-for scenario alive across reloads.
   useEffect(() => {
     if (!scenario || !entryId) return;
+    const parsedMaxLoss = parseInt(maxLossInput, 10);
     saveSession({
       scenario,
       entryId,
       answer,
       mode,
       difficulty,
+      maxLossUsd: Number.isFinite(parsedMaxLoss) && parsedMaxLoss > 0 ? parsedMaxLoss : undefined,
       evaluation: evaluation ?? undefined,
       tips,
       draftSavedAt: draftSavedAt ?? undefined,
     });
-  }, [scenario, entryId, answer, evaluation, mode, difficulty, tips, draftSavedAt]);
+  }, [scenario, entryId, answer, evaluation, mode, difficulty, maxLossInput, tips, draftSavedAt]);
 
   async function persist(nextStats: Stats, nextHistory: JournalEntry[]): Promise<void> {
     await saveState({ stats: nextStats, history: nextHistory });
@@ -568,7 +575,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     setLoading(true);
     setLoadingMsg(mode === "live" ? "Reading the tape" : "Tapping the wire");
     try {
-      const result = await dealScenario(mode, difficulty);
+      const parsedMaxLoss = parseInt(maxLossInput, 10);
+      const maxLossArg = Number.isFinite(parsedMaxLoss) && parsedMaxLoss > 0 ? parsedMaxLoss : undefined;
+      const result = await dealScenario(mode, difficulty, maxLossArg);
       if (result.error) throw new Error(result.error);
       const json = result.scenario;
       json.mode = mode;
@@ -858,6 +867,72 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     </button>
                   ))}
                 </div>
+
+                <div style={{ fontSize: 10, color: "var(--rust)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>Risk Envelope</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                  <label style={{ fontSize: 12, color: "var(--ink-soft)" }}>Max loss per trade:</label>
+                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                    <span style={{ color: "var(--ink-faint)", fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}>$</span>
+                    <input
+                      type="number"
+                      inputMode="numeric"
+                      min={0}
+                      step={50}
+                      placeholder="optional"
+                      value={maxLossInput}
+                      onChange={(e) => setMaxLossInput(e.target.value)}
+                      style={{
+                        background: "transparent",
+                        border: "1px solid var(--panel-edge)",
+                        borderRadius: 4,
+                        color: "var(--ivory-bright)",
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: 13,
+                        padding: "4px 8px",
+                        width: 110,
+                      }}
+                    />
+                  </div>
+                  {[250, 1000, 5000, 10000].map((v) => (
+                    <button
+                      key={v}
+                      type="button"
+                      onClick={() => setMaxLossInput(String(v))}
+                      style={{
+                        background: maxLossInput === String(v) ? "var(--amber-glow)" : "transparent",
+                        border: `1px solid ${maxLossInput === String(v) ? "var(--amber)" : "var(--panel-edge)"}`,
+                        borderRadius: 4,
+                        color: maxLossInput === String(v) ? "var(--amber-bright)" : "var(--ink-soft)",
+                        fontFamily: "'JetBrains Mono', monospace",
+                        fontSize: 11,
+                        padding: "3px 8px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ${v.toLocaleString()}
+                    </button>
+                  ))}
+                  {maxLossInput && (
+                    <button
+                      type="button"
+                      onClick={() => setMaxLossInput("")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--ink-faint)",
+                        fontSize: 11,
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      clear
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4, fontStyle: "italic" }}>
+                  Optional. When set, the dealer sizes the scenario&apos;s account and constraints so a well-chosen structure fits your envelope. The judge will score down trades whose worst case exceeds it.
+                </div>
+
                 <div className="actions" style={{ alignItems: "center" }}>
                   <button className="btn" onClick={generateScenario}>Deal the Scenario</button>
                   {dealPrice !== null && dealPrice > 0 && (

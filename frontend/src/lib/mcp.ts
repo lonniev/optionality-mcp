@@ -194,8 +194,13 @@ export interface DealScenarioResult {
 export async function dealScenario(
   mode: string,
   difficulty: string,
+  maxLossUsd?: number,
 ): Promise<DealScenarioResult> {
-  return callTool<DealScenarioResult>("deal_scenario", { mode, difficulty });
+  const args: Record<string, unknown> = { mode, difficulty };
+  if (typeof maxLossUsd === "number" && maxLossUsd > 0) {
+    args.max_loss_usd = maxLossUsd;
+  }
+  return callTool<DealScenarioResult>("deal_scenario", args);
 }
 
 export interface JudgeTradeResult {
