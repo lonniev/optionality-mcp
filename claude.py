@@ -56,12 +56,18 @@ async def call_claude(
     *,
     enable_web_search: bool = False,
     model: str = DEFAULT_MODEL,
+    npub: str = "",
+    tool: str = "",
 ) -> str:
     """Call Claude with one user message and a system prompt; return the text.
 
     Raises ``ClaudeError`` for situations the patron should see: missing key,
     empty response, transport failure. The error message is suitable for
     inclusion in a tool's error dict.
+
+    `npub` and `tool` (when provided) journal the call into
+    ``optionality_api_usage`` for the Profile/Usage view. Best-effort —
+    a usage-write failure does not affect the response.
     """
     api_key = await _get_api_key()
     if not api_key:
@@ -94,6 +100,25 @@ async def call_claude(
         raise ClaudeError(f"Anthropic API error: {e}") from e
     except Exception as e:
         raise ClaudeError(f"LLM transport error: {e}") from e
+
+    # Record usage for the Profile/Usage view. Pull from the SDK's
+    # `usage` object — fields are documented as `input_tokens` /
+    # `output_tokens`. Best-effort; failures swallowed by record_call.
+    try:
+        usage_obj = getattr(message, "usage", None)
+        in_tok = int(getattr(usage_obj, "input_tokens", 0) or 0)
+        out_tok = int(getattr(usage_obj, "output_tokens", 0) or 0)
+        if in_tok or out_tok:
+            from db import usage as _usage
+            await _usage.record_call(
+                npub=npub,
+                tool=tool,
+                model=model,
+                input_tokens=in_tok,
+                output_tokens=out_tok,
+            )
+    except Exception:
+        pass
 
     parts: list[str] = []
     for block in message.content or []:

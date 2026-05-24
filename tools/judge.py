@@ -34,6 +34,8 @@ async def judge_trade(npub: str, entry_id: str, trade_proposal: str) -> dict[str
             prompt,
             prompts.EVAL_SYSTEM,
             max_tokens=5500,
+            npub=npub,
+            tool="judge_trade",
         )
     except ClaudeError as e:
         return {"error": str(e)}

@@ -45,6 +45,8 @@ async def deal_scenario(npub: str, mode: str, difficulty: str) -> dict[str, Any]
             prompts.SCENARIO_SYSTEM,
             max_tokens=max_tokens,
             enable_web_search=enable_web_search,
+            npub=npub,
+            tool="deal_scenario",
         )
     except ClaudeError as e:
         return {"error": str(e)}
@@ -88,7 +90,10 @@ async def ask_tip(npub: str, entry_id: str, question: str) -> dict[str, Any]:
         "Offer ONE Socratic nudge. Under 80 words. No specific strikes, structures, or directional bias."
     )
     try:
-        text = await call_claude(prompt, prompts.TIP_SYSTEM, max_tokens=400)
+        text = await call_claude(
+            prompt, prompts.TIP_SYSTEM, max_tokens=400,
+            npub=npub, tool="ask_tip",
+        )
     except ClaudeError as e:
         return {"error": str(e)}
     return {"tip": text}

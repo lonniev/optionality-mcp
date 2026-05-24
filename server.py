@@ -113,6 +113,12 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         category="write",
         intent="Set the caller's display name on the leaderboard",
     ),
+    # ---- Transparency
+    ToolIdentity(
+        capability="get_api_usage_stats",
+        category="read",
+        intent="Aggregated Claude API token usage per model, scoped to the caller",
+    ),
 ]
 
 TOOL_REGISTRY: dict[str, ToolIdentity] = {ti.tool_id: ti for ti in _DOMAIN_TOOLS}
@@ -329,6 +335,24 @@ async def set_display_name(
     """Set the caller's display name on the leaderboard. 1..32 chars, unicode allowed."""
     from tools.leaderboard import set_display_name as _impl
     return await _impl(npub=npub, name=name)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("get_api_usage_stats"))
+async def get_api_usage_stats(
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Aggregated Claude API token usage for this patron's calls.
+
+    Returns ``{"models": [{"model", "runs", "total_calls",
+    "total_input_tokens", "total_output_tokens"}, ...]}``. One row per
+    distinct model the patron's tool calls have invoked. The FE multiplies
+    by Anthropic's published per-million pricing to show estimated USD
+    cost and the sats equivalent — same transparency view as taxsort-mcp.
+    """
+    from db.usage import get_usage_stats
+    return await get_usage_stats(npub=npub)
 
 
 def main() -> None:

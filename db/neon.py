@@ -123,6 +123,23 @@ async def _ensure_domain_schema(vault: Any) -> None:
 
         f"CREATE INDEX IF NOT EXISTS idx_leaderboard_best "
         f"ON {t('optionality_leaderboard_stats')}(best_score DESC)",
+
+        # Per-patron Claude API usage. One row per outbound `messages.create`,
+        # written by `claude.complete_text` after the response lands. Surfaces
+        # in the FE's Profile/Usage view so the patron sees exactly what their
+        # sats bought — same transparency principle as taxsort-mcp's
+        # `tax_api_usage` table.
+        f"CREATE TABLE IF NOT EXISTS {t('optionality_api_usage')} ("
+        "id BIGSERIAL PRIMARY KEY, "
+        "npub TEXT, "
+        "tool TEXT, "
+        "model TEXT NOT NULL, "
+        "input_tokens INT NOT NULL DEFAULT 0, "
+        "output_tokens INT NOT NULL DEFAULT 0, "
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+
+        f"CREATE INDEX IF NOT EXISTS idx_api_usage_npub_created "
+        f"ON {t('optionality_api_usage')}(npub, created_at DESC)",
     ]
     for stmt in stmts:
         try:
