@@ -242,6 +242,44 @@ async def _debug_pricing_seed() -> dict[str, Any]:
     out["4_reread_multipliers"] = repr(getattr(deal_tp2, "multipliers", "TP_MISSING"))
     out["4_to_dict"] = deal_tp2.to_dict() if deal_tp2 else None
 
+    # Step 5: write to Neon via the pricing store, read back, compare
+    try:
+        vault = await runtime.vault()
+        from tollbooth.pricing_store import PricingModelStore
+        store = PricingModelStore(neon_vault=vault)
+        await store.ensure_schema()
+
+        model.operator = runtime.operator_npub()
+        model.name = "DEBUG-MULTIPLIER-PROBE"
+        new_id = await store.create_model(model)
+        out["5_neon_create_returned_id"] = new_id
+
+        # Read the row back raw
+        raw = await vault._execute(
+            f"SELECT model_json FROM {store._t('operator_pricing_models')} WHERE id = $1::uuid",
+            [new_id],
+        )
+        rows = raw.get("rows", [])
+        if rows:
+            mj = rows[0]["model_json"]
+            out["5_neon_model_json_type"] = type(mj).__name__
+            if isinstance(mj, str):
+                parsed = json.loads(mj)
+            else:
+                parsed = mj
+            neon_deal = next((t for t in parsed.get("tools", []) if t.get("tool_id") == deal_id), None)
+            out["5_neon_deal_entry"] = neon_deal
+            out["5_neon_deal_has_multipliers"] = bool(neon_deal and neon_deal.get("multipliers"))
+
+        # Clean up the debug row
+        await vault._execute(
+            f"DELETE FROM {store._t('operator_pricing_models')} WHERE id = $1::uuid",
+            [new_id],
+        )
+        out["5_cleanup"] = "ok"
+    except Exception as e:
+        out["5_error"] = f"{type(e).__name__}: {e}"
+
     return out
 
 
