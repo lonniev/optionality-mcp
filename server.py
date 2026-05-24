@@ -60,10 +60,29 @@ mcp = FastMCP(
 
 _DOMAIN_TOOLS: list[ToolIdentity] = [
     # ---- Dealer (heavy LLM)
+    # Pricing: base 1 sat × difficulty × historicity. Apprentice/Fiction
+    # = 1 sat (cheapest dry-run); Sovereign/Live = 1 × 4 × 10 = 40 sats
+    # (real-tape regime-change drill, expensive Anthropic web_search call).
+    # The FE renders the effective price via check_price(tool_kwargs) so
+    # the patron sees what their selections cost before committing.
     ToolIdentity(
         capability="deal_scenario",
         category="heavy",
         intent="Generate a fresh options trading scenario and open a journal entry",
+        pricing_hint_value=1,
+        pricing_hint_multipliers=(
+            ("difficulty", (
+                ("apprentice", 1.0),
+                ("journeyman", 2.0),
+                ("adept", 3.0),
+                ("sovereign", 4.0),
+            )),
+            ("mode", (
+                ("fiction", 1.0),
+                ("historical", 5.0),
+                ("live", 10.0),
+            )),
+        ),
     ),
     ToolIdentity(
         capability="ask_tip",
@@ -77,10 +96,13 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         intent="Evaluate the trainee's trade across five dimensions and parse trade legs",
     ),
     # ---- Journal CRUD (Neon)
+    # Flat 1 sat — covers a single Neon round-trip; transparent fee for
+    # parking an in-progress draft.
     ToolIdentity(
         capability="save_draft",
         category="write",
         intent="Persist a draft trade proposal without running the judge",
+        pricing_hint_value=1,
     ),
     ToolIdentity(
         capability="list_journal",
