@@ -6,14 +6,24 @@ import type {
   DifficultyDef,
   Evaluation,
   JournalEntry,
+  LeaderboardResult,
+  LeaderboardRow,
   Mode,
   ModeDef,
   PersistedState,
   Scenario,
   Stats,
   TabId,
+  TipExchange,
 } from "../types";
-import { dealScenario, judgeTrade, ProofRequiredError } from "../lib/mcp";
+import {
+  askTip,
+  dealScenario,
+  getLeaderboard,
+  judgeTrade,
+  ProofRequiredError,
+  saveDraft,
+} from "../lib/mcp";
 import ModeIcon from "./ModeIcon";
 import DifficultyAvatar from "./DifficultyAvatar";
 import RiskProfileChart from "./RiskProfileChart";
@@ -464,6 +474,19 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [history, setHistory] = useState<JournalEntry[]>([]);
   const [entryId, setEntryId] = useState<string | null>(null);
   const answerRef = useRef<HTMLTextAreaElement | null>(null);
+  // Save-draft transient state — last server-confirmed save timestamp so
+  // the patron can see "Saved 2s ago" feedback.
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
+  const [savingDraft, setSavingDraft] = useState<boolean>(false);
+  // Ask-a-Tip Q&A thread for the open scenario. Persisted with the
+  // active session so a reload preserves the conversation context.
+  const [tips, setTips] = useState<TipExchange[]>([]);
+  const [tipQuestion, setTipQuestion] = useState<string>("");
+  const [tipAsking, setTipAsking] = useState<boolean>(false);
+  // Leaderboard state, lazy-loaded when the tab is opened.
+  const [leaderboard, setLeaderboard] = useState<LeaderboardResult | null>(null);
+  const [leaderboardLoading, setLeaderboardLoading] = useState<boolean>(false);
+  const [leaderboardSort, setLeaderboardSort] = useState<"avg" | "best" | "streak" | "played">("avg");
 
   useEffect(() => {
     (async () => {
@@ -483,6 +506,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         if (sess.evaluation) setEvaluation(sess.evaluation);
         if (sess.mode) setMode(sess.mode);
         if (sess.difficulty) setDifficulty(sess.difficulty);
+        if (Array.isArray(sess.tips)) setTips(sess.tips);
+        if (sess.draftSavedAt) setDraftSavedAt(sess.draftSavedAt);
       }
     })();
   }, []);
@@ -499,8 +524,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       mode,
       difficulty,
       evaluation: evaluation ?? undefined,
+      tips,
+      draftSavedAt: draftSavedAt ?? undefined,
     });
-  }, [scenario, entryId, answer, evaluation, mode, difficulty]);
+  }, [scenario, entryId, answer, evaluation, mode, difficulty, tips, draftSavedAt]);
 
   async function persist(nextStats: Stats, nextHistory: JournalEntry[]): Promise<void> {
     await saveState({ stats: nextStats, history: nextHistory });
@@ -589,11 +616,72 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     setEntryId(null);
     setAnswer("");
     setError("");
+    setTips([]);
+    setTipQuestion("");
+    setDraftSavedAt(null);
     // User explicitly moved past this card — drop the paid-for session
     // so the next reload lands on the setup screen, not on this stale
     // board. (Pre-judge "Discard, deal another" also flows through here.)
     clearSession();
   }
+
+  async function handleSaveDraft(): Promise<void> {
+    if (!entryId) { setError("No active scenario to save against."); return; }
+    setError("");
+    setSavingDraft(true);
+    try {
+      const res = await saveDraft(entryId, answer);
+      if (res.error) throw new Error(res.error);
+      setDraftSavedAt(Date.now());
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      setError("Save failed. " + (e as Error).message);
+    } finally {
+      setSavingDraft(false);
+    }
+  }
+
+  async function handleAskTip(): Promise<void> {
+    const q = tipQuestion.trim();
+    if (!q) return;
+    if (!entryId) { setError("Deal a scenario before asking a tip."); return; }
+    setError("");
+    setTipAsking(true);
+    try {
+      const res = await askTip(entryId, q);
+      if (res.error) throw new Error(res.error);
+      const answerText = res.tip || "";
+      setTips((prev) => [...prev, { ts: Date.now(), question: q, answer: answerText }]);
+      setTipQuestion("");
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      setError("Tip request failed. " + (e as Error).message);
+    } finally {
+      setTipAsking(false);
+    }
+  }
+
+  async function loadLeaderboard(sort: "avg" | "best" | "streak" | "played" = leaderboardSort): Promise<void> {
+    setLeaderboardLoading(true);
+    try {
+      const res = await getLeaderboard(sort);
+      setLeaderboard(res);
+      setLeaderboardSort(sort);
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      console.error("leaderboard load failed", e);
+    } finally {
+      setLeaderboardLoading(false);
+    }
+  }
+
+  // Auto-load leaderboard the first time the tab is opened.
+  useEffect(() => {
+    if (tab === "leaderboard" && leaderboard === null && !leaderboardLoading) {
+      void loadLeaderboard("avg");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   return (
     <div className="opt-root">
@@ -634,6 +722,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       <div className="tab-bar">
         <button className={`tab ${tab === "play" ? "active" : ""}`} onClick={() => setTab("play")}>The Pit</button>
         <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>Journal ({history.length})</button>
+        <button className={`tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}>Leaderboard</button>
       </div>
 
       <div className="container">
@@ -782,9 +871,59 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         />
                         <div className="actions">
                           <button className="btn" onClick={submitTrade} disabled={loading}>Submit Trade</button>
+                          <button
+                            className="btn btn-ghost"
+                            onClick={handleSaveDraft}
+                            disabled={savingDraft || !answer.trim()}
+                            title="Persist this draft to the Journal entry so it survives a reload"
+                          >
+                            {savingDraft ? "Saving…" : "Save Draft"}
+                          </button>
                           <button className="btn btn-ghost" onClick={nextRound}>Discard, deal another</button>
                         </div>
+                        {draftSavedAt && !savingDraft && (
+                          <div style={{ fontSize: 11, color: "var(--jade)", marginTop: 8, letterSpacing: "0.1em" }}>
+                            ✓ Draft saved {new Date(draftSavedAt).toLocaleTimeString()}
+                          </div>
+                        )}
                         {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
+
+                        {/* Ask-a-Tip — inline Q&A on the scenario card. */}
+                        <div style={{ marginTop: 22, borderTop: "1px solid var(--panel-edge)", paddingTop: 14 }}>
+                          <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>
+                            Ask a Tip
+                          </div>
+                          <div style={{ fontSize: 12, color: "var(--ink-faint)", marginBottom: 8, fontStyle: "italic" }}>
+                            Socratic, non-spoiler. e.g. <span style={{ color: "var(--ink-soft)" }}>"What do you mean by Call Skew?"</span>
+                          </div>
+
+                          {tips.map((t, i) => (
+                            <div key={i} style={{ marginBottom: 10, padding: "8px 10px", background: "var(--bg-soft)", borderLeft: "2px solid var(--bronze)" }}>
+                              <div style={{ fontSize: 12, color: "var(--ink-soft)", fontStyle: "italic", marginBottom: 4 }}>
+                                Q · {t.question}
+                              </div>
+                              <div style={{ fontSize: 13, color: "var(--ink)", whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
+                                {t.answer}
+                              </div>
+                            </div>
+                          ))}
+
+                          <textarea
+                            value={tipQuestion}
+                            onChange={(e) => setTipQuestion(e.target.value)}
+                            placeholder="Type your question…"
+                            style={{ minHeight: 60 }}
+                          />
+                          <div className="actions">
+                            <button
+                              className="btn btn-ghost"
+                              onClick={handleAskTip}
+                              disabled={tipAsking || !tipQuestion.trim()}
+                            >
+                              {tipAsking ? "Asking…" : "Ask"}
+                            </button>
+                          </div>
+                        </div>
                       </>
                     )}
                   </div>
@@ -844,6 +983,75 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               </div>
             )}
           </>
+        )}
+
+        {tab === "leaderboard" && (
+          <div className="panel">
+            <span className="panel-label">Leaderboard</span>
+            <h2 className="serif">Sovereign traders, sorted by skill</h2>
+            <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
+              Aggregated across every patron's judged trades. Display names are set per-patron;
+              {" "}npub-only entries show a fingerprint.
+            </p>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+              {(["avg", "best", "streak", "played"] as const).map((s) => (
+                <button
+                  key={s}
+                  className={`btn ${leaderboardSort === s ? "" : "btn-ghost"}`}
+                  onClick={() => { void loadLeaderboard(s); }}
+                  disabled={leaderboardLoading}
+                  style={{ padding: "8px 14px", fontSize: 10 }}
+                >
+                  {s === "avg" ? "Avg Score" : s === "best" ? "Best" : s === "streak" ? "Streak" : "Played"}
+                </button>
+              ))}
+              <button
+                className="btn btn-ghost"
+                onClick={() => { void loadLeaderboard(leaderboardSort); }}
+                disabled={leaderboardLoading}
+                style={{ padding: "8px 14px", fontSize: 10, marginLeft: "auto" }}
+              >
+                {leaderboardLoading ? "Loading…" : "Refresh"}
+              </button>
+            </div>
+
+            {leaderboardLoading && leaderboard === null && (
+              <div className="loading" style={{ display: "block", padding: "20px 0" }}>Reading the tape</div>
+            )}
+
+            {leaderboard !== null && leaderboard.rows.length === 0 && (
+              <div className="empty">No judged trades yet. Be the first.</div>
+            )}
+
+            {leaderboard !== null && leaderboard.rows.length > 0 && (
+              <div>
+                <div className="history-row" style={{ gridTemplateColumns: "40px 1fr 80px 80px 80px 80px", color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                  <div>#</div>
+                  <div>Trader</div>
+                  <div style={{ textAlign: "right" }}>Avg</div>
+                  <div style={{ textAlign: "right" }}>Best</div>
+                  <div style={{ textAlign: "right" }}>Streak</div>
+                  <div style={{ textAlign: "right" }}>Played</div>
+                </div>
+                {leaderboard.rows.map((row: LeaderboardRow, i: number) => (
+                  <div key={row.npub} className="history-row" style={{ gridTemplateColumns: "40px 1fr 80px 80px 80px 80px" }}>
+                    <div style={{ color: "var(--amber)", fontFamily: "Fraunces, serif", fontSize: 16 }}>{i + 1}</div>
+                    <div>
+                      <div style={{ color: "var(--ink)" }}>
+                        {row.display_name || `${row.npub.slice(0, 8)}…${row.npub.slice(-4)}`}
+                      </div>
+                      <div className="h-date">{row.last_played_at ? `last: ${new Date(row.last_played_at).toLocaleDateString()}` : ""}</div>
+                    </div>
+                    <div className="h-score">{row.avg_score}</div>
+                    <div className="h-score">{row.best_score}</div>
+                    <div className="h-score">{row.longest_streak ?? row.current_streak}</div>
+                    <div className="h-score">{row.total_played}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         )}
 
         {tab === "journal" && (

@@ -245,6 +245,20 @@ export async function saveDraft(
   });
 }
 
+/// Pull the global leaderboard. `scope` accepts `mode=...` or
+/// `difficulty=...`; empty string returns the unscoped global view.
+export async function getLeaderboard(
+  sortBy: "avg" | "best" | "streak" | "played" = "avg",
+  scope: string = "",
+  limit: number = 25,
+): Promise<import("../types").LeaderboardResult> {
+  return callTool<import("../types").LeaderboardResult>("get_leaderboard", {
+    sort_by: sortBy,
+    scope,
+    limit,
+  });
+}
+
 // ─── Login / auth — free tools, no proof required ─────────────────────────
 
 export interface ServiceStatus {

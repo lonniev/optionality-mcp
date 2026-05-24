@@ -2,7 +2,7 @@
 
 export type Mode = "historical" | "fiction" | "live";
 export type Difficulty = "apprentice" | "journeyman" | "adept" | "sovereign";
-export type TabId = "play" | "journal";
+export type TabId = "play" | "journal" | "leaderboard";
 export type LegSide = "long" | "short";
 export type LegType = "call" | "put";
 
@@ -99,6 +99,40 @@ export interface ActiveSession {
   mode: Mode;
   difficulty: Difficulty;
   evaluation?: Evaluation;
+  tips?: TipExchange[];
+  draftSavedAt?: number;
+}
+
+/// One Q&A round in the inline "Ask a Tip" panel on the scenario card.
+/// The tip itself comes from the wheel's `ask_tip` tool — a Socratic,
+/// non-spoiler nudge the LLM produces given the open journal entry.
+export interface TipExchange {
+  ts: number;
+  question: string;
+  answer: string;
+}
+
+/// One row of the leaderboard returned by the wheel's `get_leaderboard`.
+/// `by_mode` and `by_difficulty` carry the per-bucket aggregates the
+/// scoped views need; the top-level fields are the global aggregates.
+export interface LeaderboardRow {
+  npub: string;
+  display_name?: string | null;
+  total_played: number;
+  avg_score: number;
+  best_score: number;
+  current_streak: number;
+  longest_streak: number;
+  last_played_at?: string | null;
+  by_mode?: Record<string, unknown>;
+  by_difficulty?: Record<string, unknown>;
+}
+
+export interface LeaderboardResult {
+  sort_by: string;
+  scope: string;
+  rows: LeaderboardRow[];
+  count: number;
 }
 
 export interface DifficultyDef {
