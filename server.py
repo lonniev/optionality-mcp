@@ -214,23 +214,35 @@ tool = register_standard_tools(
 
 @tool
 async def _debug_pricing_seed() -> dict[str, Any]:
-    """One-shot diagnostic: dump the in-memory deal_scenario hints + seed JSON."""
+    """One-shot diagnostic: trace multiplier flow through the PricingModel round-trip."""
     import json
     from tollbooth.runtime import _build_initial_pricing_model
+    from tollbooth.pricing_model import PricingModel
+
     deal_id = capability_uuid("deal_scenario")
-    identity = runtime._tool_registry.get(deal_id)
+    out: dict[str, Any] = {}
+
     seed = _build_initial_pricing_model(runtime, "optionality-mcp")
-    seed_deal = next(
-        (t for t in json.loads(seed)["tools"] if t["tool_id"] == deal_id),
-        None,
-    )
-    return {
-        "registry_has_deal": identity is not None,
-        "identity_class": type(identity).__name__ if identity else None,
-        "pricing_hint_value": getattr(identity, "pricing_hint_value", None),
-        "pricing_hint_multipliers_repr": repr(getattr(identity, "pricing_hint_multipliers", "ATTR_MISSING")),
-        "seed_deal_entry": seed_deal,
-    }
+    seed_deal = next((t for t in json.loads(seed)["tools"] if t["tool_id"] == deal_id), None)
+    out["1_seed_has_multipliers"] = bool(seed_deal and seed_deal.get("multipliers"))
+
+    model = PricingModel.from_json(seed, model_id="", operator=runtime.operator_npub() or "")
+    deal_tp = next((tp for tp in model.tools if tp.tool_id == deal_id), None)
+    out["2_after_from_json_multipliers_attr"] = repr(getattr(deal_tp, "multipliers", "TP_MISSING"))
+    out["2_toolprice_class"] = type(deal_tp).__name__ if deal_tp else None
+    out["2_toolprice_fields"] = list(deal_tp.__dataclass_fields__.keys()) if deal_tp else None
+
+    stored_json = model.to_json()
+    out["3_stored_json_has_multipliers_string"] = "multipliers" in stored_json
+    stored_deal = next((t for t in json.loads(stored_json)["tools"] if t["tool_id"] == deal_id), None)
+    out["3_stored_deal_entry"] = stored_deal
+
+    model2 = PricingModel.from_json(stored_json)
+    deal_tp2 = next((tp for tp in model2.tools if tp.tool_id == deal_id), None)
+    out["4_reread_multipliers"] = repr(getattr(deal_tp2, "multipliers", "TP_MISSING"))
+    out["4_to_dict"] = deal_tp2.to_dict() if deal_tp2 else None
+
+    return out
 
 
 # ---------------------------------------------------------------------------
