@@ -28,6 +28,7 @@ import {
   ProofRequiredError,
   saveDraft,
 } from "../lib/mcp";
+import { annotate } from "../lib/annotate";
 
 // Anthropic per-million-token pricing for the models Optionality uses.
 // Mirrors taxsort's ProfilePage so the math is identical across our
@@ -767,7 +768,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       <header className="header">
         <div className="brand">
           OPTIONALITY
-          <small>A Sovereign Trader's Drill</small>
+          <small>Gamified Options Trading Consultant Trainer</small>
         </div>
         <div className="stats">
           <div>Sessions<b>{stats.played}</b></div>
@@ -1110,7 +1111,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <div className="score-banner">
                   <div className="grade">{evaluation.letter_grade}</div>
                   <div className="score">Overall<b>{evaluation.overall_score} / 100</b></div>
-                  <div className="headline">&ldquo;{evaluation.headline}&rdquo;</div>
+                  <div className="headline">&ldquo;{annotate(evaluation.headline)}&rdquo;</div>
                 </div>
 
                 <h3 className="serif">By Dimension</h3>
@@ -1119,7 +1120,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     <div className="dim-card" key={k}>
                       <div className="dim-name">{DIMENSION_LABELS[k] || k}</div>
                       <div className="dim-score">{v.score}<span style={{ fontSize: 12, color: "var(--ink-faint)" }}> / 20</span></div>
-                      <div className="dim-fb">{v.feedback}</div>
+                      <div className="dim-fb">{annotate(v.feedback)}</div>
                     </div>
                   ))}
                 </div>
@@ -1135,19 +1136,19 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
                 <h3 className="serif">What you got right</h3>
                 <ul className="bullet-list good">
-                  {(evaluation.what_you_got_right || []).map((b, i) => <li key={i}>{b}</li>)}
+                  {(evaluation.what_you_got_right || []).map((b, i) => <li key={i}>{annotate(b)}</li>)}
                 </ul>
 
                 <h3 className="serif">What to sharpen</h3>
                 <ul className="bullet-list bad">
-                  {(evaluation.what_to_improve || []).map((b, i) => <li key={i}>{b}</li>)}
+                  {(evaluation.what_to_improve || []).map((b, i) => <li key={i}>{annotate(b)}</li>)}
                 </ul>
 
                 <h3 className="serif">An alternative the house would have taken</h3>
-                <div className="alt-trade">{evaluation.alternative_trade}</div>
+                <div className="alt-trade">{annotate(evaluation.alternative_trade || "")}</div>
 
                 <h3 className="serif">Deeper context</h3>
-                <div className="deeper">{evaluation.deeper_context}</div>
+                <div className="deeper">{annotate(evaluation.deeper_context || "")}</div>
 
                 <div className="actions" style={{ marginTop: 22 }}>
                   <button className="btn btn-ghost" onClick={nextRound}>Back to setup</button>
