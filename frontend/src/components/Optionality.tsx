@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 
 import type {
   ActiveSession,
+  ApiUsageResult,
   Difficulty,
   DifficultyDef,
   Evaluation,
@@ -10,6 +11,7 @@ import type {
   LeaderboardRow,
   Mode,
   ModeDef,
+  ModelUsage,
   PersistedState,
   Scenario,
   Stats,
@@ -19,11 +21,26 @@ import type {
 import {
   askTip,
   dealScenario,
+  getApiUsageStats,
   getLeaderboard,
   judgeTrade,
   ProofRequiredError,
   saveDraft,
 } from "../lib/mcp";
+
+// Anthropic per-million-token pricing for the models Optionality uses.
+// Mirrors taxsort's ProfilePage so the math is identical across our
+// transparency surfaces.
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  "claude-sonnet-4-20250514": { input: 3, output: 15 },
+  "claude-sonnet-4-6-20250514": { input: 3, output: 15 },
+  "claude-haiku-4-5-20251001": { input: 1, output: 5 },
+};
+const DEFAULT_PRICING = { input: 3, output: 15 };
+
+function fmt$(n: number) {
+  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+}
 import ModeIcon from "./ModeIcon";
 import DifficultyAvatar from "./DifficultyAvatar";
 import RiskProfileChart from "./RiskProfileChart";
@@ -487,6 +504,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardResult | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState<boolean>(false);
   const [leaderboardSort, setLeaderboardSort] = useState<"avg" | "best" | "streak" | "played">("avg");
+  // Profile/Usage state (TaxSort-style transparency view).
+  const [apiUsage, setApiUsage] = useState<ApiUsageResult | null>(null);
+  const [apiUsageLoading, setApiUsageLoading] = useState<boolean>(false);
 
   useEffect(() => {
     (async () => {
@@ -683,6 +703,27 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
+  async function loadApiUsage(): Promise<void> {
+    setApiUsageLoading(true);
+    try {
+      const res = await getApiUsageStats();
+      setApiUsage(res);
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      console.error("usage load failed", e);
+    } finally {
+      setApiUsageLoading(false);
+    }
+  }
+
+  // Auto-load usage stats the first time the Usage tab is opened.
+  useEffect(() => {
+    if (tab === "usage" && apiUsage === null && !apiUsageLoading) {
+      void loadApiUsage();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
   return (
     <div className="opt-root">
       <style>{styles}</style>
@@ -723,6 +764,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         <button className={`tab ${tab === "play" ? "active" : ""}`} onClick={() => setTab("play")}>The Pit</button>
         <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>Journal ({history.length})</button>
         <button className={`tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}>Leaderboard</button>
+        <button className={`tab ${tab === "usage" ? "active" : ""}`} onClick={() => setTab("usage")}>Usage</button>
       </div>
 
       <div className="container">
@@ -984,6 +1026,114 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             )}
           </>
         )}
+
+        {tab === "usage" && (() => {
+          const models: ModelUsage[] = apiUsage?.models ?? [];
+          let totalInputTokens = 0;
+          let totalOutputTokens = 0;
+          let totalRuns = 0;
+          let estimatedCostUsd = 0;
+          for (const m of models) {
+            totalInputTokens += m.total_input_tokens;
+            totalOutputTokens += m.total_output_tokens;
+            totalRuns += m.runs;
+            const p = MODEL_PRICING[m.model] ?? DEFAULT_PRICING;
+            estimatedCostUsd +=
+              (m.total_input_tokens / 1_000_000) * p.input +
+              (m.total_output_tokens / 1_000_000) * p.output;
+          }
+          const totalTokens = totalInputTokens + totalOutputTokens;
+          const btcPriceUsd = 100_000;
+          const estimatedSats = Math.round((estimatedCostUsd / btcPriceUsd) * 100_000_000);
+
+          return (
+            <div className="panel">
+              <span className="panel-label">Usage</span>
+              <h2 className="serif">Claude API usage & estimated cost</h2>
+              <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
+                Optionality calls Anthropic's Claude for every scenario, tip, and verdict.
+                {" "}This is what your tool calls have spent in tokens — and what those tokens
+                {" "}cost the operator. Your toll covers this plus operator overhead. No hidden margin.
+              </p>
+
+              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => { void loadApiUsage(); }}
+                  disabled={apiUsageLoading}
+                  style={{ padding: "8px 14px", fontSize: 10 }}
+                >
+                  {apiUsageLoading ? "Loading…" : "Refresh"}
+                </button>
+              </div>
+
+              {apiUsageLoading && apiUsage === null && (
+                <div className="loading" style={{ display: "block", padding: "20px 0" }}>Tallying the receipts</div>
+              )}
+
+              {apiUsage !== null && models.length === 0 && (
+                <div className="empty">No model calls recorded yet. Deal a scenario.</div>
+              )}
+
+              {apiUsage !== null && models.length > 0 && (
+                <>
+                  {/* Per-model breakdown */}
+                  {models.map((m, i) => {
+                    const p = MODEL_PRICING[m.model] ?? DEFAULT_PRICING;
+                    const cost =
+                      (m.total_input_tokens / 1_000_000) * p.input +
+                      (m.total_output_tokens / 1_000_000) * p.output;
+                    return (
+                      <div key={i} style={{ background: "var(--bg-soft)", border: "1px solid var(--panel-edge)", padding: "12px 14px", marginBottom: 8 }}>
+                        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
+                          {m.model || "unknown"}
+                        </div>
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, fontSize: 12 }}>
+                          <div><span style={{ color: "var(--ink-faint)" }}>Runs:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.runs}</span></div>
+                          <div><span style={{ color: "var(--ink-faint)" }}>Input:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.total_input_tokens.toLocaleString()}</span></div>
+                          <div><span style={{ color: "var(--ink-faint)" }}>Output:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.total_output_tokens.toLocaleString()}</span></div>
+                          <div><span style={{ color: "var(--ink-faint)" }}>Cost:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>${fmt$(cost)}</span></div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {/* Totals */}
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 18 }}>
+                    <div style={{ background: "rgba(212,163,91,0.06)", border: "1px solid var(--amber)", padding: 16 }}>
+                      <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
+                        Estimated Anthropic cost
+                      </div>
+                      <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500 }}>
+                        ${fmt$(estimatedCostUsd)}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
+                        {totalTokens.toLocaleString()} tokens across {totalRuns} model calls
+                      </div>
+                    </div>
+                    <div style={{ background: "rgba(107,142,107,0.06)", border: "1px solid var(--jade)", padding: 16 }}>
+                      <div style={{ fontSize: 10, color: "var(--jade)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
+                        Equivalent in sats
+                      </div>
+                      <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--ivory-bright)", fontWeight: 500 }}>
+                        {estimatedSats.toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
+                        at ~${btcPriceUsd.toLocaleString()}/BTC
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 18, fontStyle: "italic", lineHeight: 1.6 }}>
+                    Operator passes the AI cost through to patrons via Lightning micropayments.
+                    {" "}This view is the raw transparency — you see what each scenario, tip, and
+                    {" "}verdict cost in real tokens, plus a sats estimate at a $100K/BTC reference.
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {tab === "leaderboard" && (
           <div className="panel">

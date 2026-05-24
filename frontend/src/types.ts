@@ -2,7 +2,7 @@
 
 export type Mode = "historical" | "fiction" | "live";
 export type Difficulty = "apprentice" | "journeyman" | "adept" | "sovereign";
-export type TabId = "play" | "journal" | "leaderboard";
+export type TabId = "play" | "journal" | "leaderboard" | "usage";
 export type LegSide = "long" | "short";
 export type LegType = "call" | "put";
 
@@ -133,6 +133,21 @@ export interface LeaderboardResult {
   scope: string;
   rows: LeaderboardRow[];
   count: number;
+}
+
+/// One row of the Claude API usage view, grouped by model. Mirrors the
+/// shape taxsort-mcp's `get_api_usage_stats` returns so the FE-side
+/// math (per-model cost + sats equivalent) is identical.
+export interface ModelUsage {
+  model: string;
+  runs: number;
+  total_calls: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+}
+
+export interface ApiUsageResult {
+  models: ModelUsage[];
 }
 
 export interface DifficultyDef {

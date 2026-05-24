@@ -259,6 +259,13 @@ export async function getLeaderboard(
   });
 }
 
+/// Aggregated Claude API token usage scoped to the caller's npub.
+/// Same shape as taxsort's `get_api_usage_stats` so the FE math
+/// (per-model USD cost + sats equivalent) is identical.
+export async function getApiUsageStats(): Promise<import("../types").ApiUsageResult> {
+  return callTool<import("../types").ApiUsageResult>("get_api_usage_stats", {});
+}
+
 // ─── Login / auth — free tools, no proof required ─────────────────────────
 
 export interface ServiceStatus {
