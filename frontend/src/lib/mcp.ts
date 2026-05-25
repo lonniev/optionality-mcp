@@ -73,19 +73,40 @@ export function setStoredProof(proof: string): void {
   window.localStorage.setItem(PROOF_STORAGE_KEY, proof);
 }
 
+/// Guest mode: the user clicked "Continue as Guest" on NpubGate. They
+/// reach the scenario chooser and the free preview surfaces (check_price,
+/// scenario briefing) but every paid call is gated. No npub, no proof,
+/// no journal / leaderboard / usage. Persisted so a reload survives.
+const GUEST_STORAGE_KEY = "optionality:guest";
+
+export function isGuestMode(): boolean {
+  return window.localStorage.getItem(GUEST_STORAGE_KEY) === "1";
+}
+
+export function setGuestMode(on: boolean): void {
+  if (on) window.localStorage.setItem(GUEST_STORAGE_KEY, "1");
+  else window.localStorage.removeItem(GUEST_STORAGE_KEY);
+}
+
 /**
  * "Logged in" means we have both the patron's npub AND a proof_token
  * that — until the server-side cache expires — authenticates ownership
  * of that npub for paid tool calls. Server-side expiry is the patron's
  * chosen ``cache_duration`` from the proof DM, default 2 hours.
+ *
+ * Guest mode also short-circuits to ``true`` so the gate hands off to the
+ * main UI; the main UI is responsible for disabling paid-call surfaces
+ * when ``isGuestMode()`` is true.
  */
 export function isLoggedIn(): boolean {
+  if (isGuestMode()) return true;
   return Boolean(getStoredNpub() && getStoredProof());
 }
 
 export function logOut(): void {
   window.localStorage.removeItem(NPUB_STORAGE_KEY);
   window.localStorage.removeItem(PROOF_STORAGE_KEY);
+  setGuestMode(false);
 }
 
 interface ToolResultText {

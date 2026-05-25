@@ -24,6 +24,7 @@ import {
   dealScenario,
   getApiUsageStats,
   getLeaderboard,
+  isGuestMode,
   judgeTrade,
   ProofRequiredError,
   saveDraft,
@@ -481,6 +482,9 @@ interface OptionalityProps {
 
 export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [tab, setTab] = useState<TabId>("play");
+  // Guest mode: came in via "Continue as Guest" on the gate. The scenario
+  // chooser and briefing render, but every paid surface is suppressed.
+  const guest = isGuestMode();
   const [mode, setMode] = useState<Mode>("historical");
   const [difficulty, setDifficulty] = useState<Difficulty>("journeyman");
   // Per-trade max-loss envelope in USD. Empty string = no constraint.
@@ -799,12 +803,44 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
       <div className="tab-bar">
         <button className={`tab ${tab === "play" ? "active" : ""}`} onClick={() => setTab("play")}>The Pit</button>
-        <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>Journal ({history.length})</button>
-        <button className={`tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}>Leaderboard</button>
-        <button className={`tab ${tab === "usage" ? "active" : ""}`} onClick={() => setTab("usage")}>Usage</button>
+        {!guest && (
+          <>
+            <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>Journal ({history.length})</button>
+            <button className={`tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}>Leaderboard</button>
+            <button className={`tab ${tab === "usage" ? "active" : ""}`} onClick={() => setTab("usage")}>Usage</button>
+          </>
+        )}
       </div>
 
       <div className="container">
+        {guest && (
+          <div className="panel" style={{ borderLeft: "3px solid var(--amber)", background: "rgba(212,163,91,0.04)" }}>
+            <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>Guest pass</div>
+            <div style={{ fontSize: 14, color: "var(--ink)", lineHeight: 1.55 }}>
+              You&apos;re browsing as a guest. The chooser, the briefing, and the live pricing display work.
+              Dealing a scenario, judging trades, asking tips, and saving to your Journal all require a Nostr sign-in.
+              {onSignOut && (
+                <>
+                  {" "}
+                  <button
+                    onClick={onSignOut}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: "var(--amber-bright)",
+                      textDecoration: "underline",
+                      cursor: "pointer",
+                      padding: 0,
+                      font: "inherit",
+                    }}
+                  >
+                    Sign in to play →
+                  </button>
+                </>
+              )}
+            </div>
+          </div>
+        )}
         {tab === "play" && (
           <>
             {!scenario && !loading && (
@@ -964,7 +1000,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       Pricing model has no multipliers yet — run reset_pricing_model on this operator.
                     </div>
                   )}
-                  <button className="btn" onClick={generateScenario}>Deal the Scenario</button>
+                  {guest ? (
+                    <button
+                      className="btn"
+                      onClick={onSignOut}
+                      title="Sign in with your Nostr identity to deal a scenario"
+                    >
+                      Sign In to Play
+                    </button>
+                  ) : (
+                    <button className="btn" onClick={generateScenario}>Deal the Scenario</button>
+                  )}
                 </div>
                 {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
               </div>

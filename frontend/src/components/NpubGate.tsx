@@ -5,6 +5,7 @@ import {
   receiveNpubProof,
   requestNpubProof,
   serviceStatus,
+  setGuestMode,
   setStoredNpub,
   setStoredProof,
 } from "../lib/mcp";
@@ -227,6 +228,26 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
         {pendingDuration && (
           <div style={STYLES.footnote}>Proof cached for ~{pendingDuration}.</div>
         )}
+
+        <div style={STYLES.guestDivider}>
+          <span style={STYLES.guestDividerLine} />
+          <span style={STYLES.guestDividerLabel}>or</span>
+          <span style={STYLES.guestDividerLine} />
+        </div>
+
+        <button
+          onClick={() => {
+            setGuestMode(true);
+            onAuthenticated();
+          }}
+          style={STYLES.btnGhost}
+        >
+          Continue as Guest
+        </button>
+        <div style={STYLES.footnote}>
+          Guests can browse the scenario chooser and the briefing.
+          Dealing scenarios, judging trades, and tipping require a Nostr sign-in.
+        </div>
       </div>
     </div>
   );
@@ -421,5 +442,22 @@ const STYLES: Record<string, React.CSSProperties> = {
     color: "var(--ink-faint)",
     fontStyle: "italic",
     textAlign: "center",
+  },
+  guestDivider: {
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    margin: "20px 0 14px",
+  },
+  guestDividerLine: {
+    flex: 1,
+    height: 1,
+    background: "var(--panel-edge)",
+  },
+  guestDividerLabel: {
+    fontSize: 10,
+    letterSpacing: "0.3em",
+    textTransform: "uppercase",
+    color: "var(--ink-faint)",
   },
 };
