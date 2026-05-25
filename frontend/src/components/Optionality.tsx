@@ -559,6 +559,23 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // the DM modal can route through the BE signer instead of requiring
   // a NIP-07 browser extension. Loaded at the same time as relays.
   const [escrowed, setEscrowed] = useState<boolean>(false);
+  // Current sats balance — drives the conditional Sample-Assessment tab
+  // for signed-in patrons. null = not yet loaded (don't render the
+  // tab); 0 = patron is out of sats and we surface the sample so they
+  // see what they could be playing for; >0 = hide.
+  const [currentBalance, setCurrentBalance] = useState<number | null>(null);
+
+  async function refreshBalance(): Promise<void> {
+    if (guest) return;
+    try {
+      const r = await checkBalance();
+      if (typeof r.balance_api_sats === "number") {
+        setCurrentBalance(r.balance_api_sats);
+      }
+    } catch {
+      // silent — header chip just won't update; not blocking gameplay
+    }
+  }
   const [mode, setMode] = useState<Mode>("historical");
   const [difficulty, setDifficulty] = useState<Difficulty>("journeyman");
   // Per-trade max-loss envelope in USD. Empty string = no constraint.
@@ -636,7 +653,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       } catch {
         /* silent — DM modal will tell the user if relays are missing */
       }
+      // Initial balance check — drives the Sample-Assessment tab
+      // surfacing when the patron is at zero.
+      void refreshBalance();
     })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [guest]);
 
   useEffect(() => {
@@ -714,6 +735,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       setScenario(json);
       setEntryId(result.entry_id);
       setTimeout(() => answerRef.current?.focus(), 100);
+      // Toll for deal_scenario was just debited — keep the header
+      // chip current and let the Sample-Assessment-at-zero affordance
+      // appear or disappear as appropriate.
+      void refreshBalance();
     } catch (e) {
       if (e instanceof ProofRequiredError) {
         onSignOut?.();
@@ -758,6 +783,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       setJournalDetails({});
       setStats(nextStats);
       void persist(nextStats);
+      // judge_trade was billed at the heavy tier — refresh balance
+      // so the Sample-tab affordance (visible only at zero) re-arms.
+      void refreshBalance();
     } catch (e) {
       if (e instanceof ProofRequiredError) {
         onSignOut?.();
@@ -963,6 +991,16 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
+  // When a signed-in patron's balance becomes positive while they're
+  // viewing the Sample-Assessment tab, route them back to The Pit. The
+  // tab button vanishes (balance > 0 hides it) and we don't want them
+  // staring at the Sample content with no obvious way back.
+  useEffect(() => {
+    if (!guest && tab === "sample" && currentBalance !== null && currentBalance > 0) {
+      setTab("play");
+    }
+  }, [currentBalance, tab, guest]);
+
   // Auto-load Journal on tab open. Re-fetches when the cached page is
   // empty (initial open, or after a fresh trade submission invalidated
   // it). Doesn't refetch on every open — keeps the cached scroll
@@ -1068,7 +1106,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
       <div className="tab-bar">
         <button className={`tab ${tab === "play" ? "active" : ""}`} onClick={() => setTab("play")}>The Pit</button>
-        {guest && (
+        {/* Sample Assessment tab — visible for guests AND for signed-in
+            patrons who've run their balance to zero. Acts as both
+            inspiration ("look what you could have judged") and a
+            soft nudge toward Top Off. Disappears as soon as the
+            balance is positive again. */}
+        {(guest || currentBalance === 0) && (
           <button className={`tab ${tab === "sample" ? "active" : ""}`} onClick={() => setTab("sample")}>See Assessment</button>
         )}
         {!guest && (
@@ -2028,6 +2071,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       {topOffOpen && (
         <TopOffModal
           onClose={() => setTopOffOpen(false)}
+          onBalanceUpdated={(newBalance) => setCurrentBalance(newBalance)}
         />
       )}
 
