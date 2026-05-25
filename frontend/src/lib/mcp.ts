@@ -415,6 +415,55 @@ export async function checkPrice(
   });
 }
 
+// ─── Patron credit-purchase flow ──────────────────────────────────────────
+
+/// Subset of the wheel's purchase_credits response the FE needs to
+/// surface payment UI. Field names mirror Studio's PurchaseCreditsResult
+/// so the FE flow is portable. Some wheel versions return
+/// ``lightning_invoice`` (bolt11), others ``payment_request`` — both
+/// names are accepted by the helper below.
+export interface PurchaseCreditsResult {
+  success?: boolean;
+  invoice_id?: string;
+  checkout_link?: string;
+  lightning_invoice?: string;
+  payment_request?: string;
+  expires_at?: string;
+  amount_sats?: number;
+  error?: string;
+  error_code?: string;
+}
+
+export async function purchaseCredits(sats: number): Promise<PurchaseCreditsResult> {
+  return callTool<PurchaseCreditsResult>("purchase_credits", { sats });
+}
+
+export interface CheckPaymentResult {
+  success?: boolean;
+  settled?: boolean;
+  balance?: number;
+  amount_sats?: number;
+  message?: string;
+  error?: string;
+  error_code?: string;
+}
+
+export async function checkPayment(invoiceId: string): Promise<CheckPaymentResult> {
+  return callTool<CheckPaymentResult>("check_payment", { invoice_id: invoiceId });
+}
+
+export interface CheckBalanceResult {
+  success?: boolean;
+  balance?: number;
+  npub?: string;
+  error?: string;
+  error_code?: string;
+}
+
+export async function checkBalance(): Promise<CheckBalanceResult> {
+  return callTool<CheckBalanceResult>("check_balance", {});
+}
+
 // ─── Login / auth — free tools, no proof required ─────────────────────────
 
 export interface ServiceStatus {

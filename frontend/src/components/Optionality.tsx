@@ -49,6 +49,7 @@ import DifficultyAvatar from "./DifficultyAvatar";
 import RiskProfileChart from "./RiskProfileChart";
 import FactsLedger from "./FactsLedger";
 import SampleAssessment from "./SampleAssessment";
+import TopOffModal from "./TopOffModal";
 
 // ============================================================
 //  OPTIONALITY — A Sovereign Trader's Drill
@@ -486,6 +487,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Guest mode: came in via "Continue as Guest" on the gate. The scenario
   // chooser and briefing render, but every paid surface is suppressed.
   const guest = isGuestMode();
+  // Top Off modal — purchases sats from the operator via BTCPay Lightning.
+  // Open from the lower-left of the scenario chooser; closed in all other
+  // app states so an in-progress scenario doesn't get covered.
+  const [topOffOpen, setTopOffOpen] = useState<boolean>(false);
   const [mode, setMode] = useState<Mode>("historical");
   const [difficulty, setDifficulty] = useState<Difficulty>("journeyman");
   // Per-trade max-loss envelope in USD. Empty string = no constraint.
@@ -973,6 +978,16 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 </div>
 
                 <div className="actions">
+                  {!guest && (
+                    <button
+                      className="btn btn-ghost"
+                      onClick={() => setTopOffOpen(true)}
+                      style={{ marginRight: "auto" }}
+                      title="Buy sats from the operator via Bitcoin Lightning"
+                    >
+                      Top Off
+                    </button>
+                  )}
                   {dealPrice !== null && dealPrice > 0 && (
                     <div style={{
                       fontSize: 12,
@@ -1435,6 +1450,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
           </div>
         )}
       </div>
+
+      {topOffOpen && (
+        <TopOffModal
+          onClose={() => setTopOffOpen(false)}
+        />
+      )}
     </div>
   );
 }

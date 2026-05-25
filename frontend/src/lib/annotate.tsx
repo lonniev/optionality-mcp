@@ -78,28 +78,19 @@ const CONCEPTS: ConceptDef[] = [
 
 const CONCEPTS_SORTED = [...CONCEPTS].sort((a, b) => b.term.length - a.term.length);
 const conceptPattern = CONCEPTS_SORTED.map((c) => escapeRegex(c.term)).join("|");
-const tickerPattern = "\\$?\\b([A-Z]{2,5})\\b";
+// Tickers must use the cash-tag prefix ($KRE, $MSTR) to qualify. An
+// earlier revision matched bare 2–5 letter all-caps tokens with a
+// denylist, but the false-positive surface was too large and a single
+// scenario like the SVB write-up would link "KRE" half a dozen times.
+// Cash-tags are an explicit "this is a ticker" signal — both the
+// dealer / judge prompts can adopt them and the Sample fixture uses
+// them. Without the prefix, all-caps words stay plain.
+const tickerPattern = "\\$([A-Z]{1,6})\\b";
 const COMBINED = new RegExp(`(${conceptPattern})|(${tickerPattern})`, "gi");
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
-
-/// A tiny denylist for the ticker pass — common 2–5 letter all-caps
-/// words that show up in trading prose but aren't tickers. Without it
-/// the annotator would link "FOMC" / "ETF" / "GDP" to a TradingView
-/// quote URL that does not exist.
-const TICKER_DENYLIST = new Set([
-  "FOMC", "FED", "ETF", "ETFS", "USD", "EUR", "GBP", "JPY", "CNY",
-  "GDP", "CPI", "PPI", "PMI", "ISM", "OECD", "IMF", "BIS", "ECB",
-  "BOJ", "BOE", "PBOC", "RBA", "RBNZ", "SNB", "OPEC", "NATO",
-  "API", "MCP", "JSON", "CEO", "CFO", "CTO", "COO", "USA", "UK",
-  "EU", "EV", "AI", "ML", "ATM", "ITM", "OTM", "DTE", "IV", "PE",
-  "FY", "Q1", "Q2", "Q3", "Q4", "TBD", "TBA", "EOD", "EOM", "EOY",
-  "BTW", "FYI", "ASAP", "NB", "PS", "RE", "OK", "OG", "DM", "PM",
-  "AM", "ETA", "ROI", "ROE", "ROIC", "EPS", "DCF", "NAV", "AUM",
-  "MOM", "YOY", "QOQ", "WOW", "DOD",
-]);
 
 /// React popover-on-hover for an inline concept term. Dotted underline
 /// is the affordance; the popover appears on mouseenter / focus and
@@ -187,9 +178,9 @@ export function annotate(text: string): ReactNode[] {
         out.push(raw);
       }
     } else if (m[2]) {
-      // ticker group
+      // ticker group — cash-tag-required, so raw is "$TICKER"
       const ticker = m[3];
-      if (ticker && !TICKER_DENYLIST.has(ticker.toUpperCase())) {
+      if (ticker) {
         const symbol = ticker.toUpperCase();
         out.push(
           <a
@@ -200,7 +191,7 @@ export function annotate(text: string): ReactNode[] {
             style={{ color: "var(--amber-bright)", textDecoration: "none" }}
             title={`Open ${symbol} chart on TradingView`}
           >
-            📊 {raw}
+            📊 ${symbol}
           </a>,
         );
       } else {

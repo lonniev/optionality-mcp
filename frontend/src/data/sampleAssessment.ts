@@ -20,7 +20,7 @@ export const SAMPLE_SCENARIO: Scenario = {
   mode: "historical",
   date_context: "Friday, March 10, 2023 — six hours after the FDIC seized Silicon Valley Bank",
   macro_backdrop:
-    "Regional bank deposit flight is the story of the week. SIVB tape was halted before the open and the receivership announcement landed mid-afternoon. KRE has been bid-then-offered three sessions running on rotating headlines about uninsured deposit concentrations at peer names. The 2yr Treasury has rallied 60 bps in 48 hours as the rate path repriced from another 25 to a pause. Powell's hawkish JEC testimony from Tuesday is already stale.",
+    "Regional bank deposit flight is the story of the week. $SIVB tape was halted before the open and the receivership announcement landed mid-afternoon. $KRE has been bid-then-offered three sessions running on rotating headlines about uninsured deposit concentrations at peer names. The 2yr Treasury has rallied 60 bps in 48 hours as the rate path repriced from another 25 to a pause. Powell's hawkish JEC testimony from Tuesday is already stale.",
   asset: {
     ticker: "KRE",
     name: "SPDR S&P Regional Banking ETF",
@@ -30,7 +30,7 @@ export const SAMPLE_SCENARIO: Scenario = {
     skew_note: "Puts bid hard relative to calls; 25-delta risk reversal at -14. Front-week 45-strike puts went out at 3.40 mid.",
   },
   catalyst:
-    "Sunday-evening Treasury / FDIC / Fed press conference expected to address whether uninsured SIVB depositors are made whole. A backstop announcement caps the contagion thesis; silence amplifies it. Either way, a gap on Monday's open is the market's base case.",
+    "Sunday-evening Treasury / FDIC / Fed press conference expected to address whether uninsured $SIVB depositors are made whole. A backstop announcement caps the contagion thesis; silence amplifies it. Either way, a gap on Monday's open is the market's base case.",
   key_levels:
     "Friday close $50.20. Pre-SIVB-headlines mid-week reference at $58.40. 2020 COVID-shock low at $26.50. Open interest stacked on the 45 and 40 strikes from the weeklies; gamma walls visible in the option flow.",
   constraints:
@@ -55,7 +55,7 @@ export const SAMPLE_SCENARIO: Scenario = {
 };
 
 export const SAMPLE_TRADE_PROPOSAL =
-  "Sell the March-17 weekly $45 / $40 put spread on KRE for an estimated $1.60 net credit. " +
+  "Sell the March-17 weekly 45 / 40 put spread on $KRE for an estimated $1.60 net credit. " +
   "Sell to open the 45 puts, buy to open the 40 puts as wing protection. Width is $5; max loss " +
   "is $5 minus the credit = $3.40 per share, or $340 per contract. Sizing: 25 contracts caps the " +
   "worst case at $8,500 — inside the $10,000 budget with a small reserve. " +
