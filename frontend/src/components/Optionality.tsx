@@ -1608,11 +1608,22 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               <div className="loading" style={{ display: "block", padding: "20px 0" }}>Reading the tape</div>
             )}
 
-            {leaderboard !== null && leaderboard.rows.length === 0 && (
+            {/* Defensive: wheel returns {success:false, error_code, error}
+                on any tool failure path (schema mismatch, billing,
+                anything). In that case there's no `rows` field — surface
+                the error to the user instead of crashing the tab. */}
+            {leaderboard !== null && !Array.isArray((leaderboard as unknown as { rows?: unknown }).rows) && (
+              <div className="error">
+                Leaderboard didn't load.{" "}
+                {((leaderboard as unknown as { error?: string }).error) || "Unknown error."}
+              </div>
+            )}
+
+            {leaderboard !== null && Array.isArray(leaderboard.rows) && leaderboard.rows.length === 0 && (
               <div className="empty">No judged trades yet. Be the first.</div>
             )}
 
-            {leaderboard !== null && leaderboard.rows.length > 0 && (
+            {leaderboard !== null && Array.isArray(leaderboard.rows) && leaderboard.rows.length > 0 && (
               <div>
                 <div className="history-row" style={{ gridTemplateColumns: "40px 56px 1fr 80px 80px 80px 80px", color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase" }}>
                   <div>#</div>
