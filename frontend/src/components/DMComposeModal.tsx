@@ -18,6 +18,7 @@ import {
   sendNip04DM,
   type RelayPublishResult,
 } from "../lib/nostr";
+import { getStoredNpub } from "../lib/mcp";
 import Avatar, { shortNpub } from "./Avatar";
 
 interface Props {
@@ -68,23 +69,31 @@ export default function DMComposeModal({ target, relays, onClose }: Props) {
   }
 
   const displayName = target.displayName || "Anonymous";
+  const isSelfDM = target.npub === getStoredNpub();
 
   return (
     <div style={STYLES.scrim} onClick={() => stage.kind !== "sending" && onClose()}>
       <div style={STYLES.card} onClick={(e) => e.stopPropagation()}>
-        <div style={STYLES.head}>Send DM</div>
+        <div style={STYLES.head}>{isSelfDM ? "Send DM to Yourself" : "Send DM"}</div>
 
         <div style={STYLES.recipient}>
           <Avatar value={target.avatar} size={44} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontFamily: "Fraunces, serif", fontSize: 17, color: "var(--amber-bright)" }}>
-              {displayName}
+              {displayName}{isSelfDM ? " (you)" : ""}
             </div>
             <div style={{ fontSize: 11, color: "var(--ink-faint)", fontFamily: "JetBrains Mono, monospace" }}>
               {shortNpub(target.npub)}
             </div>
           </div>
         </div>
+
+        {isSelfDM && (
+          <div style={STYLES.selfNote}>
+            Self-DM: the message lands in your own Nostr client's inbox. Useful for
+            verifying your NIP-07 signer + relay path end-to-end without pinging a peer.
+          </div>
+        )}
 
         {!nip07 && (
           <NoSignerNotice onClose={onClose} />
@@ -362,5 +371,16 @@ const STYLES: Record<string, React.CSSProperties> = {
     padding: 12,
     fontSize: 12,
     lineHeight: 1.5,
+  },
+  selfNote: {
+    background: "rgba(107,142,107,0.08)",
+    border: "1px solid var(--jade)",
+    borderLeft: "3px solid var(--jade)",
+    padding: 10,
+    fontSize: 11,
+    lineHeight: 1.55,
+    color: "var(--ink-soft)",
+    marginBottom: 14,
+    fontStyle: "italic",
   },
 };

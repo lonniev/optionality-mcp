@@ -1632,24 +1632,23 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     >
                       <div style={{ color: "var(--amber)", fontFamily: "Fraunces, serif", fontSize: 16 }}>{i + 1}</div>
                       <div>
-                        {/* Click → DM via NIP-07. Skipped for the user's
-                            own row (can't DM yourself; the click would
-                            just bounce). */}
+                        {/* Click → DM via NIP-07. Self-row clicks open
+                            a DM to yourself — useful for verifying the
+                            NIP-07 signer + relay path end-to-end
+                            without pinging a peer. NIP-04 encryption
+                            works on (own_priv, own_pub) ECDH; the DM
+                            shows up in your own Nostr client's inbox. */}
                         <Avatar
                           value={row.avatar}
                           size={40}
-                          onClick={
-                            isYou
-                              ? undefined
-                              : () => setDmTarget({
-                                  npub: row.npub,
-                                  displayName: row.display_name,
-                                  avatar: row.avatar,
-                                })
-                          }
+                          onClick={() => setDmTarget({
+                            npub: row.npub,
+                            displayName: row.display_name,
+                            avatar: row.avatar,
+                          })}
                           title={
                             isYou
-                              ? "That's you"
+                              ? "DM yourself — test the relay path"
                               : `DM ${row.display_name || shortNpub(row.npub)}`
                           }
                         />
