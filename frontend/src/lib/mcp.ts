@@ -435,7 +435,10 @@ export interface PurchaseCreditsResult {
 }
 
 export async function purchaseCredits(sats: number): Promise<PurchaseCreditsResult> {
-  return callTool<PurchaseCreditsResult>("purchase_credits", { sats });
+  // Wheel signature is purchase_credits(npub, proof, amount_sats) — kw
+  // name "amount_sats", not "sats". Pydantic rejects extra kwargs so the
+  // FE name MUST match. callTool injects npub + proof from localStorage.
+  return callTool<PurchaseCreditsResult>("purchase_credits", { amount_sats: sats });
 }
 
 export interface CheckPaymentResult {
