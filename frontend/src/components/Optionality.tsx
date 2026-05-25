@@ -6,7 +6,8 @@ import type {
   Difficulty,
   DifficultyDef,
   Evaluation,
-  JournalEntry,
+  JournalDetail,
+  JournalListEntry,
   LeaderboardResult,
   LeaderboardRow,
   Mode,
@@ -24,9 +25,11 @@ import {
   checkPrice,
   dealScenario,
   getApiUsageStats,
+  getJournal,
   getLeaderboard,
   isGuestMode,
   judgeTrade,
+  listJournal,
   ProofRequiredError,
   saveDraft,
   type CheckBalanceResult,
@@ -569,7 +572,23 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [loadingMsg, setLoadingMsg] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [stats, setStats] = useState<Stats>({ played: 0, avg: 0, best: 0, streak: 0 });
-  const [history, setHistory] = useState<JournalEntry[]>([]);
+  // Journal — server-authoritative, paginated. The wheel's list_journal
+  // returns lightweight summary rows; expanding a row triggers a lazy
+  // get_journal fetch for the full entry detail (scenario, evaluation,
+  // trade legs). Cursor-based pagination via the ISO created_at of the
+  // last row in the current page; the BE caps at 200 per fetch and the
+  // FE defaults to PAGE_SIZE per page so the tab opens fast even with
+  // thousands of sessions in Neon.
+  const [journalEntries, setJournalEntries] = useState<JournalListEntry[]>([]);
+  const [journalLoading, setJournalLoading] = useState<boolean>(false);
+  const [journalLoadingMore, setJournalLoadingMore] = useState<boolean>(false);
+  const [journalEnd, setJournalEnd] = useState<boolean>(false);
+  const [journalError, setJournalError] = useState<string>("");
+  /// Lazy-loaded detail rows, keyed by entry id. Populated on row
+  /// expand; staying in memory across collapses so a re-expand is
+  /// free. Cleared on sign-out via the storage-scoped slot mechanism.
+  const [journalDetails, setJournalDetails] = useState<Record<string, JournalDetail>>({});
+  const [journalDetailLoading, setJournalDetailLoading] = useState<Record<string, boolean>>({});
   const [entryId, setEntryId] = useState<string | null>(null);
   const answerRef = useRef<HTMLTextAreaElement | null>(null);
   // Save-draft transient state — last server-confirmed save timestamp so
@@ -623,12 +642,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       const s = await loadState(getStoredNpub());
       if (s) {
         setStats(s.stats || { played: 0, avg: 0, best: 0, streak: 0 });
-        setHistory(s.history || []);
       } else {
         // Fresh slot for this npub — clear any in-memory carry-over
         // (e.g. when bouncing between identities without a full reload).
         setStats({ played: 0, avg: 0, best: 0, streak: 0 });
-        setHistory([]);
       }
       // Hydrate active session — the patron paid for this scenario; a
       // page reload must put them back on the same board with their
@@ -667,8 +684,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     });
   }, [scenario, entryId, answer, evaluation, mode, difficulty, maxLossInput, tips, draftSavedAt]);
 
-  async function persist(nextStats: Stats, nextHistory: JournalEntry[]): Promise<void> {
-    await saveState(getStoredNpub(), { stats: nextStats, history: nextHistory });
+  async function persist(nextStats: Stats): Promise<void> {
+    // The Journal is server-authoritative via list_journal — only
+    // stats are still locally cached so the header chips don't flash
+    // empty on each page load.
+    await saveState(getStoredNpub(), { stats: nextStats });
   }
 
   async function generateScenario(): Promise<void> {
@@ -724,21 +744,15 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       const newBest = Math.max(stats.best, score);
       const newStreak = score >= 70 ? stats.streak + 1 : 0;
       const nextStats: Stats = { played: newPlayed, avg: newAvg, best: newBest, streak: newStreak };
-      const entry: JournalEntry = {
-        ts: Date.now(),
-        ticker: scenario?.asset?.ticker || "—",
-        date_context: scenario?.date_context || "",
-        mode: scenario?.mode || mode,
-        grade: json.letter_grade,
-        score,
-        scenario: scenario as Scenario,
-        answer,
-        evaluation: json,
-      };
-      const nextHistory: JournalEntry[] = [entry, ...history].slice(0, 50);
+      // Server is the source of truth for the Journal now — the wheel
+      // already persisted this entry in journal_entries via the
+      // judge_trade tool. We invalidate the cached page so the next
+      // Journal-tab visit re-fetches with the new entry at the top.
+      setJournalEntries([]);
+      setJournalEnd(false);
+      setJournalDetails({});
       setStats(nextStats);
-      setHistory(nextHistory);
-      void persist(nextStats, nextHistory);
+      void persist(nextStats);
     } catch (e) {
       if (e instanceof ProofRequiredError) {
         onSignOut?.();
@@ -801,6 +815,84 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
   }
 
+  const JOURNAL_PAGE_SIZE = 25;
+
+  /// Fetch the first page of the patron's Journal. Replaces any
+  /// prior entries; clears the detail cache; resets the cursor. Used
+  /// on tab open and after a fresh trade submission.
+  async function loadJournalFirstPage(): Promise<void> {
+    setJournalLoading(true);
+    setJournalError("");
+    try {
+      const r = await listJournal({ limit: JOURNAL_PAGE_SIZE });
+      const entries = Array.isArray(r.entries) ? r.entries : [];
+      setJournalEntries(entries);
+      setJournalEnd(entries.length < JOURNAL_PAGE_SIZE);
+      setJournalDetails({});
+      setJournalDetailLoading({});
+      if (r.error) setJournalError(r.error);
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      setJournalError((e as Error).message);
+    } finally {
+      setJournalLoading(false);
+    }
+  }
+
+  /// Fetch the next page using the last row's created_at as the
+  /// cursor. Appends to the existing list; sets journalEnd when the
+  /// returned page is shorter than the request (BE returned all
+  /// remaining rows).
+  async function loadJournalMore(): Promise<void> {
+    if (journalEnd || journalLoadingMore || journalEntries.length === 0) return;
+    const last = journalEntries[journalEntries.length - 1];
+    if (!last?.created_at) {
+      setJournalEnd(true);
+      return;
+    }
+    setJournalLoadingMore(true);
+    setJournalError("");
+    try {
+      const r = await listJournal({
+        limit: JOURNAL_PAGE_SIZE,
+        before: last.created_at,
+      });
+      const more = Array.isArray(r.entries) ? r.entries : [];
+      setJournalEntries((prev) => [...prev, ...more]);
+      if (more.length < JOURNAL_PAGE_SIZE) setJournalEnd(true);
+      if (r.error) setJournalError(r.error);
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      setJournalError((e as Error).message);
+    } finally {
+      setJournalLoadingMore(false);
+    }
+  }
+
+  /// On row expand — fetch the full entry detail (scenario,
+  /// evaluation, parsed trade legs). No-op if already cached.
+  async function loadJournalDetail(entryId: string): Promise<void> {
+    if (journalDetails[entryId] || journalDetailLoading[entryId]) return;
+    setJournalDetailLoading((prev) => ({ ...prev, [entryId]: true }));
+    try {
+      const r = await getJournal(entryId);
+      if (r.entry) {
+        setJournalDetails((prev) => ({ ...prev, [entryId]: r.entry! }));
+      } else if (r.error) {
+        setJournalError(r.error);
+      }
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      setJournalError((e as Error).message);
+    } finally {
+      setJournalDetailLoading((prev) => {
+        const next = { ...prev };
+        delete next[entryId];
+        return next;
+      });
+    }
+  }
+
   async function loadLeaderboard(sort: "avg" | "best" | "streak" | "played" = leaderboardSort): Promise<void> {
     setLeaderboardLoading(true);
     try {
@@ -819,6 +911,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   useEffect(() => {
     if (tab === "leaderboard" && leaderboard === null && !leaderboardLoading) {
       void loadLeaderboard("avg");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+
+  // Auto-load Journal on tab open. Re-fetches when the cached page is
+  // empty (initial open, or after a fresh trade submission invalidated
+  // it). Doesn't refetch on every open — keeps the cached scroll
+  // position + already-expanded detail rows when bouncing between tabs.
+  useEffect(() => {
+    if (tab === "journal" && journalEntries.length === 0 && !journalLoading && !journalEnd) {
+      void loadJournalFirstPage();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -922,7 +1025,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         )}
         {!guest && (
           <>
-            <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>Journal ({history.length})</button>
+            <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>Journal</button>
             <button className={`tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}>Leaderboard</button>
             <button className={`tab ${tab === "usage" ? "active" : ""}`} onClick={() => setTab("usage")}>Usage</button>
             <button className={`tab ${tab === "profile" ? "active" : ""}`} onClick={() => setTab("profile")}>Profile</button>
@@ -1715,47 +1818,132 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             <span className="panel-label">Journal</span>
             <h2 className="serif">Past sessions</h2>
             <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
-              Your last {history.length} drills. Click any row to reread the scenario and verdict.
+              Server-stored, npub-scoped. Click any row to reread the scenario and pitch review.
             </p>
-            {history.length === 0 && (
-              <div className="empty">No sessions yet. Deal your first card.</div>
+
+            {journalLoading && journalEntries.length === 0 && (
+              <div className="loading" style={{ display: "block", padding: "20px 0" }}>Pulling sessions</div>
             )}
-            {history.map((h) => (
-              <details key={h.ts} style={{ marginBottom: 6 }}>
-                <summary style={{ cursor: "pointer", listStyle: "none" }}>
-                  <div className="history-row">
-                    <div className="h-ticker">{h.ticker}</div>
-                    <div>
-                      <div>{h.date_context}</div>
-                      <div className="h-date">{new Date(h.ts).toLocaleString()}</div>
+
+            {journalError && (
+              <div className="error" style={{ marginBottom: 12 }}>{journalError}</div>
+            )}
+
+            {!journalLoading && journalEntries.length === 0 && !journalError && (
+              <div className="empty">No sessions yet. Deal your first Trade Scenario.</div>
+            )}
+
+            {journalEntries.map((row) => {
+              const detail = journalDetails[row.id];
+              const detailLoading = !!journalDetailLoading[row.id];
+              return (
+                <details
+                  key={row.id}
+                  style={{ marginBottom: 6 }}
+                  onToggle={(e) => {
+                    if ((e.target as HTMLDetailsElement).open && !detail && !detailLoading) {
+                      void loadJournalDetail(row.id);
+                    }
+                  }}
+                >
+                  <summary style={{ cursor: "pointer", listStyle: "none" }}>
+                    <div className="history-row">
+                      <div className="h-ticker">{row.ticker || "—"}</div>
+                      <div>
+                        <div style={{ color: "var(--ink)" }}>
+                          {row.mode} · {row.difficulty}
+                          {row.status !== "evaluated" && (
+                            <span style={{ marginLeft: 8, fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                              {row.status}
+                            </span>
+                          )}
+                        </div>
+                        <div className="h-date">
+                          {row.created_at ? new Date(row.created_at).toLocaleString() : ""}
+                        </div>
+                      </div>
+                      <div className="h-grade">{row.letter_grade ?? "—"}</div>
+                      <div className="h-score">{row.score != null ? `${row.score}/100` : "—"}</div>
                     </div>
-                    <div className="h-grade">{h.grade}</div>
-                    <div className="h-score">{h.score}/100</div>
+                  </summary>
+                  <div style={{ padding: "10px 14px 20px", background: "var(--bg-soft)" }}>
+                    {detailLoading && (
+                      <div className="loading" style={{ display: "block", padding: "16px 0" }}>Loading entry</div>
+                    )}
+                    {detail && (
+                      <>
+                        {detail.trade_proposal && (
+                          <>
+                            <h3 className="serif">Your trade</h3>
+                            <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12, whiteSpace: "pre-wrap" }}>
+                              {annotate(detail.trade_proposal)}
+                            </div>
+                          </>
+                        )}
+                        {detail.evaluation?.headline && (
+                          <>
+                            <h3 className="serif">Headline</h3>
+                            <div style={{ fontFamily: "Fraunces, serif", fontStyle: "italic", color: "var(--ink)", marginBottom: 12 }}>
+                              &ldquo;{annotate(detail.evaluation.headline)}&rdquo;
+                            </div>
+                          </>
+                        )}
+                        {detail.evaluation && (
+                          <FactsLedger evaluation={detail.evaluation} />
+                        )}
+                        {(detail.evaluation?.trade_legs && detail.evaluation.trade_legs.length > 0) && (
+                          <>
+                            <h3 className="serif">Risk Profile</h3>
+                            <RiskProfileChart
+                              legs={detail.evaluation.trade_legs}
+                              altLegs={detail.evaluation.alt_trade_legs}
+                              scenario={detail.scenario ?? null}
+                            />
+                          </>
+                        )}
+                        {detail.evaluation?.alternative_trade && (
+                          <>
+                            <h3 className="serif">Alternative</h3>
+                            <div className="alt-trade">{annotate(detail.evaluation.alternative_trade)}</div>
+                          </>
+                        )}
+                        {detail.evaluation?.deeper_context && (
+                          <>
+                            <h3 className="serif">Deeper context</h3>
+                            <div className="deeper">{annotate(detail.evaluation.deeper_context)}</div>
+                          </>
+                        )}
+                        {!detail.evaluation && detail.status !== "evaluated" && (
+                          <div style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic" }}>
+                            {detail.status === "open"
+                              ? "This entry is still open — deal a scenario in The Pit and pitch a trade to get a review."
+                              : `Entry status: ${detail.status}. No pitch review available.`}
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
-                </summary>
-                <div style={{ padding: "10px 14px 20px", background: "var(--bg-soft)" }}>
-                  <h3 className="serif">Your trade</h3>
-                  <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12, whiteSpace: "pre-wrap" }}>{h.answer}</div>
-                  <h3 className="serif">Headline</h3>
-                  <div style={{ fontFamily: "Fraunces, serif", fontStyle: "italic", color: "var(--ink)", marginBottom: 12 }}>&ldquo;{h.evaluation?.headline}&rdquo;</div>
-                  <FactsLedger evaluation={h.evaluation} />
-                  {(h.evaluation?.trade_legs && h.evaluation.trade_legs.length > 0) && (
-                    <>
-                      <h3 className="serif">Risk Profile</h3>
-                      <RiskProfileChart
-                        legs={h.evaluation.trade_legs}
-                        altLegs={h.evaluation.alt_trade_legs}
-                        scenario={h.scenario}
-                      />
-                    </>
-                  )}
-                  <h3 className="serif">Alternative</h3>
-                  <div className="alt-trade">{h.evaluation?.alternative_trade}</div>
-                  <h3 className="serif">Deeper context</h3>
-                  <div className="deeper">{h.evaluation?.deeper_context}</div>
-                </div>
-              </details>
-            ))}
+                </details>
+              );
+            })}
+
+            {journalEntries.length > 0 && !journalEnd && (
+              <div className="actions" style={{ marginTop: 16 }}>
+                <button
+                  className="btn btn-ghost"
+                  onClick={() => { void loadJournalMore(); }}
+                  disabled={journalLoadingMore}
+                >
+                  {journalLoadingMore ? "Loading…" : "Load more"}
+                </button>
+              </div>
+            )}
+
+            {journalEntries.length > 0 && journalEnd && (
+              <div style={{ fontSize: 11, color: "var(--ink-faint)", fontStyle: "italic", marginTop: 14, textAlign: "center" }}>
+                That's all your sessions.
+              </div>
+            )}
           </div>
         )}
       </div>

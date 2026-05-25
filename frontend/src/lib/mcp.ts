@@ -428,6 +428,35 @@ export async function getLeaderboard(
   });
 }
 
+/// Paginated list of the signed-in patron's journal entries, newest
+/// first. ``before`` is the cursor — the ISO ``created_at`` of the last
+/// row from the previous page. Omit on first fetch.
+///
+/// The BE's list_entries caps internally at 200; the FE defaults to 25
+/// per page so the Journal tab loads quickly even with thousands of
+/// historical sessions. "Load more" appends successive pages.
+export async function listJournal(
+  opts: { limit?: number; before?: string; status?: string } = {},
+): Promise<import("../types").JournalListResult> {
+  const args: Record<string, unknown> = { limit: opts.limit ?? 25 };
+  if (opts.before) args.before = opts.before;
+  if (opts.status) args.status = opts.status;
+  return callTool<import("../types").JournalListResult>("list_journal", args);
+}
+
+/// Fetch the full entry record — scenario, trade proposal, parsed
+/// legs, evaluation. The Journal tab lazy-fetches this on row expand
+/// rather than including the heavy payload in the list response.
+export async function getJournal(entryId: string): Promise<{
+  entry?: import("../types").JournalDetail;
+  error?: string;
+}> {
+  return callTool<{ entry?: import("../types").JournalDetail; error?: string }>(
+    "get_journal",
+    { entry_id: entryId },
+  );
+}
+
 /// Aggregated Claude API token usage scoped to the caller's npub.
 /// Same shape as taxsort's `get_api_usage_stats` so the FE math
 /// (per-model USD cost + sats equivalent) is identical.

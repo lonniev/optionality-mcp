@@ -78,6 +78,47 @@ export interface JournalEntry {
   evaluation: Evaluation;
 }
 
+/// Lightweight summary row from the wheel's `list_journal` tool —
+/// what the Journal tab uses to render the paginated list. Heavy
+/// fields (scenario, evaluation, answer) are NOT included; the FE
+/// lazy-fetches via `get_journal` when the user expands a row.
+export interface JournalListEntry {
+  id: string;
+  status: "open" | "submitted" | "evaluated" | "abandoned" | string;
+  mode: Mode;
+  difficulty: Difficulty | string;
+  ticker?: string | null;
+  score?: number | null;
+  letter_grade?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface JournalListResult {
+  entries: JournalListEntry[];
+  count: number;
+  error?: string;
+}
+
+/// Full entry shape returned by `get_journal` — joined ledger of
+/// scenario + trade + evaluation. Used to populate the expanded view
+/// inside the Journal tab.
+export interface JournalDetail {
+  id: string;
+  status: string;
+  mode: Mode;
+  difficulty: Difficulty | string;
+  ticker?: string | null;
+  score?: number | null;
+  letter_grade?: string | null;
+  scenario?: Scenario;
+  trade_proposal?: string | null;
+  trade_legs?: TradeLeg[] | null;
+  evaluation?: Evaluation | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Stats {
   played: number;
   avg: number;
