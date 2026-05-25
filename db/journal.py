@@ -27,19 +27,19 @@ async def open_entry(
     mode: str,
     difficulty: str,
     scenario: dict[str, Any],
-    effective_price_sats: int | None = None,
 ) -> str:
     """Insert a new ``open`` entry and return its UUID.
 
-    ``effective_price_sats`` is what the patron actually paid for this
-    deal (already computed by the wheel's pricing model). The leaderboard
-    uses it as the difficulty weight on this entry's eventual score.
+    Only mode + difficulty are recorded for downstream pricing/scoring
+    decisions. The leaderboard's weighting query asks the live pricing
+    model what those two values are worth at recompute time, so no
+    per-entry price snapshot is stored.
     """
     ticker = (scenario.get("asset") or {}).get("ticker") or None
     row = await fetchrow(
         """
-        INSERT INTO journal_entries (npub, status, mode, difficulty, scenario, ticker, effective_price_sats)
-        VALUES ($1, 'open', $2, $3, $4::jsonb, $5, $6)
+        INSERT INTO journal_entries (npub, status, mode, difficulty, scenario, ticker)
+        VALUES ($1, 'open', $2, $3, $4::jsonb, $5)
         RETURNING id::text AS id
         """,
         npub,
@@ -47,7 +47,6 @@ async def open_entry(
         difficulty,
         json.dumps(scenario),
         ticker,
-        effective_price_sats,
     )
     if not row:
         raise RuntimeError("open_entry: INSERT … RETURNING returned no row")

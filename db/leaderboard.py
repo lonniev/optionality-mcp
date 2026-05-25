@@ -21,22 +21,35 @@ logger = logging.getLogger(__name__)
 STREAK_THRESHOLD = 70
 
 
-def _weighted_score(raw_score: int, effective_price_sats: int | None) -> float:
-    """weighted_score = raw_score × effective_price_paid.
+async def _live_weight(mode: str | None, difficulty: str | None) -> float:
+    """Ask the pricing model what a deal_scenario at this (mode,
+    difficulty) is worth right now. Returns the sats-cost as the
+    weight — the operator's pricing model IS the source of truth for
+    scoring weight; no second dial.
 
-    The pricing model is the single source of truth for "how hard /
-    expensive is this pitch." A pitch the patron paid 40 sats for and
-    scored 50 weights to 2000; a pitch they paid 1 sat for and scored
-    100 weights to 100. Operators tune scoring weight by tuning their
-    pricing model multipliers — no second knob to keep in sync.
-
-    Legacy entries (NULL or zero effective_price_sats) fall back to
-    weight=1.0 so they always contribute their raw score rather than
-    silently zeroing out.
+    Falls back to 1.0 if the model is unreachable or the tool isn't
+    priced — keeps the leaderboard rendering with raw scores rather
+    than silently zeroing them out during a deploy or cold start.
     """
-    if not effective_price_sats or effective_price_sats <= 0:
-        return float(raw_score)
-    return float(raw_score) * float(effective_price_sats)
+    if not mode or not difficulty:
+        return 1.0
+    try:
+        from server import runtime
+        from tollbooth.tool_identity import capability_uuid
+        resolver = await runtime.pricing_resolver()
+        if resolver is None:
+            return 1.0
+        pricing = await resolver.get_tool_pricing(capability_uuid("deal_scenario"))
+        if pricing is None:
+            return 1.0
+        cost = pricing.compute(mode=mode, difficulty=difficulty)
+        return float(cost) if isinstance(cost, (int, float)) and cost > 0 else 1.0
+    except Exception as exc:
+        logger.warning(
+            "Leaderboard weight lookup failed for (mode=%r, difficulty=%r): %s",
+            mode, difficulty, exc,
+        )
+        return 1.0
 
 
 def _compute_streaks(scores_desc: list[int]) -> tuple[int, int]:
@@ -98,7 +111,7 @@ async def recompute_leaderboard(npub: str) -> None:
     """
     rows = await fetch(
         """
-        SELECT score, mode, difficulty, effective_price_sats, updated_at
+        SELECT score, mode, difficulty, updated_at
         FROM journal_entries
         WHERE npub = $1 AND status = 'evaluated' AND score IS NOT NULL
         ORDER BY updated_at DESC
@@ -122,10 +135,14 @@ async def recompute_leaderboard(npub: str) -> None:
     total_played = len(scores_desc)
     avg_score = round(sum(scores_desc) / total_played, 2)
     best_score = max(scores_desc)
-    weighted_scores = [
-        _weighted_score(int(r["score"]), r.get("effective_price_sats"))
-        for r in rows
-    ]
+    # Weight every entry by what the pricing model says deal_scenario
+    # at that (mode, difficulty) is worth RIGHT NOW. If the operator
+    # later tunes the multipliers, the next recompute reflects the
+    # new weights for all entries — there's no snapshot to drift.
+    weighted_scores: list[float] = []
+    for r in rows:
+        weight = await _live_weight(r.get("mode"), r.get("difficulty"))
+        weighted_scores.append(float(r["score"]) * weight)
     weighted_avg = round(sum(weighted_scores) / total_played, 2)
     weighted_best = round(max(weighted_scores), 2)
     current_streak, longest_streak = _compute_streaks(scores_desc)

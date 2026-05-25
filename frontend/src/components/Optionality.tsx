@@ -1745,11 +1745,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             <span className="panel-label">Leaderboard</span>
             <h2 className="serif">Sovereign traders, sorted by skill</h2>
             <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
-              Weighted by the toll paid: <code style={{ color: "var(--amber-bright)" }}>weighted_score = raw_score × effective_price_sats</code>.
-              A hard, expensive pitch scored well outranks a cheap one scored well. The pricing
-              model is the single dial — operators tune scoring weight by tuning per-difficulty
-              multipliers (mulligan included). Default sort is the weighted average; raw scores
-              available too.
+              <code style={{ color: "var(--amber-bright)" }}>weighted = raw_score × current_price(mode, difficulty)</code>.
+              The pricing model is the single dial: a hard, expensive pitch scored well
+              outranks a cheap one scored well. When the operator retunes a multiplier
+              (mulligan, sovereign, anything), the next leaderboard recompute reflects the
+              new weights for every entry — no snapshot to drift. Default sort is the
+              weighted average; raw scores available too.
             </p>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>

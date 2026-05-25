@@ -46,17 +46,6 @@ async def deal_scenario(
             trade on a scenario they've already seen — same setup, second
             look. The new play is journaled as its own entry.
     """
-    # The wheel's @paid_tool decorator already billed the patron via
-    # debit_or_deny BEFORE this body ran. The toll value (mode ×
-    # difficulty multipliers applied) lives on the runtime as
-    # ``_last_debit_cost`` — capture it here and stamp it onto the
-    # journal entry so the leaderboard can weight this play by the
-    # actual price paid, not a hardcoded scoring multiplier.
-    from server import runtime
-    effective_price_sats = getattr(runtime, "_last_debit_cost", None)
-    if not isinstance(effective_price_sats, int) or effective_price_sats < 0:
-        effective_price_sats = None
-
     # ── Replay branch ─────────────────────────────────────────────
     if replay_entry_id:
         original = await journal.get_entry(npub, replay_entry_id)
@@ -84,7 +73,6 @@ async def deal_scenario(
             mode="historical",
             difficulty="mulligan",
             scenario=scenario,
-            effective_price_sats=effective_price_sats,
         )
         return {"entry_id": entry_id, "scenario": scenario, "replay_of": replay_entry_id}
 
@@ -160,7 +148,6 @@ async def deal_scenario(
         mode=mode,
         difficulty=difficulty,
         scenario=scenario,
-        effective_price_sats=effective_price_sats,
     )
     return {"entry_id": entry_id, "scenario": scenario}
 

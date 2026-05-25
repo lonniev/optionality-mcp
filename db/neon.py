@@ -122,16 +122,11 @@ async def _ensure_domain_schema(vault: Any) -> None:
         f"CREATE INDEX IF NOT EXISTS idx_journal_npub_status "
         f"ON {t('optionality_journal_entries')}(npub, status)",
 
-        # Effective deal price in sats — the toll the patron actually
-        # paid for this scenario, captured from the pricing model at
-        # deal time (mode × difficulty multipliers applied). The
-        # leaderboard uses this as the difficulty weight: a hard +
-        # expensive pitch scored well outranks a cheap one. Stored
-        # per-entry so the leaderboard reflects what was paid at the
-        # time of the play, not what would be paid under today's
-        # multipliers. NULL for entries from before this column existed
-        # — leaderboard falls back to raw score (weight = 1).
-        f"ALTER TABLE {t('optionality_journal_entries')} ADD COLUMN IF NOT EXISTS effective_price_sats INT",
+        # NOTE: effective_price_sats column was added briefly in 0.1.8
+        # but is no longer used — the leaderboard now queries the live
+        # pricing model at recompute time instead of snapshotting per
+        # entry. The column lingers harmlessly in deploys that ran the
+        # 0.1.8 migration; we just stopped reading and writing it.
 
         f"CREATE TABLE IF NOT EXISTS {t('optionality_leaderboard_stats')} ("
         f"npub TEXT PRIMARY KEY REFERENCES {t('optionality_patrons')}(npub) ON DELETE CASCADE, "
