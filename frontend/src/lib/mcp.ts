@@ -21,6 +21,38 @@ import type { Evaluation, Scenario } from "../types";
 import { clearSessionNsec, hasSessionNsec, sessionNsecNpub } from "./sessionNsec";
 import { signInlineProof } from "./inlineProof";
 
+/// Return the npub proof that authenticates a paid tool call. One
+/// of two cached sources, depending on how the patron signed in:
+///
+///   - nsec login: we have the secret key in browser session
+///     storage; produce a fresh kind-27235 inline proof bound to
+///     the runtime tool name. Cheap (single Schnorr sig).
+///   - npub + DM login: we have the poison-phrase token the wheel
+///     cached at receive_npub_proof time; return it verbatim.
+///
+/// Either way callTool just asks once and forgets about which login
+/// path produced the answer. Stale-session-nsec entries (left over
+/// from a prior identity) are evicted automatically so they don't
+/// poison subsequent calls.
+function getCachedProof(toolName: string): string {
+  try {
+    const currentNpub = getStoredNpub();
+    const sessionNpub = hasSessionNsec() ? sessionNsecNpub() : null;
+    if (sessionNpub && sessionNpub === currentNpub) {
+      return signInlineProof(`optionality_${toolName}`);
+    }
+    if (sessionNpub && sessionNpub !== currentNpub) {
+      clearSessionNsec();
+    }
+  } catch {
+    // Inline-proof generation failed (decode / sign error). Fall
+    // through to the cached poison-phrase token; if THAT's also
+    // missing or stale, the call returns PROOF_REQUIRED and the
+    // UI bounces the user to the gate cleanly.
+  }
+  return getStoredProof();
+}
+
 const _envUrl = (import.meta.env.VITE_MCP_URL as string | undefined) ?? "";
 const MCP_URL = _envUrl.startsWith("/")
   ? `${window.location.origin}${_envUrl}`
@@ -249,48 +281,13 @@ async function callTool<T = unknown>(
   args: Record<string, unknown>,
 ): Promise<T> {
   const c = await getClient();
-  let merged: Record<string, unknown>;
-  if (BOOTSTRAP_TOOLS.has(toolName)) {
-    merged = { ...args };
-  } else {
-    // Two proof tactics for paid calls. If the session has a generated
-    // nsec (in-browser custody from "Sign In Directly"), sign a fresh
-    // inline kind-27235 proof bound to the runtime tool name — Tactic 2
-    // of the wheel's identity_proof. Else fall back to the cached
-    // poison-token tactic (set during a prior DM-based sign-in).
-    let proof: string;
-    try {
-      // Only sign inline if the cached session nsec actually derives to
-      // the currently-stored npub. A stale entry from a prior "Sign In
-      // Directly" attempt would otherwise sign with the wrong pubkey
-      // and the wheel returns PROOF_INVALID for every paid call.
-      const currentNpub = getStoredNpub();
-      const sessionNpub = hasSessionNsec() ? sessionNsecNpub() : null;
-      if (sessionNpub && sessionNpub === currentNpub) {
-        // The wheel's verify_proof binds the ``u`` tag to the MCP-
-        // namespaced name (e.g. "optionality_deal_scenario"), which
-        // is what callTool sends as the tool name a few lines below.
-        proof = signInlineProof(`optionality_${toolName}`);
-      } else {
-        if (sessionNpub && sessionNpub !== currentNpub) {
-          // Stale session nsec from a prior identity — evict it so
-          // future calls don't take the wrong branch on retry.
-          clearSessionNsec();
-        }
-        proof = getStoredProof();
-      }
-    } catch {
-      // Inline-proof tooling failure (nsec parse, sign failure) falls
-      // back to the cached path. The cached path's own error_code
-      // PROOF_REQUIRED bounces the user to NpubGate cleanly.
-      proof = getStoredProof();
-    }
-    merged = {
-      npub: getStoredNpub(),
-      proof,
-      ...args,
-    };
-  }
+  const merged: Record<string, unknown> = BOOTSTRAP_TOOLS.has(toolName)
+    ? { ...args }
+    : {
+        npub: getStoredNpub(),
+        proof: getCachedProof(toolName),
+        ...args,
+      };
   let result: ToolResult;
   try {
     result = (await c.callTool(
