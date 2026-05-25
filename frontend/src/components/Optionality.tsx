@@ -89,7 +89,8 @@ import SampleAssessment from "./SampleAssessment";
 import TopOffModal from "./TopOffModal";
 import Avatar, { shortNpub } from "./Avatar";
 import ProfileTab from "./Profile";
-import { getStoredNpub } from "../lib/mcp";
+import DMComposeModal from "./DMComposeModal";
+import { getPatronProfile, getStoredNpub } from "../lib/mcp";
 
 // ============================================================
 //  OPTIONALITY — A Sovereign Trader's Drill
@@ -531,6 +532,18 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Open from the lower-left of the scenario chooser; closed in all other
   // app states so an in-progress scenario doesn't get covered.
   const [topOffOpen, setTopOffOpen] = useState<boolean>(false);
+  // DM Compose modal target — clicking an avatar on the leaderboard
+  // populates this with that patron's identity; null hides the modal.
+  const [dmTarget, setDmTarget] = useState<{
+    npub: string;
+    displayName?: string | null;
+    avatar?: string | null;
+  } | null>(null);
+  // Sender's preferred Nostr relays — needed when we publish a DM. Loaded
+  // once at sign-in from the patron's Profile; refreshed lazily on
+  // Profile-tab edits via a Profile-component callback (not wired here
+  // for Phase 2 — relays change ~never per session).
+  const [userRelays, setUserRelays] = useState<string[]>([]);
   const [mode, setMode] = useState<Mode>("historical");
   const [difficulty, setDifficulty] = useState<Difficulty>("journeyman");
   // Per-trade max-loss envelope in USD. Empty string = no constraint.
@@ -572,6 +585,22 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // multipliers configured yet). Positive integers are the wheel's authoritative
   // sats cost. Recomputed when either selector changes.
   const [dealPrice, setDealPrice] = useState<number | null>(null);
+
+  // One-shot fetch of the patron's relay list at sign-in so the DM
+  // modal can publish without a round-trip per send. Guests skip this —
+  // they can't DM anyway. Errors swallowed silently; the modal surfaces
+  // an empty-relays state with a "Profile → Nostr Relays" prompt.
+  useEffect(() => {
+    if (guest) return;
+    (async () => {
+      try {
+        const r = await getPatronProfile();
+        if (r.profile?.relays) setUserRelays(r.profile.relays);
+      } catch {
+        /* silent — DM modal will tell the user if relays are missing */
+      }
+    })();
+  }, [guest]);
 
   useEffect(() => {
     (async () => {
@@ -1603,13 +1632,26 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     >
                       <div style={{ color: "var(--amber)", fontFamily: "Fraunces, serif", fontSize: 16 }}>{i + 1}</div>
                       <div>
-                        {/* Phase 2: clicking sends a Nostr DM (NIP-07). For
-                            now the avatar is non-clickable on the leaderboard;
-                            the tooltip previews the upcoming behavior. */}
+                        {/* Click → DM via NIP-07. Skipped for the user's
+                            own row (can't DM yourself; the click would
+                            just bounce). */}
                         <Avatar
                           value={row.avatar}
                           size={40}
-                          title={`DM ${row.display_name || shortNpub(row.npub)} (coming next)`}
+                          onClick={
+                            isYou
+                              ? undefined
+                              : () => setDmTarget({
+                                  npub: row.npub,
+                                  displayName: row.display_name,
+                                  avatar: row.avatar,
+                                })
+                          }
+                          title={
+                            isYou
+                              ? "That's you"
+                              : `DM ${row.display_name || shortNpub(row.npub)}`
+                          }
                         />
                       </div>
                       <div style={{ minWidth: 0 }}>
@@ -1690,6 +1732,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       {topOffOpen && (
         <TopOffModal
           onClose={() => setTopOffOpen(false)}
+        />
+      )}
+
+      {dmTarget && (
+        <DMComposeModal
+          target={dmTarget}
+          relays={userRelays}
+          onClose={() => setDmTarget(null)}
         />
       )}
     </div>
