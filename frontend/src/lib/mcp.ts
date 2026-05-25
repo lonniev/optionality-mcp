@@ -18,6 +18,8 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import type { Evaluation, Scenario } from "../types";
+import { hasSessionNsec } from "./sessionNsec";
+import { signInlineProof } from "./inlineProof";
 
 const _envUrl = (import.meta.env.VITE_MCP_URL as string | undefined) ?? "";
 const MCP_URL = _envUrl.startsWith("/")
@@ -198,6 +200,16 @@ export function logOut(): void {
   window.localStorage.removeItem(NPUB_STORAGE_KEY);
   window.localStorage.removeItem(PROOF_STORAGE_KEY);
   setGuestMode(false);
+  // Best-effort wipe of the in-browser session nsec. The escrowed copy
+  // on the BE survives until the user explicitly withdraws it via
+  // Profile → Game Persona Key.
+  try {
+    // Lazy require to avoid load-order issues if sessionNsec module is
+    // not yet hydrated (e.g. on cold tab close).
+    window.localStorage.removeItem("optionality:session_nsec:v1");
+  } catch {
+    /* noop */
+  }
 }
 
 interface ToolResultText {
@@ -237,13 +249,37 @@ async function callTool<T = unknown>(
   args: Record<string, unknown>,
 ): Promise<T> {
   const c = await getClient();
-  const merged: Record<string, unknown> = BOOTSTRAP_TOOLS.has(toolName)
-    ? { ...args }
-    : {
-        npub: getStoredNpub(),
-        proof: getStoredProof(),
-        ...args,
-      };
+  let merged: Record<string, unknown>;
+  if (BOOTSTRAP_TOOLS.has(toolName)) {
+    merged = { ...args };
+  } else {
+    // Two proof tactics for paid calls. If the session has a generated
+    // nsec (in-browser custody from "Sign In Directly"), sign a fresh
+    // inline kind-27235 proof bound to the runtime tool name — Tactic 2
+    // of the wheel's identity_proof. Else fall back to the cached
+    // poison-token tactic (set during a prior DM-based sign-in).
+    let proof: string;
+    try {
+      if (hasSessionNsec()) {
+        // The wheel's verify_proof binds the ``u`` tag to the MCP-
+        // namespaced name (e.g. "optionality_deal_scenario"), which
+        // is what callTool sends as the tool name a few lines below.
+        proof = signInlineProof(`optionality_${toolName}`);
+      } else {
+        proof = getStoredProof();
+      }
+    } catch {
+      // Inline-proof tooling failure (nsec parse, sign failure) falls
+      // back to the cached path. The cached path's own error_code
+      // PROOF_REQUIRED bounces the user to NpubGate cleanly.
+      proof = getStoredProof();
+    }
+    merged = {
+      npub: getStoredNpub(),
+      proof,
+      ...args,
+    };
+  }
   let result: ToolResult;
   try {
     result = (await c.callTool(

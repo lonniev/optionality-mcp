@@ -95,14 +95,21 @@ function KeypairModal({
   onClose,
   onCopy,
   onUseIt,
+  onSignInDirectly,
 }: {
   generated: { nsec: string; npub: string };
   onClose: () => void;
   onCopy: (text: string) => Promise<void>;
   onUseIt: () => void;
+  /// "Skip the DM, sign in right now": stash the freshly-generated
+  /// nsec in browser session storage, optionally escrow to BE, and
+  /// land the user directly on The Pit. Skips the Nostr-client step.
+  onSignInDirectly: () => Promise<void>;
 }) {
   const [copiedNsec, setCopiedNsec] = useState(false);
   const [copiedNpub, setCopiedNpub] = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
+  const [directError, setDirectError] = useState("");
 
   async function handleCopy(which: "nsec" | "npub"): Promise<void> {
     if (which === "nsec") {
@@ -154,27 +161,80 @@ function KeypairModal({
           </div>
         </div>
 
-        <p style={STYLES.modalProse}>
-          You'll need a Nostr client to receive the proof DM during sign-in. We recommend{" "}
-          <a
-            href="https://0xchat.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "var(--amber-bright)" }}
-          >
-            0xchat
-          </a>
-          {" "}— mobile + desktop, free, supports the NIP-04 DMs Optionality uses.
-        </p>
+        <div style={{
+          background: "rgba(212,163,91,0.06)",
+          border: "1px solid var(--amber)",
+          borderLeft: "3px solid var(--amber)",
+          padding: 12,
+          fontSize: 12,
+          lineHeight: 1.55,
+          marginBottom: 14,
+        }}>
+          <b>Skip the DM &amp; sign in now.</b> Optionality can hold this brand-new
+          nsec for you — we encrypt it in the operator vault and use it to sign
+          your Nostr DMs on your behalf. iPad-friendly, one-click sign-in. The
+          nsec also lives in this browser so the page can sign per-call identity
+          proofs. <i>Don't pick this if the nsec above represents a real Nostr
+          identity you want to keep self-custodied.</i>
+        </div>
+
+        {directError && (
+          <div style={{
+            color: "var(--rust)",
+            background: "rgba(184,85,58,0.08)",
+            border: "1px solid var(--rust)",
+            borderLeft: "3px solid var(--rust)",
+            padding: 10,
+            fontSize: 12,
+            marginBottom: 12,
+          }}>{directError}</div>
+        )}
 
         <div style={STYLES.modalActions}>
-          <button onClick={onClose} style={STYLES.btnTertiary}>
-            I've saved both keys
-          </button>
-          <button onClick={onUseIt} style={STYLES.btnPrimary}>
-            Use this npub to sign in
+          <button
+            onClick={async () => {
+              setDirectError("");
+              setSigningIn(true);
+              try {
+                await onSignInDirectly();
+              } catch (e) {
+                setDirectError((e as Error).message);
+                setSigningIn(false);
+              }
+            }}
+            disabled={signingIn}
+            style={{ ...STYLES.btnPrimary, ...(signingIn ? { opacity: 0.5, cursor: "not-allowed" } : {}) }}
+          >
+            {signingIn ? "Signing in…" : "Sign In Directly"}
           </button>
         </div>
+
+        <details style={{ marginTop: 20 }}>
+          <summary style={{ fontSize: 11, color: "var(--ink-soft)", cursor: "pointer", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+            Self-custody alternatives
+          </summary>
+          <div style={{ marginTop: 10 }}>
+            <p style={STYLES.modalProse}>
+              Prefer to manage the nsec yourself? Stash it in a Nostr client like{" "}
+              <a
+                href="https://0xchat.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: "var(--amber-bright)" }}
+              >
+                0xchat
+              </a>{" "}— then sign in via the standard DM challenge below.
+            </p>
+            <div style={STYLES.modalActions}>
+              <button onClick={onClose} style={STYLES.btnTertiary}>
+                I've saved both keys
+              </button>
+              <button onClick={onUseIt} style={STYLES.btnTertiary}>
+                Use this npub for DM sign-in
+              </button>
+            </div>
+          </div>
+        </details>
       </div>
     </div>
   );
@@ -497,6 +557,30 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
             onUseIt={() => {
               setInput(generated.npub);
               setShowGenerator(false);
+            }}
+            onSignInDirectly={async () => {
+              // Skip the DM proof entirely. The wheel accepts inline
+              // kind-27235 events as `proof` on every paid call
+              // (Tactic 2 in identity_proof.verify_proof), so we
+              // stash the nsec in browser session storage and the
+              // mcp.ts callTool wrapper signs per-call proofs.
+              const { setSessionNsec } = await import("../lib/sessionNsec");
+              const { escrowNsec } = await import("../lib/mcp");
+              setStoredNpub(generated.npub);
+              setSessionNsec(generated.nsec);
+              // Best-effort escrow so the BE can sign Nostr DMs on
+              // the patron's behalf. The first escrow_nsec call uses
+              // the new inline-proof path automatically. If escrow
+              // fails (e.g. operator key not available), we still
+              // proceed — patron can deposit later from Profile.
+              try {
+                await escrowNsec(generated.nsec);
+              } catch (e) {
+                // Surface in console but don't block sign-in.
+                console.warn("Escrow during direct sign-in failed:", e);
+              }
+              setShowGenerator(false);
+              onAuthenticated();
             }}
           />
         )}
