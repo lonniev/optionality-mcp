@@ -318,44 +318,31 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
   const trimmed = input.trim();
   const npubLooksValid = trimmed.startsWith("npub1") && trimmed.length >= 60;
 
-  // npub + nsec paste-recovery state. A patron who started via "Sign
-  // In Directly" and saved their nsec (password manager, encrypted
-  // note, paper) can paste it back here to resume without a Nostr
-  // client — same effect as the original direct sign-in, just a
-  // different starting point. The form is collapsed by default since
-  // it's the durable-return path, not the day-one onboarding.
-  const [showNsecForm, setShowNsecForm] = useState<boolean>(false);
-  const [nsecInput, setNsecInput] = useState<string>("");
+  // The single input field accepts either an npub or an nsec. Branch
+  // on the prefix at submit time; users don't have to know which form
+  // they're using.
+  const inputIsNsec = trimmed.startsWith("nsec1") && trimmed.length > 8;
+  const inputIsNpub = trimmed.startsWith("npub1") && trimmed.length >= 60;
+  const inputLooksValid = inputIsNsec || inputIsNpub;
 
+  /// Sign in with just an nsec. We derive the npub from it (so the
+  /// patron doesn't have to paste both), stash the nsec in browser
+  /// session storage, and best-effort escrow to the operator vault.
+  /// Subsequent paid calls sign inline kind-27235 proofs from the
+  /// session nsec (Tactic 2 in the wheel's verify_proof).
   async function handleNsecSignIn(): Promise<void> {
     setError("");
-    if (!npubLooksValid) {
-      setError("Enter a valid npub1... key in the field above.");
-      return;
-    }
-    const nsec = nsecInput.trim();
-    if (!nsec.startsWith("nsec1")) {
-      setError("Nsec must be a bech32 nsec1… string.");
-      return;
-    }
-    // Validate the nsec actually derives to the claimed npub before
-    // committing anything to storage.
+    const nsec = trimmed;
     let derivedNpub: string;
     try {
       const { getPublicKey, nip19 } = await import("nostr-tools");
       const decoded = nip19.decode(nsec);
       if (decoded.type !== "nsec" || !(decoded.data instanceof Uint8Array)) {
-        throw new Error("Could not decode nsec");
+        throw new Error("Not a bech32 nsec");
       }
       derivedNpub = nip19.npubEncode(getPublicKey(decoded.data));
     } catch (e) {
-      setError("Invalid nsec: " + (e as Error).message);
-      return;
-    }
-    if (derivedNpub !== trimmed) {
-      setError(
-        `Nsec doesn't match the npub. The nsec you pasted derives to ${derivedNpub.slice(0, 16)}…`,
-      );
+      setError("Couldn't read that nsec: " + (e as Error).message);
       return;
     }
 
@@ -363,19 +350,16 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
     try {
       const { setSessionNsec } = await import("../lib/sessionNsec");
       const { escrowNsec } = await import("../lib/mcp");
-      setStoredNpub(trimmed);
+      setStoredNpub(derivedNpub);
       setSessionNsec(nsec);
-      // Best-effort escrow refresh — operator may already hold this
-      // nsec (from a prior session) in which case escrow_nsec refuses
-      // and we proceed anyway. The browser session nsec is enough to
-      // sign inline kind-27235 proofs for every paid call regardless.
+      // Best-effort escrow — refuses cleanly if the operator already
+      // holds this patron's nsec from a prior session.
       try {
         await escrowNsec(nsec);
       } catch (e) {
         console.warn("Escrow refresh failed (proceeding):", e);
       }
-      setNsecInput("");
-      setShowNsecForm(false);
+      setInput("");
       onAuthenticated();
     } catch (e) {
       setError("Sign-in failed: " + (e as Error).message);
@@ -469,16 +453,9 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
           <small style={STYLES.brandSub}>Gamified Options Trading Consultant Trainer</small>
         </div>
 
-        <h2 className="serif" style={STYLES.heading}>This Capitalist Club discriminates by Nostr Npub.</h2>
-
-        <p style={STYLES.prose}>
-          Sign in with your Nostr identity. We&apos;ll send a Secure Courier DM to your npub;
-          your signed reply proves ownership. No email. No password. No KYC.
-        </p>
-
         {stage === "begin" && recents.length > 0 && (
           <div style={STYLES.recentBlock}>
-            <div style={STYLES.recentLabel}>Recent identities — skip the DM</div>
+            <div style={STYLES.recentLabel}>Recent identities</div>
             {recents.map((entry) => (
               <RecentRow
                 key={entry.npub}
@@ -488,90 +465,52 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
                 disabled={busy}
               />
             ))}
-            <div style={STYLES.recentHint}>
-              Cached proof is still valid; clicking signs you in without a fresh DM exchange.
-            </div>
           </div>
         )}
 
         {stage === "begin" && (
           <>
-            <label style={STYLES.label} htmlFor="npub-input">
-              {recents.length > 0 ? "Or sign in with a different npub" : "Your patron npub"}
+            <label style={STYLES.label} htmlFor="key-input">
+              Paste your npub or nsec
             </label>
             <input
-              id="npub-input"
-              type="text"
+              id="key-input"
+              type={inputIsNsec ? "password" : "text"}
               spellCheck={false}
               autoComplete="off"
               autoCapitalize="off"
               autoCorrect="off"
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && npubLooksValid && !busy) void handleBegin(); }}
-              placeholder="npub1..."
+              onKeyDown={(e) => {
+                if (e.key !== "Enter" || !inputLooksValid || busy) return;
+                if (inputIsNsec) void handleNsecSignIn();
+                else void handleBegin();
+              }}
+              placeholder="npub1… (DM challenge) or nsec1… (instant)"
               style={STYLES.input}
             />
             <button
-              onClick={() => void handleBegin()}
-              disabled={!npubLooksValid || busy}
-              style={{ ...STYLES.btnPrimary, ...((!npubLooksValid || busy) ? STYLES.btnDisabled : {}) }}
+              onClick={() => {
+                if (inputIsNsec) void handleNsecSignIn();
+                else void handleBegin();
+              }}
+              disabled={!inputLooksValid || busy}
+              style={{ ...STYLES.btnPrimary, ...((!inputLooksValid || busy) ? STYLES.btnDisabled : {}) }}
             >
-              {busy ? "Sending DM…" : "Begin Sign-In"}
+              {busy
+                ? (inputIsNsec ? "Signing in…" : "Sending DM…")
+                : inputIsNsec
+                  ? "Sign In"
+                  : inputIsNpub
+                    ? "Send DM to Sign In"
+                    : "Sign In"}
             </button>
-
-            {/* npub + nsec paste-recovery — for patrons who started
-                with "Sign In Directly" on this browser, saved their
-                nsec, then need to come back from a cleared cache,
-                a different device, or a sign-out. Lives below the DM
-                challenge so the "proper" Nostr-client path stays
-                primary, but it's right there if needed. */}
-            <button
-              type="button"
-              onClick={() => setShowNsecForm((v) => !v)}
-              style={STYLES.nsecToggle}
-            >
-              {showNsecForm ? "Hide nsec paste form" : "I have my nsec — sign in without a DM"}
-            </button>
-
-            {showNsecForm && (
-              <div style={STYLES.nsecForm}>
-                <div style={STYLES.nsecHint}>
-                  Paste the nsec you saved when you generated this npub. We'll verify it
-                  derives to the npub above, then sign you in directly — no DM challenge,
-                  no Nostr client required. <b>Don't paste an nsec from a real Nostr identity
-                  you keep self-custodied; that's the wrong path for those keys.</b>
-                </div>
-                <label style={STYLES.label} htmlFor="nsec-input">Your nsec</label>
-                <input
-                  id="nsec-input"
-                  type="password"
-                  spellCheck={false}
-                  autoComplete="off"
-                  autoCapitalize="off"
-                  autoCorrect="off"
-                  value={nsecInput}
-                  onChange={(e) => setNsecInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && nsecInput.trim().startsWith("nsec1") && !busy) {
-                      void handleNsecSignIn();
-                    }
-                  }}
-                  placeholder="nsec1..."
-                  style={STYLES.input}
-                />
-                <button
-                  onClick={() => void handleNsecSignIn()}
-                  disabled={!nsecInput.trim().startsWith("nsec1") || !npubLooksValid || busy}
-                  style={{
-                    ...STYLES.btnPrimary,
-                    ...((!nsecInput.trim().startsWith("nsec1") || !npubLooksValid || busy) ? STYLES.btnDisabled : {}),
-                  }}
-                >
-                  {busy ? "Signing in…" : "Sign In with nsec"}
-                </button>
-              </div>
-            )}
+            <div style={STYLES.formHint}>
+              {inputIsNsec
+                ? "Your nsec stays in this browser session. Optionality will also hold an encrypted copy so we can sign DMs on your behalf — withdraw any time from Profile."
+                : "We send a Secure Courier DM to your npub. Reply from your Nostr client (0xchat / Damus) and your signature is the proof. No email. No password. No KYC."}
+            </div>
           </>
         )}
 
@@ -900,31 +839,12 @@ const STYLES: Record<string, React.CSSProperties> = {
     fontStyle: "italic",
     textAlign: "center",
   },
-  nsecToggle: {
-    display: "block",
-    width: "100%",
-    background: "transparent",
-    border: "none",
-    color: "var(--amber)",
-    fontFamily: "JetBrains Mono, monospace",
+  formHint: {
+    marginTop: 10,
     fontSize: 11,
-    textAlign: "center",
-    padding: "12px 0 4px",
-    cursor: "pointer",
-    textDecoration: "underline",
-  },
-  nsecForm: {
-    marginTop: 8,
-    padding: "12px 14px",
-    background: "var(--bg-soft)",
-    border: "1px solid var(--panel-edge)",
-    borderLeft: "3px solid var(--amber)",
-  },
-  nsecHint: {
-    fontSize: 11,
-    color: "var(--ink-soft)",
+    color: "var(--ink-faint)",
     lineHeight: 1.55,
-    marginBottom: 12,
+    fontStyle: "italic",
   },
   guestDivider: {
     display: "flex",
