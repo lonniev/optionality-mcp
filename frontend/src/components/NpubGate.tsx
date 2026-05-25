@@ -34,114 +34,6 @@ import {
  * Errors at any step are surfaced in-place; the user can retry without
  * leaving the gate.
  */
-/// Low-intensity SVG of an open-outcry trading pit — tiered concentric
-/// terraces with stylized trader figures around the rings, ticker-tape
-/// streamers across the top. Sits behind the login panel at ~10% opacity
-/// so it reads as atmosphere, not subject. Pure inline SVG (no asset
-/// pipeline coordination needed); colors reference CSS variables for
-/// theme parity.
-function PitBackdrop() {
-  return (
-    <svg
-      aria-hidden="true"
-      viewBox="0 0 1200 800"
-      preserveAspectRatio="xMidYMid slice"
-      style={{
-        position: "absolute",
-        inset: 0,
-        width: "100%",
-        height: "100%",
-        opacity: 0.11,
-        pointerEvents: "none",
-        zIndex: 0,
-      }}
-    >
-      <defs>
-        <radialGradient id="pit-vignette" cx="50%" cy="58%" r="55%">
-          <stop offset="0%" stopColor="var(--amber)" stopOpacity="0.45" />
-          <stop offset="60%" stopColor="var(--amber)" stopOpacity="0.10" />
-          <stop offset="100%" stopColor="var(--bg)" stopOpacity="0" />
-        </radialGradient>
-      </defs>
-
-      {/* Vignette glow centered on the pit floor */}
-      <rect x="0" y="0" width="1200" height="800" fill="url(#pit-vignette)" />
-
-      {/* Concentric tiered terraces — drawn as offset octagons giving the
-          octagonal pit footprint familiar from CBOE / CME. */}
-      <g
-        stroke="var(--amber-bright)"
-        strokeWidth="1.4"
-        fill="none"
-        opacity="0.85"
-      >
-        {[460, 360, 270, 190, 120].map((r, i) => {
-          const cx = 600, cy = 470;
-          // 8-sided octagon, slightly rotated for visual interest
-          const pts = Array.from({ length: 8 }).map((_, k) => {
-            const a = (Math.PI / 4) * k + Math.PI / 8;
-            return `${(cx + Math.cos(a) * r).toFixed(1)},${(cy + Math.sin(a) * r * 0.55).toFixed(1)}`;
-          });
-          return (
-            <polygon
-              key={i}
-              points={pts.join(" ")}
-              strokeDasharray={i === 4 ? "0" : "3,4"}
-              opacity={0.4 + i * 0.12}
-            />
-          );
-        })}
-      </g>
-
-      {/* Trader figures scattered around the outer rings — simple
-          two-circle silhouettes (head + torso) so they read as people
-          without committing to detail at low opacity. */}
-      <g fill="var(--ivory)" opacity="0.55">
-        {([
-          [220, 380, 12], [310, 540, 14], [430, 640, 13], [610, 680, 15],
-          [780, 640, 14], [900, 540, 13], [990, 380, 14], [900, 280, 12],
-          [780, 220, 13], [610, 200, 14], [430, 220, 13], [310, 280, 12],
-          [380, 460, 10], [510, 590, 11], [690, 590, 11], [820, 460, 10],
-          [380, 360, 10], [510, 280, 11], [690, 280, 11], [820, 360, 10],
-        ] as Array<[number, number, number]>).map(([x, y, s], i) => (
-          <g key={i} transform={`translate(${x},${y})`}>
-            <circle r={s * 0.45} cy={-s * 0.9} />
-            <ellipse rx={s * 0.7} ry={s * 1.0} cy={s * 0.25} />
-          </g>
-        ))}
-      </g>
-
-      {/* Ticker-tape streamers across the upper third — three faint
-          horizontal bands suggesting price feeds. */}
-      <g
-        stroke="var(--bronze)"
-        strokeWidth="0.6"
-        fill="none"
-        opacity="0.6"
-      >
-        <path d="M0 80 Q300 70 600 84 T1200 78" />
-        <path d="M0 120 Q300 132 600 116 T1200 124" />
-        <path d="M0 158 Q300 150 600 162 T1200 154" strokeDasharray="2,6" />
-      </g>
-
-      {/* Pit-floor numerals — abstract three-character glyphs near each
-          tier crest, evoking strike prices without being legible. */}
-      <g
-        fill="var(--amber)"
-        opacity="0.32"
-        fontFamily="'JetBrains Mono', monospace"
-        fontSize="11"
-        textAnchor="middle"
-      >
-        <text x="600" y="220">·· ·· ··</text>
-        <text x="600" y="710">·· ·· ··</text>
-        <text x="180" y="470" transform="rotate(-90 180 470)">·· ··</text>
-        <text x="1020" y="470" transform="rotate(90 1020 470)">·· ··</text>
-      </g>
-    </svg>
-  );
-}
-
 export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [input, setInput] = useState<string>(getStoredNpub());
   const [stage, setStage] = useState<"begin" | "awaiting-reply" | "checking">("begin");
@@ -238,7 +130,12 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
 
   return (
     <div style={STYLES.root}>
-      <PitBackdrop />
+      <img
+        src="/login-bg.jpg"
+        alt=""
+        aria-hidden="true"
+        style={STYLES.backdrop}
+      />
       <div style={STYLES.panel}>
         <div style={STYLES.brand}>
           OPTIONALITY
@@ -364,6 +261,26 @@ const STYLES: Record<string, React.CSSProperties> = {
     position: "relative",
     zIndex: 1,
     backdropFilter: "blur(2px)",
+  },
+  // Kubrick's 1949 CBOT pit photo, Library of Congress, public domain.
+  // Treatment: warm-amber sepia + slight blur + radial mask that
+  // feathers the edges so the image dissolves into the background
+  // rather than ending in a hard rectangle. scale(1.08) crops the
+  // archival frame markers ("7" / "2.368") from the negative border.
+  backdrop: {
+    position: "absolute",
+    inset: 0,
+    width: "100%",
+    height: "100%",
+    objectFit: "cover",
+    objectPosition: "center",
+    opacity: 0.18,
+    filter: "sepia(0.45) hue-rotate(-12deg) blur(0.4px) contrast(1.05)",
+    transform: "scale(1.08)",
+    pointerEvents: "none",
+    zIndex: 0,
+    maskImage: "radial-gradient(ellipse at center, black 35%, transparent 88%)",
+    WebkitMaskImage: "radial-gradient(ellipse at center, black 35%, transparent 88%)",
   },
   brand: {
     fontFamily: "'Fraunces', Georgia, serif",
