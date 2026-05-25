@@ -20,28 +20,23 @@ logger = logging.getLogger(__name__)
 
 STREAK_THRESHOLD = 70
 
-# Difficulty-weight multipliers for leaderboard scoring — like the
-# degree-of-difficulty (DD) in diving. weighted_score = raw_score × DD.
-# A great pitch on Sovereign outranks a perfect pitch on Apprentice.
-# Mulligan replays are penalized so they can't be farmed for rank.
-#
-# Independent from the pricing-model multipliers (those control the
-# operator's toll). Adjusted here in code; not configurable per-patron.
-DIFFICULTY_WEIGHT: dict[str, float] = {
-    "apprentice": 1.0,
-    "journeyman": 2.0,
-    "adept":      3.0,
-    "sovereign":  4.0,
-    "mulligan":   0.5,
-}
 
+def _weighted_score(raw_score: int, effective_price_sats: int | None) -> float:
+    """weighted_score = raw_score × effective_price_paid.
 
-def _weighted_score(raw_score: int, difficulty: str | None) -> float:
-    """Apply the difficulty multiplier. Unknown difficulty → 1.0 floor
-    (we always record at least the raw score, never zero out)."""
-    if not difficulty:
+    The pricing model is the single source of truth for "how hard /
+    expensive is this pitch." A pitch the patron paid 40 sats for and
+    scored 50 weights to 2000; a pitch they paid 1 sat for and scored
+    100 weights to 100. Operators tune scoring weight by tuning their
+    pricing model multipliers — no second knob to keep in sync.
+
+    Legacy entries (NULL or zero effective_price_sats) fall back to
+    weight=1.0 so they always contribute their raw score rather than
+    silently zeroing out.
+    """
+    if not effective_price_sats or effective_price_sats <= 0:
         return float(raw_score)
-    return float(raw_score) * DIFFICULTY_WEIGHT.get(difficulty, 1.0)
+    return float(raw_score) * float(effective_price_sats)
 
 
 def _compute_streaks(scores_desc: list[int]) -> tuple[int, int]:
@@ -103,7 +98,7 @@ async def recompute_leaderboard(npub: str) -> None:
     """
     rows = await fetch(
         """
-        SELECT score, mode, difficulty, updated_at
+        SELECT score, mode, difficulty, effective_price_sats, updated_at
         FROM journal_entries
         WHERE npub = $1 AND status = 'evaluated' AND score IS NOT NULL
         ORDER BY updated_at DESC
@@ -127,7 +122,10 @@ async def recompute_leaderboard(npub: str) -> None:
     total_played = len(scores_desc)
     avg_score = round(sum(scores_desc) / total_played, 2)
     best_score = max(scores_desc)
-    weighted_scores = [_weighted_score(int(r["score"]), r.get("difficulty")) for r in rows]
+    weighted_scores = [
+        _weighted_score(int(r["score"]), r.get("effective_price_sats"))
+        for r in rows
+    ]
     weighted_avg = round(sum(weighted_scores) / total_played, 2)
     weighted_best = round(max(weighted_scores), 2)
     current_streak, longest_streak = _compute_streaks(scores_desc)
