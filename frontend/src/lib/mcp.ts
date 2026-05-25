@@ -704,6 +704,19 @@ export interface ServiceStatus {
   operator_npub_hash?: string;
   lifecycle?: string;
   message?: string;
+  /// Optionality MCP server.py __version__ (semver-ish, e.g. "0.1.9").
+  version?: string;
+  /// tollbooth-dpyc wheel version the MCP is linked against.
+  tollbooth_dpyc_version?: string;
+  /// Horizon-injected build info — commit SHA + repo URL.
+  build_info?: {
+    fastmcp_cloud_url?: string;
+    fastmcp_cloud_git_commit_sha?: string;
+    fastmcp_cloud_git_repo?: string;
+  };
+  process_id?: number;
+  service?: string;
+  slug?: string;
 }
 
 /** Read the operator's npub fingerprint so the patron can verify the DM source. */

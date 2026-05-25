@@ -7,6 +7,14 @@
 // Kubrick's 1949 CBOT pit photo (the same backdrop the gate uses) sits
 // as a fixed, sepia-toned watermark behind the content panels — visual
 // continuity from the gate into the app.
+//
+// Tool prices are quoted from the live pricing model via check_price —
+// no hardcoded numbers. If the lookup fails (rare; the wheel free-tier
+// gates it minimally) we render a softer paragraph without specific
+// figures so we never misstate the operator's actual toll.
+
+import { useEffect, useState } from "react";
+import { checkPrice } from "../lib/mcp";
 
 interface Props {
   onTopOff: () => void;
@@ -14,7 +22,69 @@ interface Props {
   isGuest: boolean;
 }
 
+interface PriceQuote {
+  cheap: number;     // deal_scenario at fiction × apprentice
+  expensive: number; // deal_scenario at live × sovereign
+  pitch: number;     // judge_trade base
+}
+
+function readCost(r: Awaited<ReturnType<typeof checkPrice>>): number | null {
+  // Different wheel versions surface the cost under slightly different
+  // keys. Tolerate the variations rather than rejecting a quote on a
+  // shape change.
+  const candidates = [
+    (r as unknown as { effective_cost?: number }).effective_cost,
+    (r as unknown as { cost?: number }).cost,
+    (r as unknown as { effective_cost_api_sats?: number }).effective_cost_api_sats,
+    (r as unknown as { base_cost_api_sats?: number }).base_cost_api_sats,
+  ];
+  for (const v of candidates) {
+    if (typeof v === "number" && v >= 0) return v;
+  }
+  return null;
+}
+
 export default function Welcome({ onTopOff, onSeeAssessment, isGuest }: Props) {
+  // Live pricing from the BE — null until the lookup completes; -1
+  // sentinel if the lookup failed and we should avoid quoting numbers.
+  const [prices, setPrices] = useState<PriceQuote | null | -1>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [cheap, expensive, pitch] = await Promise.all([
+          checkPrice("deal_scenario", { mode: "fiction", difficulty: "apprentice" }),
+          checkPrice("deal_scenario", { mode: "live", difficulty: "sovereign" }),
+          checkPrice("judge_trade", {}),
+        ]);
+        if (cancelled) return;
+        const c = readCost(cheap);
+        const e = readCost(expensive);
+        const p = readCost(pitch);
+        if (typeof c === "number" && typeof e === "number" && typeof p === "number") {
+          setPrices({ cheap: c, expensive: e, pitch: p });
+        } else {
+          setPrices(-1);
+        }
+      } catch {
+        if (!cancelled) setPrices(-1);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  // Cost-to-start guidance: ~30 paid rounds at the average price.
+  // We compute it from the live numbers (cheap + expensive average +
+  // pitch) so the figure tracks the operator's actual pricing.
+  const startSats = prices && prices !== -1
+    ? Math.max(200, Math.round(((prices.cheap + prices.expensive) / 2 + prices.pitch) * 30 / 100) * 100)
+    : null;
+  // Rough USD at ~$100K/BTC reference. 1 sat = $0.001 = 0.1¢, so
+  // sats / 10 = cents. Reads as "about NN¢" rather than implying a
+  // precise quote (BTC/USD moves; this is just a sticker price).
+  const startCents = startSats !== null ? Math.round(startSats / 10) : null;
+
   return (
     <>
       <img
@@ -89,25 +159,58 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest }: Props) {
         </ol>
 
         <h3 className="serif" style={{ marginTop: 20 }}>The toll</h3>
-        <p className="briefing-prose">
-          Each tool call costs Bitcoin Lightning sats. A fiction-mode apprentice
-          scenario is 1 sat (less than a tenth of a US cent at $100K/BTC). Sovereign
-          live tape with full web-search grounding is 40 sats. The pitch review is
-          10 sats. A typical round runs 6–30 sats. There's no subscription, no KYC,
-          no platform skim — the operator sets the pricing model transparently and
-          you can inspect every multiplier on the Usage tab.
-        </p>
-        <p className="briefing-prose">
-          <b>To start playing: about 80¢ in BTC.</b> That's roughly 800 sats, enough for
-          a dozen graded pitches at typical difficulty. The Top Off button buys sats
-          via a Lightning invoice; Wallet of Satoshi, Phoenix, Mutiny, or any Lightning
-          wallet works.
-        </p>
+        {prices && prices !== -1 ? (
+          <>
+            <p className="briefing-prose">
+              Each tool call costs Bitcoin Lightning sats — pulled from this operator's
+              live pricing model, not a marketing brochure. Right now:
+            </p>
+            <ul className="briefing-prose" style={{ paddingLeft: 22, lineHeight: 1.7, marginBottom: 12 }}>
+              <li>
+                Cheapest deal — fiction × apprentice:{" "}
+                <b>{prices.cheap} sat{prices.cheap === 1 ? "" : "s"}</b>
+              </li>
+              <li>
+                Top of the curve — live tape × sovereign with full web-search grounding:{" "}
+                <b>{prices.expensive} sat{prices.expensive === 1 ? "" : "s"}</b>
+              </li>
+              <li>
+                Pitch review (the judge LLM call):{" "}
+                <b>{prices.pitch} sat{prices.pitch === 1 ? "" : "s"}</b>
+              </li>
+            </ul>
+            <p className="briefing-prose">
+              No subscription, no KYC, no platform skim — the operator sets every
+              multiplier directly and you can inspect them yourself via the{" "}
+              <b>Usage</b> tab once you have a balance.
+            </p>
+            {startSats !== null && startCents !== null && (
+              <p className="briefing-prose">
+                <b>To start playing: about {startCents}¢ in BTC.</b> That's roughly{" "}
+                {startSats.toLocaleString()} sats — enough for ~30 graded rounds at
+                mid-difficulty. Top Off buys sats via a Lightning invoice; Wallet
+                of Satoshi, Phoenix, Mutiny, or any Lightning wallet works.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="briefing-prose">
+            Each tool call costs Bitcoin Lightning sats — pulled from this operator's
+            live pricing model. Difficulty and mode scale the toll; you can inspect
+            every multiplier on the <b>Usage</b> tab once you have a balance.
+            Top Off buys sats via a Lightning invoice — Wallet of Satoshi, Phoenix,
+            Mutiny, or any Lightning wallet works. {prices === -1 && (
+              <span style={{ color: "var(--ink-faint)", fontStyle: "italic" }}>
+                (Couldn't reach the pricing model just now to quote specific numbers.)
+              </span>
+            )}
+          </p>
+        )}
       </div>
 
       <div className="panel">
         <span className="panel-label">The economy</span>
-        <h3 className="serif">Optionality runs on Tollbooth-DPYC</h3>
+        <h3 className="serif">Optionality runs on Tollbooth-DPYC<sup>™</sup></h3>
         <p className="briefing-prose">
           Optionality is an agentic options-trading game built on{" "}
           <a
@@ -116,10 +219,19 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest }: Props) {
             rel="noopener noreferrer"
             style={{ color: "var(--amber-bright)", textDecoration: "none", fontWeight: 500 }}
           >
-            Tollbooth-DPYC →
+            Tollbooth-DPYC<sup>™</sup> →
           </a>{" "}
-          — a Bitcoin Lightning + Nostr stack for monetized AI services. Three properties
-          worth naming:
+          — a Bitcoin Lightning + Nostr stack for monetized AI services. The
+          governance, certified operators, and community registry live in the open at{" "}
+          <a
+            href="https://github.com/lonniev/dpyc-community"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "var(--amber-bright)", textDecoration: "none", fontWeight: 500 }}
+          >
+            github.com/lonniev/dpyc-community →
+          </a>.
+          Three properties worth naming:
         </p>
         <ul className="briefing-prose" style={{ paddingLeft: 20, lineHeight: 1.7 }}>
           <li>
@@ -152,8 +264,8 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest }: Props) {
             <>
               Look around — the <b>See Assessment</b> tab shows a full graded round
               so you can see what the game ships before joining. When you want to
-              start pitching trades for real, sign in with a Nostr identity and
-              top off about 80¢ in BTC.
+              start pitching trades for real, sign in with a Nostr identity
+              {startCents !== null ? <> and top off about {startCents}¢ in BTC.</> : "."}
             </>
           ) : (
             <>
@@ -168,7 +280,11 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest }: Props) {
             See Assessment
           </button>
           <button className="btn" onClick={onTopOff}>
-            {isGuest ? "Sign In to Play" : "Top Off — ~80¢ to start"}
+            {isGuest
+              ? "Sign In to Play"
+              : startCents !== null
+                ? `Top Off — ~${startCents}¢ to start`
+                : "Top Off"}
           </button>
         </div>
       </div>
