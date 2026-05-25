@@ -33,6 +33,41 @@ import {
 } from "../lib/mcp";
 import { annotate } from "../lib/annotate";
 
+/// Map MCP-namespaced tool names (the wheel's debit ledger key) to
+/// friendlier labels for the Usage panel. Keys are the
+/// "<slug>_<capability>" strings the wheel writes to today_usage.
+/// Unmapped tools fall back to a humanized version of the capability.
+const TOOL_DISPLAY_NAMES: Record<string, string> = {
+  optionality_deal_scenario: "Trade Scenario",
+  optionality_judge_trade: "Pitch Review",
+  optionality_ask_tip: "Tip Request",
+  optionality_save_draft: "Save Draft",
+  optionality_purchase_credits: "Top Off",
+  optionality_check_payment: "Payment Check",
+  optionality_check_balance: "Balance Check",
+  optionality_check_price: "Price Preview",
+  optionality_get_leaderboard: "Leaderboard",
+  optionality_get_my_rank: "My Rank",
+  optionality_get_journal: "Journal Lookup",
+  optionality_list_journal: "Journal List",
+  optionality_delete_journal: "Journal Delete",
+  optionality_set_display_name: "Display Name",
+  optionality_get_api_usage_stats: "API Usage",
+  optionality_account_statement: "Account Statement",
+  optionality_request_npub_proof: "Sign-In (request)",
+  optionality_receive_npub_proof: "Sign-In (verify)",
+};
+
+function displayToolName(rawKey: string): string {
+  if (TOOL_DISPLAY_NAMES[rawKey]) return TOOL_DISPLAY_NAMES[rawKey];
+  // Strip the operator-slug prefix and Title-Case the capability.
+  const stripped = rawKey.startsWith("optionality_") ? rawKey.slice("optionality_".length) : rawKey;
+  return stripped
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
 // Anthropic per-million-token pricing for the models Optionality uses.
 // Mirrors taxsort's ProfilePage so the math is identical across our
 // transparency surfaces.
@@ -1041,12 +1076,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     <button
                       className="btn"
                       onClick={onSignOut}
-                      title="Sign in with your Nostr identity to deal a scenario"
+                      title="Sign in with your Nostr identity to deal a Trade Scenario"
                     >
                       Sign In to Play
                     </button>
                   ) : (
-                    <button className="btn" onClick={generateScenario}>Deal the Scenario</button>
+                    <button className="btn" onClick={generateScenario}>Deal a Trade Scenario</button>
                   )}
                 </div>
                 {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
@@ -1127,7 +1162,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           placeholder="e.g. Sell the 30-day 95/90 put spread for 1.20 credit, sized to risk 0.5% of NAV. The Fed's hawkish hold puts a floor under the dollar but the equity is bid on insider buying; collecting premium below the 200d feels asymmetric…"
                         />
                         <div className="actions">
-                          <button className="btn btn-ghost" onClick={nextRound}>Discard, deal another</button>
+                          <button className="btn btn-ghost" onClick={nextRound}>Discard, next scenario</button>
                           <button
                             className="btn btn-ghost"
                             onClick={handleSaveDraft}
@@ -1136,7 +1171,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           >
                             {savingDraft ? "Saving…" : "Save Draft"}
                           </button>
-                          <button className="btn" onClick={submitTrade} disabled={loading}>Submit Trade</button>
+                          <button
+                            className="btn"
+                            onClick={submitTrade}
+                            disabled={loading}
+                            title="Submit your trade to the pitch panel for review"
+                          >
+                            Pitch the Trade
+                          </button>
                         </div>
                         {draftSavedAt && !savingDraft && (
                           <div style={{ fontSize: 11, color: "var(--jade)", marginTop: 8, letterSpacing: "0.1em" }}>
@@ -1190,7 +1232,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
             {evaluation && !loading && (
               <div className="panel">
-                <span className="panel-label">Verdict</span>
+                <span className="panel-label">Pitch Review</span>
                 <div className="score-banner">
                   <div className="grade">{evaluation.letter_grade}</div>
                   <div className="score">Overall<b>{evaluation.overall_score} / 100</b></div>
@@ -1235,7 +1277,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
                 <div className="actions" style={{ marginTop: 22 }}>
                   <button className="btn btn-ghost" onClick={nextRound}>Back to setup</button>
-                  <button className="btn" onClick={() => { nextRound(); void generateScenario(); }}>Deal Another</button>
+                  <button className="btn" onClick={() => { nextRound(); void generateScenario(); }}>Next Trade Scenario</button>
                 </div>
               </div>
             )}
@@ -1358,7 +1400,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         <tbody>
                           {toolRows.map((r) => (
                             <tr key={r.tool} style={{ borderBottom: "1px solid var(--panel-edge)" }}>
-                              <td style={{ padding: "8px 6px", fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{r.tool}</td>
+                              <td style={{ padding: "8px 6px", color: "var(--ink)" }}>
+                                {displayToolName(r.tool)}
+                                <span style={{ marginLeft: 8, color: "var(--ink-faint)", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}>
+                                  {r.tool}
+                                </span>
+                              </td>
                               <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink-soft)" }}>{r.calls}</td>
                               <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>{r.sats.toLocaleString()}</td>
                             </tr>

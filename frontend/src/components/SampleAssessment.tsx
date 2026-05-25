@@ -29,13 +29,13 @@ export default function SampleAssessment() {
       <div className="panel" style={{ borderLeft: "3px solid var(--amber)" }}>
         <span className="panel-label">Sample · For Illustration</span>
         <h2 className="serif" style={{ marginTop: 4 }}>
-          What an Optionality round looks like.
+          What an Optionality pitch review looks like.
         </h2>
         <p className="briefing-prose" style={{ marginBottom: 0 }}>
           A real round is dealt fresh by an LLM grounded in the mode &amp; persona you choose,
-          assessed by a second LLM, and persisted to your Journal. This one is fixed —
-          a March 2023 historical scenario, a credit put spread trade, a full verdict.
-          Use it to see what the game ships before you put sats on the table.
+          pitched to a second LLM that grades you across five dimensions, and persisted to
+          your Journal. This one is fixed — a March 2023 Trade Scenario, a credit put spread
+          pitch, a full review. Use it to see what the game ships before you put sats on the table.
         </p>
       </div>
 
@@ -74,14 +74,14 @@ export default function SampleAssessment() {
       </div>
 
       <div className="panel">
-        <span className="panel-label">Trainee's Trade</span>
+        <span className="panel-label">Trainee's Pitch</span>
         <p className="briefing-prose" style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
           {annotate(SAMPLE_TRADE_PROPOSAL)}
         </p>
       </div>
 
       <div className="panel">
-        <span className="panel-label">Verdict</span>
+        <span className="panel-label">Pitch Review</span>
         <div className="score-banner">
           <div className="grade">{evaluation.letter_grade}</div>
           <div className="score">Overall<b>{evaluation.overall_score} / 100</b></div>
