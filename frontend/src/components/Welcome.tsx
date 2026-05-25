@@ -1,19 +1,42 @@
-// Welcome panel for new authenticated patrons at zero sats.
+// Welcome panel — the first page every new arrival lands on,
+// authenticated or guest. Mission + how-it's-played + Tollbooth-DPYC
+// marketing in one scrollable page; primary CTA is Top Off for signed-in
+// patrons or "Sign in to play" for guests. Stays in the tab strip
+// after the initial auto-route so seasoned patrons can find a refresher.
 //
-// Surfaces once at sign-in (auto-routed), stays available as a tab
-// while balance is zero, and quietly disappears once the patron tops
-// off. Mission + how-it-works + Tollbooth-DPYC marketing in one
-// scrollable page; primary CTA is Top Off, secondary is the Sample
-// Assessment tab.
+// Kubrick's 1949 CBOT pit photo (the same backdrop the gate uses) sits
+// as a fixed, sepia-toned watermark behind the content panels — visual
+// continuity from the gate into the app.
 
 interface Props {
   onTopOff: () => void;
   onSeeAssessment: () => void;
+  isGuest: boolean;
 }
 
-export default function Welcome({ onTopOff, onSeeAssessment }: Props) {
+export default function Welcome({ onTopOff, onSeeAssessment, isGuest }: Props) {
   return (
     <>
+      <img
+        src="/login-bg.jpg"
+        alt=""
+        aria-hidden="true"
+        style={{
+          position: "fixed",
+          inset: 0,
+          width: "100%",
+          height: "100%",
+          objectFit: "cover",
+          objectPosition: "center",
+          opacity: 0.08,
+          filter: "sepia(0.45) hue-rotate(-12deg) blur(0.4px) contrast(1.05)",
+          transform: "scale(1.08)",
+          pointerEvents: "none",
+          zIndex: 0,
+          maskImage: "radial-gradient(ellipse at center, black 30%, transparent 85%)",
+          WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 85%)",
+        }}
+      />
       <div className="panel" style={{ borderLeft: "3px solid var(--amber)" }}>
         <span className="panel-label">Welcome</span>
         <h2 className="serif" style={{ marginTop: 4, fontSize: 28 }}>
@@ -125,16 +148,27 @@ export default function Welcome({ onTopOff, onSeeAssessment }: Props) {
       <div className="panel" style={{ background: "var(--bg-soft)" }}>
         <h3 className="serif" style={{ marginTop: 0 }}>Ready?</h3>
         <p className="briefing-prose">
-          Look around — the <b>See Assessment</b> tab shows a full graded round so
-          you can see what the game ships before you put sats on the table. When
-          you want to start pitching trades for real:
+          {isGuest ? (
+            <>
+              Look around — the <b>See Assessment</b> tab shows a full graded round
+              so you can see what the game ships before joining. When you want to
+              start pitching trades for real, sign in with a Nostr identity and
+              top off about 80¢ in BTC.
+            </>
+          ) : (
+            <>
+              Look around — the <b>See Assessment</b> tab shows a full graded round
+              so you can see what the game ships before you put sats on the table.
+              When you want to start pitching trades for real:
+            </>
+          )}
         </p>
         <div className="actions">
           <button className="btn btn-ghost" onClick={onSeeAssessment}>
             See Assessment
           </button>
           <button className="btn" onClick={onTopOff}>
-            Top Off — ~80¢ to start
+            {isGuest ? "Sign In to Play" : "Top Off — ~80¢ to start"}
           </button>
         </div>
       </div>
