@@ -20,9 +20,9 @@ import {
 type Stage =
   | { kind: "idle" }
   | { kind: "purchasing" }
-  | { kind: "invoice"; result: PurchaseCreditsResult }
+  | { kind: "invoice"; result: PurchaseCreditsResult; lastStatus?: string }
   | { kind: "checking"; result: PurchaseCreditsResult }
-  | { kind: "paid"; balance: number; result: PurchaseCreditsResult }
+  | { kind: "paid"; balance: number; result: PurchaseCreditsResult; creditsGranted: number }
   | { kind: "error"; message: string };
 
 const PRESET_AMOUNTS = [100, 500, 1000, 5000, 10000];
@@ -43,7 +43,9 @@ export default function TopOffModal({ onClose, onBalanceUpdated }: Props) {
     (async () => {
       try {
         const r = await checkBalance();
-        if (!cancelled && typeof r.balance === "number") setCurrentBalance(r.balance);
+        if (!cancelled && typeof r.balance_api_sats === "number") {
+          setCurrentBalance(r.balance_api_sats);
+        }
       } catch {
         // silent — header just hides
       }
@@ -91,22 +93,45 @@ export default function TopOffModal({ onClose, onBalanceUpdated }: Props) {
         setStage({ kind: "error", message: payment.error });
         return;
       }
-      if (payment.settled) {
-        // Settled — pull the fresh balance for display + parent notification.
-        let newBalance = payment.balance;
+
+      const status = payment.status ?? "Unknown";
+
+      if (status === "Settled") {
+        // Wheel returns balance_api_sats (snake_case); fall back to a
+        // fresh check_balance call if that's missing for any reason.
+        let newBalance = payment.balance_api_sats;
         if (typeof newBalance !== "number") {
           try {
             const bal = await checkBalance();
-            newBalance = bal.balance;
+            newBalance = bal.balance_api_sats;
           } catch { /* fall through */ }
         }
         const balance = typeof newBalance === "number" ? newBalance : 0;
+        const creditsGranted = payment.credits_granted ?? 0;
         if (onBalanceUpdated) onBalanceUpdated(balance);
-        setStage({ kind: "paid", balance, result });
+        setStage({ kind: "paid", balance, result, creditsGranted });
         return;
       }
-      // Still pending — bounce back to the invoice view.
-      setStage({ kind: "invoice", result });
+
+      if (status === "Expired" || status === "Invalid") {
+        setStage({
+          kind: "error",
+          message:
+            payment.message ||
+            `Invoice ${status.toLowerCase()}. Cancel and create a fresh invoice.`,
+        });
+        return;
+      }
+
+      // "New" or "Processing" — payment still pending. Bounce back to
+      // the invoice view, but stash the wheel's message so the user sees
+      // why the check didn't resolve. Without this the button toggled
+      // silently and looked broken.
+      setStage({
+        kind: "invoice",
+        result,
+        lastStatus: payment.message ?? `Status: ${status}`,
+      });
     } catch (e) {
       setStage({ kind: "error", message: (e as Error).message });
     }
@@ -213,6 +238,9 @@ export default function TopOffModal({ onClose, onBalanceUpdated }: Props) {
                   → Open BTCPay page
                 </a>
               )}
+              {stage.kind === "invoice" && stage.lastStatus && (
+                <div style={STYLES.lastStatus}>{stage.lastStatus}</div>
+              )}
             </div>
             <div style={STYLES.actions}>
               <button onClick={onClose} style={STYLES.btnGhost}>Cancel</button>
@@ -237,6 +265,11 @@ export default function TopOffModal({ onClose, onBalanceUpdated }: Props) {
         {stage.kind === "paid" && (
           <>
             <div style={STYLES.successHead}>✓ Payment settled</div>
+            {stage.creditsGranted > 0 && (
+              <div style={STYLES.creditsGranted}>
+                +{stage.creditsGranted.toLocaleString()} sats credited
+              </div>
+            )}
             <div style={STYLES.successBalance}>
               New balance
               <b>{stage.balance.toLocaleString()} sats</b>
@@ -468,5 +501,19 @@ const STYLES: Record<string, React.CSSProperties> = {
     padding: 12,
     fontSize: 12,
     lineHeight: 1.5,
+  },
+  lastStatus: {
+    marginTop: 10,
+    paddingTop: 8,
+    borderTop: "1px dashed var(--panel-edge)",
+    fontSize: 11,
+    color: "var(--amber)",
+    fontStyle: "italic",
+  },
+  creditsGranted: {
+    fontSize: 14,
+    color: "var(--jade)",
+    fontFamily: "'JetBrains Mono', monospace",
+    marginBottom: 10,
   },
 };

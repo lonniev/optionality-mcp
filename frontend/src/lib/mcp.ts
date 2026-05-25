@@ -441,12 +441,24 @@ export async function purchaseCredits(sats: number): Promise<PurchaseCreditsResu
   return callTool<PurchaseCreditsResult>("purchase_credits", { amount_sats: sats });
 }
 
+/// Shape of the wheel's check_payment response. Notes for the FE:
+/// - status is the primary signal ("New" | "Processing" | "Settled" |
+///   "Expired" | "Invalid"). There is NO ``settled: bool`` field.
+/// - balance_api_sats is the canonical patron balance (snake_case).
+/// - message is a human-readable status the wheel writes for every
+///   branch — surface this when the call returns "pending" so the user
+///   can see what BTCPay reported.
+/// - On Settled: credits_granted + persisted are set.
 export interface CheckPaymentResult {
   success?: boolean;
-  settled?: boolean;
-  balance?: number;
-  amount_sats?: number;
+  status?: "New" | "Processing" | "Settled" | "Expired" | "Invalid" | string;
+  additional_status?: string;
   message?: string;
+  invoice_id?: string;
+  credits_granted?: number;
+  persisted?: boolean;
+  warning?: string;
+  balance_api_sats?: number;
   error?: string;
   error_code?: string;
 }
@@ -457,7 +469,9 @@ export async function checkPayment(invoiceId: string): Promise<CheckPaymentResul
 
 export interface CheckBalanceResult {
   success?: boolean;
-  balance?: number;
+  balance_api_sats?: number;
+  total_deposited_api_sats?: number;
+  total_consumed_api_sats?: number;
   npub?: string;
   error?: string;
   error_code?: string;
