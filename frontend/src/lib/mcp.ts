@@ -18,7 +18,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import type { Evaluation, Scenario } from "../types";
-import { hasSessionNsec } from "./sessionNsec";
+import { clearSessionNsec, hasSessionNsec, sessionNsecNpub } from "./sessionNsec";
 import { signInlineProof } from "./inlineProof";
 
 const _envUrl = (import.meta.env.VITE_MCP_URL as string | undefined) ?? "";
@@ -260,12 +260,23 @@ async function callTool<T = unknown>(
     // poison-token tactic (set during a prior DM-based sign-in).
     let proof: string;
     try {
-      if (hasSessionNsec()) {
+      // Only sign inline if the cached session nsec actually derives to
+      // the currently-stored npub. A stale entry from a prior "Sign In
+      // Directly" attempt would otherwise sign with the wrong pubkey
+      // and the wheel returns PROOF_INVALID for every paid call.
+      const currentNpub = getStoredNpub();
+      const sessionNpub = hasSessionNsec() ? sessionNsecNpub() : null;
+      if (sessionNpub && sessionNpub === currentNpub) {
         // The wheel's verify_proof binds the ``u`` tag to the MCP-
         // namespaced name (e.g. "optionality_deal_scenario"), which
         // is what callTool sends as the tool name a few lines below.
         proof = signInlineProof(`optionality_${toolName}`);
       } else {
+        if (sessionNpub && sessionNpub !== currentNpub) {
+          // Stale session nsec from a prior identity — evict it so
+          // future calls don't take the wrong branch on retry.
+          clearSessionNsec();
+        }
         proof = getStoredProof();
       }
     } catch {

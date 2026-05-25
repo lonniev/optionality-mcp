@@ -20,7 +20,7 @@
 // what the user is offered to copy. nostr-tools converts to the
 // Uint8Array secp256k1 scalar each signing call.
 
-import { nip19 } from "nostr-tools";
+import { getPublicKey, nip19 } from "nostr-tools";
 
 const STORAGE_KEY = "optionality:session_nsec:v1";
 
@@ -63,4 +63,21 @@ export function getSessionNsecBytes(): Uint8Array {
 
 export function hasSessionNsec(): boolean {
   return !!getSessionNsec();
+}
+
+/// Return the bech32 npub corresponding to the stored session nsec, or
+/// null if the nsec is absent or malformed. Used to verify that the
+/// session-cached nsec actually belongs to the currently-signed-in
+/// patron before signing an inline proof with it. Stale entries from
+/// a prior "Sign In Directly" attempt would otherwise produce
+/// signatures with the wrong pubkey → "Invalid identity proof" on
+/// every paid call.
+export function sessionNsecNpub(): string | null {
+  try {
+    const sk = getSessionNsecBytes();
+    const pk = getPublicKey(sk);
+    return nip19.npubEncode(pk);
+  } catch {
+    return null;
+  }
 }
