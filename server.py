@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.9"
+__version__ = "0.1.10"
 
 logger = logging.getLogger(__name__)
 
@@ -169,6 +169,9 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         capability="send_patron_dm",
         category="write",
         intent="Sign and publish a Nostr DM as the patron using the escrowed nsec",
+        # 5 sats per DM: pays for the operator's relay fan-out plus a
+        # mild anti-spam friction. Operators can override in Studio.
+        pricing_hint_value=5,
     ),
     ToolIdentity(
         capability="get_escrow_status",
