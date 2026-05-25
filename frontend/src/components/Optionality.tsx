@@ -40,7 +40,7 @@ import { annotate } from "../lib/annotate";
 const TOOL_DISPLAY_NAMES: Record<string, string> = {
   optionality_deal_scenario: "Trade Scenario",
   optionality_judge_trade: "Pitch Review",
-  optionality_ask_tip: "Tip Request",
+  optionality_ask_tip: "Clue Request",
   optionality_save_draft: "Save Draft",
   optionality_purchase_credits: "Top Off",
   optionality_check_payment: "Payment Check",
@@ -731,7 +731,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   async function handleAskTip(): Promise<void> {
     const q = tipQuestion.trim();
     if (!q) return;
-    if (!entryId) { setError("Deal a scenario before asking a tip."); return; }
+    if (!entryId) { setError("Deal a Trade Scenario before asking for a clue."); return; }
     setError("");
     setTipAsking(true);
     try {
@@ -742,7 +742,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       setTipQuestion("");
     } catch (e) {
       if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
-      setError("Tip request failed. " + (e as Error).message);
+      setError("Clue request failed. " + (e as Error).message);
     } finally {
       setTipAsking(false);
     }
@@ -880,7 +880,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>Guest pass</div>
             <div style={{ fontSize: 14, color: "var(--ink)", lineHeight: 1.55 }}>
               You&apos;re browsing as a guest. The chooser, the briefing, and the live pricing display work.
-              Dealing a scenario, judging trades, asking tips, and saving to your Journal all require a Nostr sign-in.
+              Dealing a Trade Scenario, pitching trades, asking for clues, and saving to your Journal all require a Nostr sign-in.
               {onSignOut && (
                 <>
                   {" "}
@@ -1187,10 +1187,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         )}
                         {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
 
-                        {/* Ask-a-Tip — inline Q&A on the scenario card. */}
+                        {/* Ask-a-Clue — inline Q&A on the scenario card. */}
                         <div style={{ marginTop: 22, borderTop: "1px solid var(--panel-edge)", paddingTop: 14 }}>
                           <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>
-                            Ask a Tip
+                            Ask for a Clue
                           </div>
                           <div style={{ fontSize: 12, color: "var(--ink-faint)", marginBottom: 8, fontStyle: "italic" }}>
                             Socratic, non-spoiler. e.g. <span style={{ color: "var(--ink-soft)" }}>"What do you mean by Call Skew?"</span>
@@ -1219,7 +1219,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                               onClick={handleAskTip}
                               disabled={tipAsking || !tipQuestion.trim()}
                             >
-                              {tipAsking ? "Asking…" : "Ask"}
+                              {tipAsking ? "Asking…" : "Ask for Clue"}
                             </button>
                           </div>
                         </div>
