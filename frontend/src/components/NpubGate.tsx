@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
 
 import {
   getStoredNpub,
@@ -35,6 +36,101 @@ import {
  * Errors at any step are surfaced in-place; the user can retry without
  * leaving the gate.
  */
+/// Modal shown after "Generate Your Npub" — displays the freshly-minted
+/// nsec/npub pair with copy-to-clipboard affordances and a link to a
+/// Nostr client. The keys are never sent to the server; the user is
+/// responsible for stashing the nsec in their own Nostr client before
+/// closing.
+function KeypairModal({
+  generated,
+  onClose,
+  onCopy,
+  onUseIt,
+}: {
+  generated: { nsec: string; npub: string };
+  onClose: () => void;
+  onCopy: (text: string) => Promise<void>;
+  onUseIt: () => void;
+}) {
+  const [copiedNsec, setCopiedNsec] = useState(false);
+  const [copiedNpub, setCopiedNpub] = useState(false);
+
+  async function handleCopy(which: "nsec" | "npub"): Promise<void> {
+    if (which === "nsec") {
+      await onCopy(generated.nsec);
+      setCopiedNsec(true);
+      setTimeout(() => setCopiedNsec(false), 1800);
+    } else {
+      await onCopy(generated.npub);
+      setCopiedNpub(true);
+      setTimeout(() => setCopiedNpub(false), 1800);
+    }
+  }
+
+  return (
+    <div style={STYLES.modalScrim} onClick={onClose}>
+      <div style={STYLES.modalCard} onClick={(e) => e.stopPropagation()}>
+        <div style={STYLES.modalHead}>Your new Nostr identity</div>
+        <p style={STYLES.modalProse}>
+          Stash both keys somewhere safe — a password manager, an encrypted note, or a Nostr
+          client. The <b>nsec</b> is your secret. Whoever holds it controls this identity.
+          The <b>npub</b> is your public name; share it freely.
+        </p>
+
+        <div style={STYLES.keyRow}>
+          <label style={STYLES.keyLabel}>Public key (npub)</label>
+          <div style={STYLES.keyValueRow}>
+            <code style={STYLES.keyValue}>{generated.npub}</code>
+            <button
+              onClick={() => void handleCopy("npub")}
+              style={STYLES.copyBtn}
+            >
+              {copiedNpub ? "✓" : "Copy"}
+            </button>
+          </div>
+        </div>
+
+        <div style={STYLES.keyRow}>
+          <label style={{ ...STYLES.keyLabel, color: "var(--rust)" }}>
+            Secret key (nsec) — never share
+          </label>
+          <div style={STYLES.keyValueRow}>
+            <code style={{ ...STYLES.keyValue, color: "var(--rust)" }}>{generated.nsec}</code>
+            <button
+              onClick={() => void handleCopy("nsec")}
+              style={STYLES.copyBtn}
+            >
+              {copiedNsec ? "✓" : "Copy"}
+            </button>
+          </div>
+        </div>
+
+        <p style={STYLES.modalProse}>
+          You'll need a Nostr client to receive the proof DM during sign-in. We recommend{" "}
+          <a
+            href="https://0xchat.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{ color: "var(--amber-bright)" }}
+          >
+            0xchat
+          </a>
+          {" "}— mobile + desktop, free, supports the NIP-04 DMs Optionality uses.
+        </p>
+
+        <div style={STYLES.modalActions}>
+          <button onClick={onClose} style={STYLES.btnTertiary}>
+            I've saved both keys
+          </button>
+          <button onClick={onUseIt} style={STYLES.btnPrimary}>
+            Use this npub to sign in
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => void }) {
   const [input, setInput] = useState<string>(getStoredNpub());
   const [stage, setStage] = useState<"begin" | "awaiting-reply" | "checking">("begin");
@@ -43,6 +139,31 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
   const [opFingerprint, setOpFingerprint] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
+  // Generate-keypair modal state. Both bech32 strings live in component
+  // state only — never persisted, never sent to the server. The user is
+  // expected to copy them to a Nostr client (0xchat, Damus, Amethyst) on
+  // their own device before closing the modal.
+  const [showGenerator, setShowGenerator] = useState<boolean>(false);
+  const [generated, setGenerated] = useState<{ nsec: string; npub: string } | null>(null);
+
+  function handleGenerateKeypair(): void {
+    const sk = generateSecretKey();
+    const pk = getPublicKey(sk);
+    setGenerated({
+      nsec: nip19.nsecEncode(sk),
+      npub: nip19.npubEncode(pk),
+    });
+    setShowGenerator(true);
+  }
+
+  async function copy(text: string): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      // Older browsers / restricted contexts — fall through silently;
+      // the user can still select-and-copy the visible text.
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +264,7 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
           <small style={STYLES.brandSub}>Gamified Options Trading Consultant Trainer</small>
         </div>
 
-        <h2 className="serif" style={STYLES.heading}>The desk requires identification.</h2>
+        <h2 className="serif" style={STYLES.heading}>This Capitalist Club discriminates by Nostr Npub.</h2>
 
         <p style={STYLES.prose}>
           Sign in with your Nostr identity. We&apos;ll send a Secure Courier DM to your npub;
@@ -235,19 +356,53 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
           <span style={STYLES.guestDividerLine} />
         </div>
 
-        <button
-          onClick={() => {
-            setGuestMode(true);
-            onAuthenticated();
-          }}
-          style={STYLES.btnGhost}
-        >
-          Continue as Guest
-        </button>
-        <div style={STYLES.footnote}>
-          Guests can browse the scenario chooser and the briefing.
-          Dealing scenarios, judging trades, and tipping require a Nostr sign-in.
+        <div style={STYLES.altRow}>
+          <button
+            onClick={() => {
+              setGuestMode(true);
+              onAuthenticated();
+            }}
+            style={STYLES.btnGhostHalf}
+          >
+            Continue as Guest
+          </button>
+          <button
+            onClick={handleGenerateKeypair}
+            style={STYLES.btnGhostHalf}
+          >
+            Generate Your Npub
+          </button>
         </div>
+        <div style={STYLES.footnote}>
+          Guests can browse the chooser, the briefing, and the sample assessment.
+          Generating a keypair gives you a fresh Nostr identity to sign in with.
+        </div>
+
+        <div style={STYLES.brandFootnote}>
+          Optionality<sup>™</sup> is an agentic options-trading game built on
+          {" "}
+          <a
+            href="https://tollbooth-dpyc.com"
+            target="_blank"
+            rel="noopener noreferrer"
+            style={STYLES.brandFootnoteLink}
+          >
+            Tollbooth-DPYC<sup>™</sup>
+          </a>{" "}
+          — Bitcoin Lightning micropayments and Nostr identity for AI agents.
+        </div>
+
+        {showGenerator && generated && (
+          <KeypairModal
+            generated={generated}
+            onClose={() => setShowGenerator(false)}
+            onCopy={copy}
+            onUseIt={() => {
+              setInput(generated.npub);
+              setShowGenerator(false);
+            }}
+          />
+        )}
       </div>
     </div>
   );
@@ -459,5 +614,114 @@ const STYLES: Record<string, React.CSSProperties> = {
     letterSpacing: "0.3em",
     textTransform: "uppercase",
     color: "var(--ink-faint)",
+  },
+  altRow: {
+    display: "flex",
+    gap: 10,
+  },
+  btnGhostHalf: {
+    flex: 1,
+    background: "transparent",
+    color: "var(--ink-soft)",
+    border: "1px solid var(--panel-edge)",
+    padding: "10px 12px",
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 12,
+    letterSpacing: "0.05em",
+    cursor: "pointer",
+    textTransform: "uppercase",
+  },
+  brandFootnote: {
+    marginTop: 22,
+    paddingTop: 16,
+    borderTop: "1px solid var(--panel-edge)",
+    fontSize: 11,
+    color: "var(--ink-faint)",
+    textAlign: "center",
+    lineHeight: 1.55,
+  },
+  brandFootnoteLink: {
+    color: "var(--amber-bright)",
+    textDecoration: "none",
+    fontWeight: 500,
+  },
+  modalScrim: {
+    position: "fixed",
+    inset: 0,
+    background: "rgba(0,0,0,0.65)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    zIndex: 100,
+    padding: 20,
+    backdropFilter: "blur(4px)",
+  },
+  modalCard: {
+    background: "var(--panel)",
+    border: "1px solid var(--amber)",
+    boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
+    padding: "28px 30px",
+    width: "100%",
+    maxWidth: 540,
+    maxHeight: "90vh",
+    overflowY: "auto",
+  },
+  modalHead: {
+    fontFamily: "'Fraunces', Georgia, serif",
+    fontSize: 22,
+    color: "var(--amber-bright)",
+    marginBottom: 12,
+  },
+  modalProse: {
+    fontSize: 13,
+    color: "var(--ink)",
+    lineHeight: 1.55,
+    margin: "0 0 14px",
+  },
+  keyRow: {
+    margin: "14px 0",
+  },
+  keyLabel: {
+    display: "block",
+    fontSize: 10,
+    letterSpacing: "0.25em",
+    textTransform: "uppercase",
+    color: "var(--amber)",
+    marginBottom: 6,
+  },
+  keyValueRow: {
+    display: "flex",
+    gap: 8,
+    alignItems: "stretch",
+  },
+  keyValue: {
+    flex: 1,
+    padding: "8px 10px",
+    background: "var(--bg-soft)",
+    border: "1px solid var(--panel-edge)",
+    color: "var(--ivory-bright)",
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 11,
+    wordBreak: "break-all",
+    lineHeight: 1.5,
+  },
+  copyBtn: {
+    minWidth: 56,
+    padding: "0 12px",
+    background: "transparent",
+    border: "1px solid var(--amber)",
+    color: "var(--amber-bright)",
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 11,
+    cursor: "pointer",
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+  },
+  modalActions: {
+    display: "flex",
+    gap: 10,
+    marginTop: 18,
+    justifyContent: "flex-end",
+    flexWrap: "wrap",
   },
 };

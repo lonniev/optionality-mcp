@@ -2,7 +2,7 @@
 
 export type Mode = "historical" | "fiction" | "live";
 export type Difficulty = "apprentice" | "journeyman" | "adept" | "sovereign";
-export type TabId = "play" | "journal" | "leaderboard" | "usage";
+export type TabId = "play" | "sample" | "journal" | "leaderboard" | "usage";
 export type LegSide = "long" | "short";
 export type LegType = "call" | "put";
 

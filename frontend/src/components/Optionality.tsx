@@ -48,6 +48,7 @@ import ModeIcon from "./ModeIcon";
 import DifficultyAvatar from "./DifficultyAvatar";
 import RiskProfileChart from "./RiskProfileChart";
 import FactsLedger from "./FactsLedger";
+import SampleAssessment from "./SampleAssessment";
 
 // ============================================================
 //  OPTIONALITY — A Sovereign Trader's Drill
@@ -803,6 +804,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
       <div className="tab-bar">
         <button className={`tab ${tab === "play" ? "active" : ""}`} onClick={() => setTab("play")}>The Pit</button>
+        <button className={`tab ${tab === "sample" ? "active" : ""}`} onClick={() => setTab("sample")}>See Assessment</button>
         {!guest && (
           <>
             <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>Journal ({history.length})</button>
@@ -1204,6 +1206,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             )}
           </>
         )}
+
+        {tab === "sample" && <SampleAssessment />}
 
         {tab === "usage" && (() => {
           const models: ModelUsage[] = apiUsage?.models ?? [];
