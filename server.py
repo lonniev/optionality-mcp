@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.4"
+__version__ = "0.1.5"
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +134,20 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         capability="set_display_name",
         category="write",
         intent="Set the caller's display name on the leaderboard",
+    ),
+    # ---- Profile (avatar / bio / relays) — free reads and writes so a
+    # patron setting up their profile doesn't burn sats they meant to
+    # use playing. Visible on the leaderboard and the soon-to-arrive
+    # patron-to-patron Nostr DM affordance.
+    ToolIdentity(
+        capability="get_patron_profile",
+        category="free",
+        intent="Read the caller's profile — display name, avatar, bio, preferred relays",
+    ),
+    ToolIdentity(
+        capability="set_profile",
+        category="free",
+        intent="Update any subset of the caller's profile fields",
     ),
     # ---- Transparency — free so checking the usage view doesn't itself
     # cost sats. Matches taxsort-mcp's pricing for the parallel tool.
@@ -363,6 +377,49 @@ async def set_display_name(
     """Set the caller's display name on the leaderboard. 1..32 chars, unicode allowed."""
     from tools.leaderboard import set_display_name as _impl
     return await _impl(npub=npub, name=name)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("get_patron_profile"))
+async def get_patron_profile(
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Return the caller's profile — display_name, avatar, bio, relays."""
+    from tools.profile import get_patron_profile as _impl
+    return await _impl(npub=npub)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("set_profile"))
+async def set_profile(
+    display_name: str | None = None,
+    avatar: str | None = None,
+    bio: str | None = None,
+    relays: str | None = None,
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Update any subset of the caller's profile fields.
+
+    Args:
+        display_name: 1..32 chars, unicode allowed. Surfaces on leaderboard.
+        avatar: Short token (single emoji glyph or alphanumeric tag).
+        bio: 0..500 chars of free-form text. Empty string clears it.
+        relays: JSON-stringified list of wss:// relay URLs (max 12).
+
+    Any field left as ``None`` is a no-op — only fields explicitly
+    provided get overwritten. Returns the full profile after the update
+    so the caller can reconcile in one round-trip.
+    """
+    from tools.profile import set_profile as _impl
+    return await _impl(
+        npub=npub,
+        display_name=display_name,
+        avatar=avatar,
+        bio=bio,
+        relays=relays,
+    )
 
 
 @tool

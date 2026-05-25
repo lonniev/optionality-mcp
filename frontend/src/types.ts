@@ -2,7 +2,7 @@
 
 export type Mode = "historical" | "fiction" | "live";
 export type Difficulty = "apprentice" | "journeyman" | "adept" | "sovereign";
-export type TabId = "play" | "sample" | "journal" | "leaderboard" | "usage";
+export type TabId = "play" | "sample" | "journal" | "leaderboard" | "usage" | "profile";
 export type LegSide = "long" | "short";
 export type LegType = "call" | "put";
 
@@ -123,6 +123,7 @@ export interface TipExchange {
 export interface LeaderboardRow {
   npub: string;
   display_name?: string | null;
+  avatar?: string | null;
   total_played: number;
   avg_score: number;
   best_score: number;
@@ -131,6 +132,18 @@ export interface LeaderboardRow {
   last_played_at?: string | null;
   by_mode?: Record<string, unknown>;
   by_difficulty?: Record<string, unknown>;
+}
+
+/// Patron profile returned by `get_patron_profile`. All editable fields
+/// are nullable — fresh patrons start with display_name / avatar / bio
+/// all unset and an empty relays list. Theme is FE-only (localStorage).
+export interface PatronProfile {
+  npub: string;
+  display_name?: string | null;
+  avatar?: string | null;
+  bio?: string | null;
+  relays: string[];
+  created_at?: string | null;
 }
 
 export interface LeaderboardResult {

@@ -81,7 +81,17 @@ async def _ensure_domain_schema(vault: Any) -> None:
         f"CREATE TABLE IF NOT EXISTS {t('optionality_patrons')} ("
         "npub TEXT PRIMARY KEY, "
         "display_name TEXT, "
+        "avatar TEXT, "
+        "bio TEXT, "
+        "relays JSONB, "
         "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+
+        # Idempotent ALTERs for existing deployments — patrons created
+        # before the profile columns existed get NULLs which the FE
+        # treats as "unset". IF NOT EXISTS keeps this safe on re-runs.
+        f"ALTER TABLE {t('optionality_patrons')} ADD COLUMN IF NOT EXISTS avatar TEXT",
+        f"ALTER TABLE {t('optionality_patrons')} ADD COLUMN IF NOT EXISTS bio TEXT",
+        f"ALTER TABLE {t('optionality_patrons')} ADD COLUMN IF NOT EXISTS relays JSONB",
 
         f"CREATE TABLE IF NOT EXISTS {t('optionality_journal_entries')} ("
         "id UUID PRIMARY KEY DEFAULT gen_random_uuid(), "
@@ -108,6 +118,7 @@ async def _ensure_domain_schema(vault: Any) -> None:
         f"CREATE TABLE IF NOT EXISTS {t('optionality_leaderboard_stats')} ("
         f"npub TEXT PRIMARY KEY REFERENCES {t('optionality_patrons')}(npub) ON DELETE CASCADE, "
         "display_name TEXT, "
+        "avatar TEXT, "
         "total_played INT NOT NULL DEFAULT 0, "
         "avg_score NUMERIC(5,2) NOT NULL DEFAULT 0, "
         "best_score INT NOT NULL DEFAULT 0, "
@@ -123,6 +134,10 @@ async def _ensure_domain_schema(vault: Any) -> None:
 
         f"CREATE INDEX IF NOT EXISTS idx_leaderboard_best "
         f"ON {t('optionality_leaderboard_stats')}(best_score DESC)",
+
+        # Idempotent backfill for the avatar column on existing
+        # deployments — leaderboard read picks it up automatically.
+        f"ALTER TABLE {t('optionality_leaderboard_stats')} ADD COLUMN IF NOT EXISTS avatar TEXT",
 
         # Per-patron Claude API usage. One row per outbound `messages.create`,
         # written by `claude.complete_text` after the response lands. Surfaces

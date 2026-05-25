@@ -87,6 +87,9 @@ import RiskProfileChart from "./RiskProfileChart";
 import FactsLedger from "./FactsLedger";
 import SampleAssessment from "./SampleAssessment";
 import TopOffModal from "./TopOffModal";
+import Avatar, { shortNpub } from "./Avatar";
+import ProfileTab from "./Profile";
+import { getStoredNpub } from "../lib/mcp";
 
 // ============================================================
 //  OPTIONALITY — A Sovereign Trader's Drill
@@ -872,6 +875,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>Journal ({history.length})</button>
             <button className={`tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}>Leaderboard</button>
             <button className={`tab ${tab === "usage" ? "active" : ""}`} onClick={() => setTab("usage")}>Usage</button>
+            <button className={`tab ${tab === "profile" ? "active" : ""}`} onClick={() => setTab("profile")}>Profile</button>
           </>
         )}
       </div>
@@ -1576,33 +1580,62 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
             {leaderboard !== null && leaderboard.rows.length > 0 && (
               <div>
-                <div className="history-row" style={{ gridTemplateColumns: "40px 1fr 80px 80px 80px 80px", color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                <div className="history-row" style={{ gridTemplateColumns: "40px 56px 1fr 80px 80px 80px 80px", color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase" }}>
                   <div>#</div>
+                  <div></div>
                   <div>Trader</div>
                   <div style={{ textAlign: "right" }}>Avg</div>
                   <div style={{ textAlign: "right" }}>Best</div>
                   <div style={{ textAlign: "right" }}>Streak</div>
                   <div style={{ textAlign: "right" }}>Played</div>
                 </div>
-                {leaderboard.rows.map((row: LeaderboardRow, i: number) => (
-                  <div key={row.npub} className="history-row" style={{ gridTemplateColumns: "40px 1fr 80px 80px 80px 80px" }}>
-                    <div style={{ color: "var(--amber)", fontFamily: "Fraunces, serif", fontSize: 16 }}>{i + 1}</div>
-                    <div>
-                      <div style={{ color: "var(--ink)" }}>
-                        {row.display_name || `${row.npub.slice(0, 8)}…${row.npub.slice(-4)}`}
+                {leaderboard.rows.map((row: LeaderboardRow, i: number) => {
+                  const isYou = row.npub === getStoredNpub();
+                  return (
+                    <div
+                      key={row.npub}
+                      className="history-row"
+                      style={{
+                        gridTemplateColumns: "40px 56px 1fr 80px 80px 80px 80px",
+                        background: isYou ? "var(--amber-glow)" : undefined,
+                        alignItems: "center",
+                      }}
+                    >
+                      <div style={{ color: "var(--amber)", fontFamily: "Fraunces, serif", fontSize: 16 }}>{i + 1}</div>
+                      <div>
+                        {/* Phase 2: clicking sends a Nostr DM (NIP-07). For
+                            now the avatar is non-clickable on the leaderboard;
+                            the tooltip previews the upcoming behavior. */}
+                        <Avatar
+                          value={row.avatar}
+                          size={40}
+                          title={`DM ${row.display_name || shortNpub(row.npub)} (coming next)`}
+                        />
                       </div>
-                      <div className="h-date">{row.last_played_at ? `last: ${new Date(row.last_played_at).toLocaleDateString()}` : ""}</div>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ color: "var(--ink)" }}>
+                          {row.display_name || "Anonymous"}
+                          {isYou && (
+                            <span style={{ marginLeft: 6, fontSize: 10, color: "var(--amber)", letterSpacing: "0.15em" }}>YOU</span>
+                          )}
+                        </div>
+                        <div className="h-date" style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                          {shortNpub(row.npub)}{row.last_played_at ? `  ·  last: ${new Date(row.last_played_at).toLocaleDateString()}` : ""}
+                        </div>
+                      </div>
+                      <div className="h-score">{row.avg_score}</div>
+                      <div className="h-score">{row.best_score}</div>
+                      <div className="h-score">{row.longest_streak ?? row.current_streak}</div>
+                      <div className="h-score">{row.total_played}</div>
                     </div>
-                    <div className="h-score">{row.avg_score}</div>
-                    <div className="h-score">{row.best_score}</div>
-                    <div className="h-score">{row.longest_streak ?? row.current_streak}</div>
-                    <div className="h-score">{row.total_played}</div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
         )}
+
+        {tab === "profile" && !guest && <ProfileTab npub={getStoredNpub()} />}
 
         {tab === "journal" && (
           <div className="panel">

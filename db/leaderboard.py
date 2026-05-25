@@ -88,8 +88,9 @@ async def recompute_leaderboard(npub: str) -> None:
         npub,
     )
 
-    patron = await fetchrow("SELECT display_name FROM patrons WHERE npub = $1", npub)
+    patron = await fetchrow("SELECT display_name, avatar FROM patrons WHERE npub = $1", npub)
     display_name = (patron or {}).get("display_name")
+    avatar = (patron or {}).get("avatar")
 
     if not rows:
         # Delete any stale row so the leaderboard doesn't keep a zombie 0/0/0 entry.
@@ -111,12 +112,13 @@ async def recompute_leaderboard(npub: str) -> None:
     await execute(
         """
         INSERT INTO leaderboard_stats
-            (npub, display_name, total_played, avg_score, best_score,
+            (npub, display_name, avatar, total_played, avg_score, best_score,
              current_streak, longest_streak, last_played_at,
              by_mode, by_difficulty, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::jsonb, $10::jsonb, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, NOW())
         ON CONFLICT (npub) DO UPDATE SET
             display_name   = EXCLUDED.display_name,
+            avatar         = EXCLUDED.avatar,
             total_played   = EXCLUDED.total_played,
             avg_score      = EXCLUDED.avg_score,
             best_score     = EXCLUDED.best_score,
@@ -129,6 +131,7 @@ async def recompute_leaderboard(npub: str) -> None:
         """,
         npub,
         display_name,
+        avatar,
         total_played,
         avg_score,
         best_score,
@@ -167,7 +170,7 @@ async def get_leaderboard(
     if mode:
         return await fetch(
             f"""
-            SELECT npub, display_name,
+            SELECT npub, display_name, avatar,
                    (by_mode->$1->>'played')::INT     AS scope_played,
                    (by_mode->$1->>'avg_score')::NUMERIC AS scope_avg_score,
                    (by_mode->$1->>'best_score')::INT AS scope_best_score,
@@ -183,7 +186,7 @@ async def get_leaderboard(
     if difficulty:
         return await fetch(
             f"""
-            SELECT npub, display_name,
+            SELECT npub, display_name, avatar,
                    (by_difficulty->$1->>'played')::INT     AS scope_played,
                    (by_difficulty->$1->>'avg_score')::NUMERIC AS scope_avg_score,
                    (by_difficulty->$1->>'best_score')::INT AS scope_best_score,
@@ -199,7 +202,7 @@ async def get_leaderboard(
 
     return await fetch(
         f"""
-        SELECT npub, display_name, total_played, avg_score, best_score,
+        SELECT npub, display_name, avatar, total_played, avg_score, best_score,
                current_streak, longest_streak, last_played_at
         FROM leaderboard_stats
         ORDER BY {order}

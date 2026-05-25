@@ -388,6 +388,48 @@ export async function getApiUsageStats(): Promise<import("../types").ApiUsageRes
   return callTool<import("../types").ApiUsageResult>("get_api_usage_stats", {});
 }
 
+// ─── Profile (patron-keyed display_name / avatar / bio / relays) ──────────
+
+export interface GetPatronProfileResult {
+  success?: boolean;
+  profile?: import("../types").PatronProfile;
+  error?: string;
+  error_code?: string;
+}
+
+export async function getPatronProfile(): Promise<GetPatronProfileResult> {
+  return callTool<GetPatronProfileResult>("get_patron_profile", {});
+}
+
+export interface SetProfilePatch {
+  display_name?: string;
+  avatar?: string;
+  bio?: string;
+  /// FE passes the relays as a JSON-stringified array; the wheel tool
+  /// expects a string for now (Pydantic dispatches list-vs-string at
+  /// the normalize_relays layer). Stringifying here keeps the wheel
+  /// signature stable and the tool argument as a flat string.
+  relays?: string[];
+}
+
+export interface SetProfileResult {
+  success?: boolean;
+  updated?: string[];
+  errors?: Record<string, string> | null;
+  profile?: import("../types").PatronProfile;
+  error?: string;
+  error_code?: string;
+}
+
+export async function setProfile(patch: SetProfilePatch): Promise<SetProfileResult> {
+  const args: Record<string, unknown> = {};
+  if (typeof patch.display_name === "string") args.display_name = patch.display_name;
+  if (typeof patch.avatar === "string") args.avatar = patch.avatar;
+  if (typeof patch.bio === "string") args.bio = patch.bio;
+  if (Array.isArray(patch.relays)) args.relays = JSON.stringify(patch.relays);
+  return callTool<SetProfileResult>("set_profile", args);
+}
+
 export interface CheckPriceResult {
   success: boolean;
   tool_id?: string;

@@ -20,6 +20,32 @@
   color-scheme: dark;
 }
 
+/*
+ * Light theme — applied via data-theme="light" on the <html> element.
+ * Same amber accent so the brand voice carries; ink and background
+ * invert. Toggle wired through src/lib/theme.ts and persisted in
+ * localStorage so the choice survives a reload.
+ */
+:root[data-theme="light"] {
+  --bg: #f5efe3;
+  --bg-soft: #ece4d2;
+  --panel: #faf5e9;
+  --panel-edge: #d6c9a8;
+  --ink: #2a2218;
+  --ink-soft: #5a4d36;
+  --ink-faint: #8b7d62;
+  --amber: #b88130;
+  --amber-bright: #a36e1c;
+  --amber-glow: rgba(184, 129, 48, 0.16);
+  --ivory: #6b5a3a;
+  --ivory-bright: #4a3c24;
+  --bronze: #826a3e;
+  --rust: #a04a30;
+  --jade: #4e7a4e;
+  --crimson: #8b3a30;
+  color-scheme: light;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
 html, body, #root {
