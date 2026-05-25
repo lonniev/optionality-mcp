@@ -1,17 +1,24 @@
 // Annotated text renderer for the verdict and other pedagogical panels.
 //
-// Wraps known options-trading concepts with hover tooltips, and known
-// tickers / publication names with emoji-decorated links. The verdict
-// becomes a small in-place study guide: a trainee who doesn't yet know
-// what "calendar spread" or "IV crush" means gets the definition on
-// hover; a reference to MSTR or Bloomberg becomes a click-through.
+// Two passes are woven into the React tree:
 //
-// Two glossaries live here on purpose. They are study-guide content, not
-// configuration — keep the inline definitions tight and prefer adding a
-// term over expanding existing ones. The annotator is greedy on length:
-// "iron condor" wins over "iron".
+//   1. Options concepts (calendar spread, IV crush, vega, …) get a
+//      dotted-underline hover that surfaces a short definition in a
+//      real React popover (mouseenter / focus, positioned, themed).
+//      Not the browser `title="..."` attribute — that renders a slow
+//      OS-styled tooltip and ships a different feel per platform.
+//
+//   2. Tickers (2–5 uppercase letters, denylisted against macro
+//      acronyms like FOMC / ETF / GDP) become an emoji-decorated link
+//      to TradingView so a curious reader can pull up the chart.
+//
+// An earlier revision also auto-linked publication names (Bloomberg /
+// WSJ / Investopedia / …). The visual density was wildly excessive in
+// dimension-feedback paragraphs — six links in three sentences read
+// like spam. Publications dropped; the agent can cite outlets in prose
+// without a link decoration.
 
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 
 interface ConceptDef {
   /// Canonical lowercase form used for matching.
@@ -69,55 +76,19 @@ const CONCEPTS: ConceptDef[] = [
   { term: "wheel strategy", tip: "Sell cash-secured puts on a stock you'd own; if assigned, sell covered calls against it until called away. Repeat. Premium-grind playbook." },
 ];
 
-interface PublicationDef {
-  /// Canonical display name as it tends to appear in evaluation text.
-  name: string;
-  /// Site URL to link to.
-  url: string;
-  /// One-character emoji that fronts the link.
-  emoji: string;
-}
-
-const PUBLICATIONS: PublicationDef[] = [
-  { name: "Bloomberg", url: "https://www.bloomberg.com/", emoji: "📰" },
-  { name: "Reuters", url: "https://www.reuters.com/", emoji: "📰" },
-  { name: "Wall Street Journal", url: "https://www.wsj.com/", emoji: "📰" },
-  { name: "WSJ", url: "https://www.wsj.com/", emoji: "📰" },
-  { name: "Financial Times", url: "https://www.ft.com/", emoji: "🌐" },
-  { name: "Barron's", url: "https://www.barrons.com/", emoji: "📰" },
-  { name: "Investopedia", url: "https://www.investopedia.com/", emoji: "📚" },
-  { name: "Zero Hedge", url: "https://www.zerohedge.com/", emoji: "⚡" },
-  { name: "ZeroHedge", url: "https://www.zerohedge.com/", emoji: "⚡" },
-  { name: "MarketWatch", url: "https://www.marketwatch.com/", emoji: "📊" },
-  { name: "CNBC", url: "https://www.cnbc.com/", emoji: "📺" },
-  { name: "Wired", url: "https://www.wired.com/", emoji: "🌐" },
-  { name: "Coindesk", url: "https://www.coindesk.com/", emoji: "🪙" },
-  { name: "CoinDesk", url: "https://www.coindesk.com/", emoji: "🪙" },
-];
-
-/// Build the regex once. Concepts use word-boundary matching and are
-/// case-insensitive. Publications are case-sensitive (preserves casing
-/// like "Barron's"). Tickers are 2–5 uppercase letters, often appearing
-/// alone or alongside the cash-tag prefix.
 const CONCEPTS_SORTED = [...CONCEPTS].sort((a, b) => b.term.length - a.term.length);
-const PUBS_SORTED = [...PUBLICATIONS].sort((a, b) => b.name.length - a.name.length);
-
 const conceptPattern = CONCEPTS_SORTED.map((c) => escapeRegex(c.term)).join("|");
-const pubPattern = PUBS_SORTED.map((p) => escapeRegex(p.name)).join("|");
 const tickerPattern = "\\$?\\b([A-Z]{2,5})\\b";
-
-const COMBINED = new RegExp(
-  `(${conceptPattern})|(${pubPattern})|(${tickerPattern})`,
-  "gi",
-);
+const COMBINED = new RegExp(`(${conceptPattern})|(${tickerPattern})`, "gi");
 
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-/// A tiny denylist for the ticker pass — common 2–4 letter all-caps
-/// words that show up in trading prose but aren't tickers. The annotator
-/// would otherwise link "FOMC" or "ETF" to a fake quote URL.
+/// A tiny denylist for the ticker pass — common 2–5 letter all-caps
+/// words that show up in trading prose but aren't tickers. Without it
+/// the annotator would link "FOMC" / "ETF" / "GDP" to a TradingView
+/// quote URL that does not exist.
 const TICKER_DENYLIST = new Set([
   "FOMC", "FED", "ETF", "ETFS", "USD", "EUR", "GBP", "JPY", "CNY",
   "GDP", "CPI", "PPI", "PMI", "ISM", "OECD", "IMF", "BIS", "ECB",
@@ -130,10 +101,61 @@ const TICKER_DENYLIST = new Set([
   "MOM", "YOY", "QOQ", "WOW", "DOD",
 ]);
 
-/// Render a string with concept tooltips, publication links, and ticker
-/// links woven into the React tree. Plain prose stays plain; matches
-/// become inline elements. Pass through React strings so the caller can
-/// keep using <p>{annotate(text)}</p> without ceremony.
+/// React popover-on-hover for an inline concept term. Dotted underline
+/// is the affordance; the popover appears on mouseenter / focus and
+/// dismisses on mouseleave / blur. Positioned above the term unless
+/// near the top of the viewport.
+function ConceptTooltip({ tip, children }: { tip: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <span
+      style={{
+        position: "relative",
+        borderBottom: "1px dotted var(--amber)",
+        cursor: "help",
+        display: "inline",
+      }}
+      tabIndex={0}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+    >
+      {children}
+      {open && (
+        <span
+          role="tooltip"
+          style={{
+            position: "absolute",
+            bottom: "calc(100% + 8px)",
+            left: "50%",
+            transform: "translateX(-50%)",
+            width: "max-content",
+            maxWidth: 320,
+            background: "var(--panel)",
+            border: "1px solid var(--amber)",
+            color: "var(--ink)",
+            padding: "8px 12px",
+            fontSize: 12,
+            fontStyle: "normal",
+            lineHeight: 1.5,
+            textAlign: "left",
+            zIndex: 1000,
+            boxShadow: "0 6px 24px rgba(0,0,0,0.45)",
+            pointerEvents: "none",
+            // Small caret pointing down at the underlined term
+            // (rendered via a transparent-border triangle).
+          }}
+        >
+          {tip}
+        </span>
+      )}
+    </span>
+  );
+}
+
+/// Render a string with concept hovers and ticker links woven into the
+/// React tree. Plain prose stays plain; matches become inline elements.
 export function annotate(text: string): ReactNode[] {
   if (!text) return [text];
 
@@ -152,45 +174,21 @@ export function annotate(text: string): ReactNode[] {
     }
 
     const raw = m[0];
-    // Group 1 = concept, 2 = publication, 3 = ticker (with $? prefix)
     if (m[1]) {
+      // concept group
       const def = CONCEPTS_SORTED.find((c) => c.term.toLowerCase() === raw.toLowerCase());
       if (def) {
         out.push(
-          <span
-            key={`c${keyCounter++}`}
-            title={def.tip}
-            style={{
-              borderBottom: "1px dotted var(--amber)",
-              cursor: "help",
-            }}
-          >
+          <ConceptTooltip key={`c${keyCounter++}`} tip={def.tip}>
             {raw}
-          </span>,
+          </ConceptTooltip>,
         );
       } else {
         out.push(raw);
       }
     } else if (m[2]) {
-      const pub = PUBS_SORTED.find((p) => p.name.toLowerCase() === raw.toLowerCase());
-      if (pub) {
-        out.push(
-          <a
-            key={`p${keyCounter++}`}
-            href={pub.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "var(--amber-bright)", textDecoration: "none" }}
-            title={`Open ${pub.name}`}
-          >
-            {pub.emoji} {raw}
-          </a>,
-        );
-      } else {
-        out.push(raw);
-      }
-    } else if (m[3]) {
-      const ticker = m[4];
+      // ticker group
+      const ticker = m[3];
       if (ticker && !TICKER_DENYLIST.has(ticker.toUpperCase())) {
         const symbol = ticker.toUpperCase();
         out.push(
@@ -200,7 +198,7 @@ export function annotate(text: string): ReactNode[] {
             target="_blank"
             rel="noopener noreferrer"
             style={{ color: "var(--amber-bright)", textDecoration: "none" }}
-            title={`Open ${symbol} on TradingView`}
+            title={`Open ${symbol} chart on TradingView`}
           >
             📊 {raw}
           </a>,
