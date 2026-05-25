@@ -93,6 +93,7 @@ import TopOffModal from "./TopOffModal";
 import Avatar, { shortNpub } from "./Avatar";
 import ProfileTab from "./Profile";
 import DMComposeModal from "./DMComposeModal";
+import Welcome from "./Welcome";
 import { getPatronProfile, getStoredNpub } from "../lib/mcp";
 
 // ============================================================
@@ -559,11 +560,16 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // the DM modal can route through the BE signer instead of requiring
   // a NIP-07 browser extension. Loaded at the same time as relays.
   const [escrowed, setEscrowed] = useState<boolean>(false);
-  // Current sats balance — drives the conditional Sample-Assessment tab
-  // for signed-in patrons. null = not yet loaded (don't render the
-  // tab); 0 = patron is out of sats and we surface the sample so they
-  // see what they could be playing for; >0 = hide.
+  // Current sats balance — drives the conditional Welcome /
+  // Sample-Assessment tabs for signed-in patrons. null = not yet
+  // loaded (don't render the auto-route); 0 = patron is at zero and
+  // we surface the onboarding panels; >0 = play tab default.
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
+  // One-shot guard so the initial-zero auto-route to Welcome fires
+  // exactly once per session. After the patron navigates away (or
+  // tops off), they can return to Welcome via the tab button while
+  // balance is still zero, but they don't get force-routed again.
+  const [welcomeAutoRouted, setWelcomeAutoRouted] = useState<boolean>(false);
 
   async function refreshBalance(): Promise<void> {
     if (guest) return;
@@ -992,14 +998,31 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   }, [tab]);
 
   // When a signed-in patron's balance becomes positive while they're
-  // viewing the Sample-Assessment tab, route them back to The Pit. The
-  // tab button vanishes (balance > 0 hides it) and we don't want them
-  // staring at the Sample content with no obvious way back.
+  // viewing the Welcome or Sample tabs, route them back to The Pit.
+  // Those tabs vanish at positive balance and we don't want the
+  // patron staring at orphan content with no obvious way back.
   useEffect(() => {
-    if (!guest && tab === "sample" && currentBalance !== null && currentBalance > 0) {
-      setTab("play");
+    if (!guest && currentBalance !== null && currentBalance > 0) {
+      if (tab === "welcome" || tab === "sample") {
+        setTab("play");
+      }
     }
   }, [currentBalance, tab, guest]);
+
+  // Auto-route brand-new patrons (signed in, balance == 0) to the
+  // Welcome panel exactly once per session. They land on it, can read
+  // the mission + how-it's-played + Tollbooth-DPYC context, and pick
+  // Top Off / See Assessment from there. After they leave the panel
+  // we don't force them back even if balance stays at zero — the
+  // Welcome tab button is still visible as long as balance is 0, so
+  // they can return on their own.
+  useEffect(() => {
+    if (!guest && !welcomeAutoRouted && currentBalance === 0 && tab === "play") {
+      setTab("welcome");
+      setWelcomeAutoRouted(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentBalance, guest]);
 
   // Auto-load Journal on tab open. Re-fetches when the cached page is
   // empty (initial open, or after a fresh trade submission invalidated
@@ -1105,6 +1128,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       </header>
 
       <div className="tab-bar">
+        {/* Welcome tab — signed-in patrons at zero balance. Mission +
+            how-it's-played + Tollbooth-DPYC context. Auto-routed once
+            on first sign-in; remains in the tab strip while balance is
+            zero so the patron can return on their own. Hidden the
+            moment balance goes positive. */}
+        {!guest && currentBalance === 0 && (
+          <button className={`tab ${tab === "welcome" ? "active" : ""}`} onClick={() => setTab("welcome")}>Welcome</button>
+        )}
         <button className={`tab ${tab === "play" ? "active" : ""}`} onClick={() => setTab("play")}>The Pit</button>
         {/* Sample Assessment tab — visible for guests AND for signed-in
             patrons who've run their balance to zero. Acts as both
@@ -1532,6 +1563,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               </div>
             )}
           </>
+        )}
+
+        {tab === "welcome" && !guest && (
+          <Welcome
+            onTopOff={() => setTopOffOpen(true)}
+            onSeeAssessment={() => setTab("sample")}
+          />
         )}
 
         {tab === "sample" && <SampleAssessment />}
