@@ -359,10 +359,16 @@ export async function dealScenario(
   mode: string,
   difficulty: string,
   maxLossUsd?: number,
+  replayEntryId?: string,
 ): Promise<DealScenarioResult> {
   const args: Record<string, unknown> = { mode, difficulty };
   if (typeof maxLossUsd === "number" && maxLossUsd > 0) {
     args.max_loss_usd = maxLossUsd;
+  }
+  if (replayEntryId) {
+    // BE forces mode="historical", difficulty="mulligan" on this path;
+    // we pass them anyway so the wheel's validators see consistent input.
+    args.replay_entry_id = replayEntryId;
   }
   return callTool<DealScenarioResult>("deal_scenario", args);
 }
@@ -416,8 +422,16 @@ export async function saveDraft(
 
 /// Pull the global leaderboard. `scope` accepts `mode=...` or
 /// `difficulty=...`; empty string returns the unscoped global view.
+export type LeaderboardSort =
+  | "weighted_avg"
+  | "weighted_best"
+  | "avg"
+  | "best"
+  | "streak"
+  | "played";
+
 export async function getLeaderboard(
-  sortBy: "avg" | "best" | "streak" | "played" = "avg",
+  sortBy: LeaderboardSort = "weighted_avg",
   scope: string = "",
   limit: number = 25,
 ): Promise<import("../types").LeaderboardResult> {

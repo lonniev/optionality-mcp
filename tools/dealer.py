@@ -17,7 +17,11 @@ from db import journal, patrons
 logger = logging.getLogger(__name__)
 
 _VALID_MODES = ("historical", "fiction", "live")
-_VALID_DIFFICULTIES = ("apprentice", "journeyman", "adept", "sovereign")
+# "mulligan" is the replay difficulty — when a patron picks a past
+# evaluated entry from their Journal and asks to redo it, the wheel
+# reissues the same scenario as a fresh play. Priced + leaderboard-
+# weighted distinctly from the original difficulty levels.
+_VALID_DIFFICULTIES = ("apprentice", "journeyman", "adept", "sovereign", "mulligan")
 
 
 async def deal_scenario(
@@ -25,6 +29,7 @@ async def deal_scenario(
     mode: str,
     difficulty: str,
     max_loss_usd: int | None = None,
+    replay_entry_id: str | None = None,
 ) -> dict[str, Any]:
     """Generate one scenario and open a journal entry. Returns scenario JSON + entry_id.
 
@@ -33,11 +38,58 @@ async def deal_scenario(
             account size and constraints so a thoughtful structure can be
             sized to fit. Some trainees reason more crisply about a $250
             trade than a $10,000 one; this lets them shape the scenario.
+        replay_entry_id: Optional id of a previously-evaluated journal entry.
+            When set, the dealer skips LLM generation and reuses that entry's
+            scenario JSON as-is. mode is forced to "historical" and difficulty
+            to "mulligan" so the new entry is priced + leaderboard-weighted
+            distinctly from the original. The trainee gets to pitch a fresh
+            trade on a scenario they've already seen — same setup, second
+            look. The new play is journaled as its own entry.
     """
+    # ── Replay branch ─────────────────────────────────────────────
+    if replay_entry_id:
+        original = await journal.get_entry(npub, replay_entry_id)
+        if not original:
+            return {
+                "error": (
+                    f"journal entry {replay_entry_id} not found for this patron, "
+                    "or already deleted"
+                )
+            }
+        scenario = original.get("scenario") or {}
+        if not scenario:
+            return {"error": "original entry has no scenario to replay"}
+
+        # Force the replay's mode + difficulty so pricing and leaderboard
+        # weighting reflect "second look" rather than the original setup.
+        scenario["mode"] = "historical"
+        if max_loss_usd is not None:
+            scenario["max_loss_usd"] = max_loss_usd
+        scenario["replay_of"] = replay_entry_id
+
+        await patrons.upsert_patron(npub)
+        entry_id = await journal.open_entry(
+            npub=npub,
+            mode="historical",
+            difficulty="mulligan",
+            scenario=scenario,
+        )
+        return {"entry_id": entry_id, "scenario": scenario, "replay_of": replay_entry_id}
+
     if mode not in _VALID_MODES:
         return {"error": f"invalid mode: {mode!r}. Choose one of {_VALID_MODES}"}
     if difficulty not in _VALID_DIFFICULTIES:
         return {"error": f"invalid difficulty: {difficulty!r}. Choose one of {_VALID_DIFFICULTIES}"}
+    # Mulligan can't be a from-scratch generation — it only makes sense
+    # paired with a replay_entry_id (caught above).
+    if difficulty == "mulligan":
+        return {
+            "error": (
+                "Mulligan difficulty is only valid for replays. "
+                "Pass replay_entry_id to redo a past scenario, or pick "
+                "apprentice / journeyman / adept / sovereign for a fresh deal."
+            )
+        }
     if max_loss_usd is not None and max_loss_usd <= 0:
         return {"error": f"max_loss_usd must be positive when provided; got {max_loss_usd!r}"}
 

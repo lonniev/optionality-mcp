@@ -146,6 +146,19 @@ async def _ensure_domain_schema(vault: Any) -> None:
         # deployments — leaderboard read picks it up automatically.
         f"ALTER TABLE {t('optionality_leaderboard_stats')} ADD COLUMN IF NOT EXISTS avatar TEXT",
 
+        # Difficulty-weighted scoring — like diving's degree-of-difficulty
+        # multiplier. recompute_leaderboard computes weighted_score =
+        # raw_score × DIFFICULTY_WEIGHT[difficulty] and rolls up the
+        # per-patron weighted average + best. Default leaderboard sort
+        # switches to weighted_avg so a hard pitch scored well outranks
+        # an easy one scored well.
+        f"ALTER TABLE {t('optionality_leaderboard_stats')} ADD COLUMN IF NOT EXISTS weighted_avg NUMERIC(8,2) NOT NULL DEFAULT 0",
+        f"ALTER TABLE {t('optionality_leaderboard_stats')} ADD COLUMN IF NOT EXISTS weighted_best NUMERIC(8,2) NOT NULL DEFAULT 0",
+        f"CREATE INDEX IF NOT EXISTS idx_leaderboard_weighted_avg "
+        f"ON {t('optionality_leaderboard_stats')}(weighted_avg DESC)",
+        f"CREATE INDEX IF NOT EXISTS idx_leaderboard_weighted_best "
+        f"ON {t('optionality_leaderboard_stats')}(weighted_best DESC)",
+
         # Per-patron Claude API usage. One row per outbound `messages.create`,
         # written by `claude.complete_text` after the response lands. Surfaces
         # in the FE's Profile/Usage view so the patron sees exactly what their

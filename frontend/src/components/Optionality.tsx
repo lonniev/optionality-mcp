@@ -603,7 +603,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Leaderboard state, lazy-loaded when the tab is opened.
   const [leaderboard, setLeaderboard] = useState<LeaderboardResult | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState<boolean>(false);
-  const [leaderboardSort, setLeaderboardSort] = useState<"avg" | "best" | "streak" | "played">("avg");
+  /// Default leaderboard sort is weighted_avg — a hard pitch scored well
+  /// outranks an easy one scored well (diving's DD model). Raw avg / best
+  /// stay available so patrons can see the unweighted view.
+  const [leaderboardSort, setLeaderboardSort] = useState<
+    "weighted_avg" | "weighted_best" | "avg" | "best" | "streak" | "played"
+  >("weighted_avg");
   // Profile/Usage state (TaxSort-style transparency view).
   const [apiUsage, setApiUsage] = useState<ApiUsageResult | null>(null);
   const [apiUsageLoading, setApiUsageLoading] = useState<boolean>(false);
@@ -869,6 +874,41 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
   }
 
+  /// Replay an evaluated journal entry as a fresh "mulligan" play.
+  /// Calls deal_scenario with replay_entry_id — the wheel reissues
+  /// the same scenario JSON under a new entry_id with
+  /// mode="historical", difficulty="mulligan". The user lands on
+  /// The Pit with the original setup; they pitch a fresh trade.
+  async function replayJournalEntry(entryId: string): Promise<void> {
+    setError("");
+    setEvaluation(null);
+    setAnswer("");
+    setScenario(null);
+    setEntryId(null);
+    setTab("play");
+    setLoading(true);
+    setLoadingMsg("Reissuing the scenario");
+    try {
+      const result = await dealScenario("historical", "mulligan", undefined, entryId);
+      if (result.error) throw new Error(result.error);
+      const json = result.scenario as Scenario;
+      json.mode = "historical";
+      setScenario(json);
+      setEntryId(result.entry_id);
+      // Force the chooser's mode/difficulty to match what the wheel
+      // recorded so any subsequent "Discard, next scenario" returns
+      // to the right state for the new play.
+      setMode("historical");
+      setDifficulty("mulligan");
+      setTimeout(() => answerRef.current?.focus(), 100);
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      setError("Replay failed. " + (e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   /// On row expand — fetch the full entry detail (scenario,
   /// evaluation, parsed trade legs). No-op if already cached.
   async function loadJournalDetail(entryId: string): Promise<void> {
@@ -893,7 +933,15 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
   }
 
-  async function loadLeaderboard(sort: "avg" | "best" | "streak" | "played" = leaderboardSort): Promise<void> {
+  async function loadLeaderboard(
+    sort:
+      | "weighted_avg"
+      | "weighted_best"
+      | "avg"
+      | "best"
+      | "streak"
+      | "played" = leaderboardSort,
+  ): Promise<void> {
     setLeaderboardLoading(true);
     try {
       const res = await getLeaderboard(sort);
@@ -910,7 +958,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Auto-load leaderboard the first time the tab is opened.
   useEffect(() => {
     if (tab === "leaderboard" && leaderboard === null && !leaderboardLoading) {
-      void loadLeaderboard("avg");
+      void loadLeaderboard("weighted_avg");
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -1697,22 +1745,31 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             <span className="panel-label">Leaderboard</span>
             <h2 className="serif">Sovereign traders, sorted by skill</h2>
             <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
-              Aggregated across every patron's judged trades. Display names are set per-patron;
-              {" "}npub-only entries show a fingerprint.
+              Difficulty-weighted, like diving — a hard pitch scored well outranks an easy one
+              scored well. Default sort is the weighted average; raw scores are available too.
+              Mulligan replays are weighted at 0.5× so a redo can't farm the table.
             </p>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-              {(["avg", "best", "streak", "played"] as const).map((s) => (
-                <button
-                  key={s}
-                  className={`btn ${leaderboardSort === s ? "" : "btn-ghost"}`}
-                  onClick={() => { void loadLeaderboard(s); }}
-                  disabled={leaderboardLoading}
-                  style={{ padding: "8px 14px", fontSize: 10 }}
-                >
-                  {s === "avg" ? "Avg Score" : s === "best" ? "Best" : s === "streak" ? "Streak" : "Played"}
-                </button>
-              ))}
+              {(["weighted_avg", "weighted_best", "avg", "best", "streak", "played"] as const).map((s) => {
+                const label =
+                  s === "weighted_avg" ? "Weighted Avg" :
+                  s === "weighted_best" ? "Weighted Best" :
+                  s === "avg" ? "Raw Avg" :
+                  s === "best" ? "Raw Best" :
+                  s === "streak" ? "Streak" : "Played";
+                return (
+                  <button
+                    key={s}
+                    className={`btn ${leaderboardSort === s ? "" : "btn-ghost"}`}
+                    onClick={() => { void loadLeaderboard(s); }}
+                    disabled={leaderboardLoading}
+                    style={{ padding: "8px 14px", fontSize: 10 }}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
               <button
                 className="btn btn-ghost"
                 onClick={() => { void loadLeaderboard(leaderboardSort); }}
@@ -1744,12 +1801,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
             {leaderboard !== null && Array.isArray(leaderboard.rows) && leaderboard.rows.length > 0 && (
               <div>
-                <div className="history-row" style={{ gridTemplateColumns: "40px 56px 1fr 80px 80px 80px 80px", color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                <div className="history-row" style={{ gridTemplateColumns: "40px 56px 1fr 84px 84px 60px 60px 60px", color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase" }}>
                   <div>#</div>
                   <div></div>
                   <div>Trader</div>
-                  <div style={{ textAlign: "right" }}>Avg</div>
-                  <div style={{ textAlign: "right" }}>Best</div>
+                  <div style={{ textAlign: "right" }} title="Weighted average — raw score × difficulty multiplier">W·Avg</div>
+                  <div style={{ textAlign: "right" }} title="Weighted best single pitch">W·Best</div>
+                  <div style={{ textAlign: "right" }} title="Raw average across all evaluated pitches">Avg</div>
                   <div style={{ textAlign: "right" }}>Streak</div>
                   <div style={{ textAlign: "right" }}>Played</div>
                 </div>
@@ -1760,7 +1818,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       key={row.npub}
                       className="history-row"
                       style={{
-                        gridTemplateColumns: "40px 56px 1fr 80px 80px 80px 80px",
+                        gridTemplateColumns: "40px 56px 1fr 84px 84px 60px 60px 60px",
                         background: isYou ? "var(--amber-glow)" : undefined,
                         alignItems: "center",
                       }}
@@ -1799,8 +1857,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           {shortNpub(row.npub)}{row.last_played_at ? `  ·  last: ${new Date(row.last_played_at).toLocaleDateString()}` : ""}
                         </div>
                       </div>
-                      <div className="h-score">{row.avg_score}</div>
-                      <div className="h-score">{row.best_score}</div>
+                      <div className="h-score" style={{ color: "var(--amber-bright)", fontWeight: 600 }}>
+                        {row.weighted_avg != null ? Number(row.weighted_avg).toFixed(1) : "—"}
+                      </div>
+                      <div className="h-score">
+                        {row.weighted_best != null ? Number(row.weighted_best).toFixed(1) : "—"}
+                      </div>
+                      <div className="h-score" style={{ color: "var(--ink-faint)" }}>{row.avg_score}</div>
                       <div className="h-score">{row.longest_streak ?? row.current_streak}</div>
                       <div className="h-score">{row.total_played}</div>
                     </div>
@@ -1912,6 +1975,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             <h3 className="serif">Deeper context</h3>
                             <div className="deeper">{annotate(detail.evaluation.deeper_context)}</div>
                           </>
+                        )}
+                        {detail.status === "evaluated" && (
+                          <div className="actions" style={{ marginTop: 16 }}>
+                            <button
+                              className="btn"
+                              onClick={() => { void replayJournalEntry(detail.id); }}
+                              title="Reissue this scenario as a mulligan — same setup, fresh pitch"
+                            >
+                              Redo Again
+                            </button>
+                          </div>
                         )}
                         {!detail.evaluation && detail.status !== "evaluated" && (
                           <div style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic" }}>

@@ -20,6 +20,29 @@ logger = logging.getLogger(__name__)
 
 STREAK_THRESHOLD = 70
 
+# Difficulty-weight multipliers for leaderboard scoring — like the
+# degree-of-difficulty (DD) in diving. weighted_score = raw_score × DD.
+# A great pitch on Sovereign outranks a perfect pitch on Apprentice.
+# Mulligan replays are penalized so they can't be farmed for rank.
+#
+# Independent from the pricing-model multipliers (those control the
+# operator's toll). Adjusted here in code; not configurable per-patron.
+DIFFICULTY_WEIGHT: dict[str, float] = {
+    "apprentice": 1.0,
+    "journeyman": 2.0,
+    "adept":      3.0,
+    "sovereign":  4.0,
+    "mulligan":   0.5,
+}
+
+
+def _weighted_score(raw_score: int, difficulty: str | None) -> float:
+    """Apply the difficulty multiplier. Unknown difficulty → 1.0 floor
+    (we always record at least the raw score, never zero out)."""
+    if not difficulty:
+        return float(raw_score)
+    return float(raw_score) * DIFFICULTY_WEIGHT.get(difficulty, 1.0)
+
 
 def _compute_streaks(scores_desc: list[int]) -> tuple[int, int]:
     """Return ``(current_streak, longest_streak)`` from a desc-ordered score list.
@@ -104,6 +127,9 @@ async def recompute_leaderboard(npub: str) -> None:
     total_played = len(scores_desc)
     avg_score = round(sum(scores_desc) / total_played, 2)
     best_score = max(scores_desc)
+    weighted_scores = [_weighted_score(int(r["score"]), r.get("difficulty")) for r in rows]
+    weighted_avg = round(sum(weighted_scores) / total_played, 2)
+    weighted_best = round(max(weighted_scores), 2)
     current_streak, longest_streak = _compute_streaks(scores_desc)
     last_played_at = rows[0]["updated_at"]
     by_mode = _bucket_counts(rows, "mode")
@@ -113,15 +139,18 @@ async def recompute_leaderboard(npub: str) -> None:
         """
         INSERT INTO leaderboard_stats
             (npub, display_name, avatar, total_played, avg_score, best_score,
+             weighted_avg, weighted_best,
              current_streak, longest_streak, last_played_at,
              by_mode, by_difficulty, updated_at)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::jsonb, $11::jsonb, NOW())
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12::jsonb, $13::jsonb, NOW())
         ON CONFLICT (npub) DO UPDATE SET
             display_name   = EXCLUDED.display_name,
             avatar         = EXCLUDED.avatar,
             total_played   = EXCLUDED.total_played,
             avg_score      = EXCLUDED.avg_score,
             best_score     = EXCLUDED.best_score,
+            weighted_avg   = EXCLUDED.weighted_avg,
+            weighted_best  = EXCLUDED.weighted_best,
             current_streak = EXCLUDED.current_streak,
             longest_streak = EXCLUDED.longest_streak,
             last_played_at = EXCLUDED.last_played_at,
@@ -135,6 +164,8 @@ async def recompute_leaderboard(npub: str) -> None:
         total_played,
         avg_score,
         best_score,
+        weighted_avg,
+        weighted_best,
         current_streak,
         longest_streak,
         last_played_at,
@@ -144,11 +175,13 @@ async def recompute_leaderboard(npub: str) -> None:
 
 
 _SORT_COLUMN: dict[str, str] = {
-    "avg":     "avg_score DESC",
-    "best":    "best_score DESC",
-    "streak":  "current_streak DESC",
-    "played":  "total_played DESC",
-    "recent":  "last_played_at DESC NULLS LAST",
+    "avg":            "avg_score DESC",
+    "best":           "best_score DESC",
+    "weighted_avg":   "weighted_avg DESC",
+    "weighted_best":  "weighted_best DESC",
+    "streak":         "current_streak DESC",
+    "played":         "total_played DESC",
+    "recent":         "last_played_at DESC NULLS LAST",
 }
 
 
@@ -174,7 +207,9 @@ async def get_leaderboard(
                    (by_mode->$1->>'played')::INT     AS scope_played,
                    (by_mode->$1->>'avg_score')::NUMERIC AS scope_avg_score,
                    (by_mode->$1->>'best_score')::INT AS scope_best_score,
-                   total_played, avg_score, best_score, current_streak, longest_streak,
+                   total_played, avg_score, best_score,
+                   weighted_avg, weighted_best,
+                   current_streak, longest_streak,
                    last_played_at
             FROM leaderboard_stats
             WHERE by_mode ? $1
@@ -190,7 +225,9 @@ async def get_leaderboard(
                    (by_difficulty->$1->>'played')::INT     AS scope_played,
                    (by_difficulty->$1->>'avg_score')::NUMERIC AS scope_avg_score,
                    (by_difficulty->$1->>'best_score')::INT AS scope_best_score,
-                   total_played, avg_score, best_score, current_streak, longest_streak,
+                   total_played, avg_score, best_score,
+                   weighted_avg, weighted_best,
+                   current_streak, longest_streak,
                    last_played_at
             FROM leaderboard_stats
             WHERE by_difficulty ? $1
@@ -203,6 +240,7 @@ async def get_leaderboard(
     return await fetch(
         f"""
         SELECT npub, display_name, avatar, total_played, avg_score, best_score,
+               weighted_avg, weighted_best,
                current_streak, longest_streak, last_played_at
         FROM leaderboard_stats
         ORDER BY {order}

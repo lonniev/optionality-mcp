@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 
 logger = logging.getLogger(__name__)
 
@@ -260,6 +260,7 @@ async def deal_scenario(
     npub: NpubField = "",
     proof: str = "",
     max_loss_usd: int | None = None,
+    replay_entry_id: str | None = None,
 ) -> dict[str, Any]:
     """Generate a fresh options trading scenario and open a journal entry.
 
@@ -267,14 +268,27 @@ async def deal_scenario(
         mode: ``historical`` | ``fiction`` | ``live`` — controls how the
             dealer LLM grounds the scenario. ``live`` uses Anthropic's
             web_search tool and costs more tokens.
-        difficulty: ``apprentice`` | ``journeyman`` | ``adept`` | ``sovereign``.
+        difficulty: ``apprentice`` | ``journeyman`` | ``adept`` | ``sovereign``
+            for a fresh deal; ``mulligan`` only paired with replay_entry_id.
         max_loss_usd: Optional per-trade risk envelope in USD. When set, the
             dealer scales the constraints (account size, sizing limits) so a
             thoughtful structure can fit the budget. Useful for trainees who
             reason better about $250 than $10,000 versions of the same trade.
+        replay_entry_id: Optional id of an evaluated journal entry. When set,
+            the wheel reissues that entry's scenario as a new play, forcing
+            mode="historical" and difficulty="mulligan". Skips the LLM call —
+            no new generation cost, just the operator's toll per the pricing
+            model. The new play is journaled as its own entry; the original
+            is untouched.
     """
     from tools.dealer import deal_scenario as _impl
-    return await _impl(npub=npub, mode=mode, difficulty=difficulty, max_loss_usd=max_loss_usd)
+    return await _impl(
+        npub=npub,
+        mode=mode,
+        difficulty=difficulty,
+        max_loss_usd=max_loss_usd,
+        replay_entry_id=replay_entry_id,
+    )
 
 
 @tool

@@ -1,7 +1,7 @@
 // Domain types for Optionality drill.
 
 export type Mode = "historical" | "fiction" | "live";
-export type Difficulty = "apprentice" | "journeyman" | "adept" | "sovereign";
+export type Difficulty = "apprentice" | "journeyman" | "adept" | "sovereign" | "mulligan";
 export type TabId = "play" | "sample" | "journal" | "leaderboard" | "usage" | "profile";
 export type LegSide = "long" | "short";
 export type LegType = "call" | "put";
@@ -168,6 +168,11 @@ export interface LeaderboardRow {
   total_played: number;
   avg_score: number;
   best_score: number;
+  /// Difficulty-weighted scores (like diving's degree-of-difficulty).
+  /// weighted_score = raw_score × DIFFICULTY_WEIGHT[difficulty].
+  /// Sovereign 80 weights to 320; Apprentice 80 weights to 80.
+  weighted_avg?: number;
+  weighted_best?: number;
   current_streak: number;
   longest_streak: number;
   last_played_at?: string | null;
