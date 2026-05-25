@@ -1240,7 +1240,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       Sign In to Play
                     </button>
                   ) : (
-                    <button className="btn" onClick={generateScenario}>Deal a Trade Scenario</button>
+                    <button className="btn" onClick={generateScenario}>Be Challenged</button>
                   )}
                 </div>
                 {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
