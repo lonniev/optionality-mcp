@@ -128,9 +128,11 @@ function KeypairModal({
       <div style={STYLES.modalCard} onClick={(e) => e.stopPropagation()}>
         <div style={STYLES.modalHead}>Your new Nostr identity</div>
         <p style={STYLES.modalProse}>
-          Stash both keys somewhere safe — a password manager, an encrypted note, or a Nostr
-          client. The <b>nsec</b> is your secret. Whoever holds it controls this identity.
-          The <b>npub</b> is your public name; share it freely.
+          Stash both keys in a password manager — your <b>npub</b> is the username, your
+          <b> nsec</b> is the password. If you ever clear your browser or sign in on a new
+          device, you can paste them back into the gate ("I have my nsec — sign in without
+          a DM") and resume your games. The nsec is the secret; whoever holds it controls
+          this identity, so don't share it.
         </p>
 
         <div style={STYLES.keyRow}>
@@ -316,6 +318,72 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
   const trimmed = input.trim();
   const npubLooksValid = trimmed.startsWith("npub1") && trimmed.length >= 60;
 
+  // npub + nsec paste-recovery state. A patron who started via "Sign
+  // In Directly" and saved their nsec (password manager, encrypted
+  // note, paper) can paste it back here to resume without a Nostr
+  // client — same effect as the original direct sign-in, just a
+  // different starting point. The form is collapsed by default since
+  // it's the durable-return path, not the day-one onboarding.
+  const [showNsecForm, setShowNsecForm] = useState<boolean>(false);
+  const [nsecInput, setNsecInput] = useState<string>("");
+
+  async function handleNsecSignIn(): Promise<void> {
+    setError("");
+    if (!npubLooksValid) {
+      setError("Enter a valid npub1... key in the field above.");
+      return;
+    }
+    const nsec = nsecInput.trim();
+    if (!nsec.startsWith("nsec1")) {
+      setError("Nsec must be a bech32 nsec1… string.");
+      return;
+    }
+    // Validate the nsec actually derives to the claimed npub before
+    // committing anything to storage.
+    let derivedNpub: string;
+    try {
+      const { getPublicKey, nip19 } = await import("nostr-tools");
+      const decoded = nip19.decode(nsec);
+      if (decoded.type !== "nsec" || !(decoded.data instanceof Uint8Array)) {
+        throw new Error("Could not decode nsec");
+      }
+      derivedNpub = nip19.npubEncode(getPublicKey(decoded.data));
+    } catch (e) {
+      setError("Invalid nsec: " + (e as Error).message);
+      return;
+    }
+    if (derivedNpub !== trimmed) {
+      setError(
+        `Nsec doesn't match the npub. The nsec you pasted derives to ${derivedNpub.slice(0, 16)}…`,
+      );
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const { setSessionNsec } = await import("../lib/sessionNsec");
+      const { escrowNsec } = await import("../lib/mcp");
+      setStoredNpub(trimmed);
+      setSessionNsec(nsec);
+      // Best-effort escrow refresh — operator may already hold this
+      // nsec (from a prior session) in which case escrow_nsec refuses
+      // and we proceed anyway. The browser session nsec is enough to
+      // sign inline kind-27235 proofs for every paid call regardless.
+      try {
+        await escrowNsec(nsec);
+      } catch (e) {
+        console.warn("Escrow refresh failed (proceeding):", e);
+      }
+      setNsecInput("");
+      setShowNsecForm(false);
+      onAuthenticated();
+    } catch (e) {
+      setError("Sign-in failed: " + (e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function handleBegin(): Promise<void> {
     if (!npubLooksValid) {
       setError("Enter a valid npub1... key.");
@@ -451,6 +519,59 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
             >
               {busy ? "Sending DM…" : "Begin Sign-In"}
             </button>
+
+            {/* npub + nsec paste-recovery — for patrons who started
+                with "Sign In Directly" on this browser, saved their
+                nsec, then need to come back from a cleared cache,
+                a different device, or a sign-out. Lives below the DM
+                challenge so the "proper" Nostr-client path stays
+                primary, but it's right there if needed. */}
+            <button
+              type="button"
+              onClick={() => setShowNsecForm((v) => !v)}
+              style={STYLES.nsecToggle}
+            >
+              {showNsecForm ? "Hide nsec paste form" : "I have my nsec — sign in without a DM"}
+            </button>
+
+            {showNsecForm && (
+              <div style={STYLES.nsecForm}>
+                <div style={STYLES.nsecHint}>
+                  Paste the nsec you saved when you generated this npub. We'll verify it
+                  derives to the npub above, then sign you in directly — no DM challenge,
+                  no Nostr client required. <b>Don't paste an nsec from a real Nostr identity
+                  you keep self-custodied; that's the wrong path for those keys.</b>
+                </div>
+                <label style={STYLES.label} htmlFor="nsec-input">Your nsec</label>
+                <input
+                  id="nsec-input"
+                  type="password"
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  value={nsecInput}
+                  onChange={(e) => setNsecInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && nsecInput.trim().startsWith("nsec1") && !busy) {
+                      void handleNsecSignIn();
+                    }
+                  }}
+                  placeholder="nsec1..."
+                  style={STYLES.input}
+                />
+                <button
+                  onClick={() => void handleNsecSignIn()}
+                  disabled={!nsecInput.trim().startsWith("nsec1") || !npubLooksValid || busy}
+                  style={{
+                    ...STYLES.btnPrimary,
+                    ...((!nsecInput.trim().startsWith("nsec1") || !npubLooksValid || busy) ? STYLES.btnDisabled : {}),
+                  }}
+                >
+                  {busy ? "Signing in…" : "Sign In with nsec"}
+                </button>
+              </div>
+            )}
           </>
         )}
 
@@ -778,6 +899,32 @@ const STYLES: Record<string, React.CSSProperties> = {
     color: "var(--ink-faint)",
     fontStyle: "italic",
     textAlign: "center",
+  },
+  nsecToggle: {
+    display: "block",
+    width: "100%",
+    background: "transparent",
+    border: "none",
+    color: "var(--amber)",
+    fontFamily: "JetBrains Mono, monospace",
+    fontSize: 11,
+    textAlign: "center",
+    padding: "12px 0 4px",
+    cursor: "pointer",
+    textDecoration: "underline",
+  },
+  nsecForm: {
+    marginTop: 8,
+    padding: "12px 14px",
+    background: "var(--bg-soft)",
+    border: "1px solid var(--panel-edge)",
+    borderLeft: "3px solid var(--amber)",
+  },
+  nsecHint: {
+    fontSize: 11,
+    color: "var(--ink-soft)",
+    lineHeight: 1.55,
+    marginBottom: 12,
   },
   guestDivider: {
     display: "flex",
