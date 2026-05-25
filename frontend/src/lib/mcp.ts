@@ -274,6 +274,13 @@ export class ProofRequiredError extends Error {
 const BOOTSTRAP_TOOLS = new Set([
   "request_npub_proof",
   "receive_npub_proof",
+  // service_status() takes zero kwargs on the wheel side — passing
+  // npub/proof gets rejected by Pydantic strict mode with
+  // unexpected_keyword_argument. Treat it like a bootstrap tool so
+  // callTool skips the envelope. Most other free tools (check_balance,
+  // check_payment, etc.) explicitly declare (npub: str, proof: str)
+  // in their signature and remain fine.
+  "service_status",
 ]);
 
 async function callTool<T = unknown>(
