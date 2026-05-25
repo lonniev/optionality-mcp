@@ -864,7 +864,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
       <div className="tab-bar">
         <button className={`tab ${tab === "play" ? "active" : ""}`} onClick={() => setTab("play")}>The Pit</button>
-        <button className={`tab ${tab === "sample" ? "active" : ""}`} onClick={() => setTab("sample")}>See Assessment</button>
+        {guest && (
+          <button className={`tab ${tab === "sample" ? "active" : ""}`} onClick={() => setTab("sample")}>See Assessment</button>
+        )}
         {!guest && (
           <>
             <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>Journal ({history.length})</button>
