@@ -100,7 +100,15 @@ import { getPatronProfile, getStoredNpub } from "../lib/mcp";
 //  prompts live server-side now (mcp/src/optionality_mcp/prompts.py).
 // ============================================================
 
-const STORAGE_KEY = "optionality:state:v1";
+// Per-npub state key. The previous flat "optionality:state:v1" key was
+// shared across whoever signed in on this browser, so the Journal +
+// Stats showed the prior identity's data when you switched npubs.
+// Namespacing by npub fixes the cross-identity bleed; the lookup
+// falls back to "" so guests can read/write their own slot.
+const STORAGE_KEY_PREFIX = "optionality:state:v1:";
+function storageKey(npub: string): string {
+  return STORAGE_KEY_PREFIX + (npub || "_guest");
+}
 /// Separate from stats/history. The patron paid for this scenario; it
 /// must survive a page reload until they explicitly finish the round.
 const SESSION_KEY = "optionality:session:v1";
@@ -165,9 +173,9 @@ const DIMENSION_LABELS: Record<string, string> = {
 //  Phase 4 (Task 21) replaces these with MCP journal CRUD.
 // ------------------------------------------------------------
 
-async function loadState(): Promise<PersistedState | null> {
+async function loadState(npub: string): Promise<PersistedState | null> {
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY);
+    const raw = window.localStorage.getItem(storageKey(npub));
     if (!raw) return null;
     return JSON.parse(raw) as PersistedState;
   } catch {
@@ -175,9 +183,9 @@ async function loadState(): Promise<PersistedState | null> {
   }
 }
 
-async function saveState(state: PersistedState): Promise<void> {
+async function saveState(npub: string, state: PersistedState): Promise<void> {
   try {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    window.localStorage.setItem(storageKey(npub), JSON.stringify(state));
   } catch (e) {
     console.error("save failed", e);
   }
@@ -609,10 +617,18 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
   useEffect(() => {
     (async () => {
-      const s = await loadState();
+      // Scoped to the signed-in npub so switching identities on this
+      // browser doesn't leak the prior patron's stats + Journal into
+      // the new session. Guests use a "_guest" slot.
+      const s = await loadState(getStoredNpub());
       if (s) {
         setStats(s.stats || { played: 0, avg: 0, best: 0, streak: 0 });
         setHistory(s.history || []);
+      } else {
+        // Fresh slot for this npub — clear any in-memory carry-over
+        // (e.g. when bouncing between identities without a full reload).
+        setStats({ played: 0, avg: 0, best: 0, streak: 0 });
+        setHistory([]);
       }
       // Hydrate active session — the patron paid for this scenario; a
       // page reload must put them back on the same board with their
@@ -652,7 +668,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   }, [scenario, entryId, answer, evaluation, mode, difficulty, maxLossInput, tips, draftSavedAt]);
 
   async function persist(nextStats: Stats, nextHistory: JournalEntry[]): Promise<void> {
-    await saveState({ stats: nextStats, history: nextHistory });
+    await saveState(getStoredNpub(), { stats: nextStats, history: nextHistory });
   }
 
   async function generateScenario(): Promise<void> {
