@@ -179,6 +179,84 @@ async def set_relays(npub: str, relays: list[Any] | str) -> list[str]:
     return cleaned
 
 
+def _aad_for(npub: str) -> str:
+    """Build the AAD string for a patron's escrowed nsec. Binds the
+    ciphertext to that specific npub so a row swap between patrons
+    won't decrypt — VaultCipher.decrypt fails with the wrong AAD."""
+    return f"optionality:nsec_escrow:{npub}"
+
+
+async def escrow_nsec_set(npub: str, nsec_bech32: str, operator_nsec_hex: str) -> None:
+    """Encrypt and persist a patron's nsec.
+
+    The caller is responsible for verifying that nsec_bech32 derives to
+    the same npub passed in — this function trusts that check has run.
+    Encryption uses the operator's nsec-derived AES key (the same key
+    that protects the Anthropic api_key and other vaulted credentials).
+    AAD binds to the patron's npub so cross-row decryption fails.
+    """
+    from tollbooth.vault_encryption import VaultCipher
+
+    cipher = VaultCipher(operator_nsec_hex)
+    ciphertext = cipher.encrypt(nsec_bech32, aad=_aad_for(npub))
+    await upsert_patron(npub)
+    await execute(
+        "UPDATE patrons SET escrowed_nsec_b64 = $2 WHERE npub = $1",
+        npub,
+        ciphertext,
+    )
+
+
+async def escrow_nsec_get(npub: str, operator_nsec_hex: str) -> str | None:
+    """Return the patron's plaintext nsec, or None if not escrowed.
+
+    Decrypted plaintext exists in this function's local string for the
+    duration of the caller's use. The caller should treat it as
+    sensitive — log nothing, return nothing, and let it go out of scope
+    promptly after the signing operation. Python doesn't expose
+    deterministic memory wiping, so this is best-effort by convention.
+    """
+    from tollbooth.vault_encryption import VaultCipher
+
+    row = await fetchrow(
+        "SELECT escrowed_nsec_b64 FROM patrons WHERE npub = $1",
+        npub,
+    )
+    if not row:
+        return None
+    ct = row.get("escrowed_nsec_b64")
+    if not ct:
+        return None
+    cipher = VaultCipher(operator_nsec_hex)
+    return cipher.decrypt(ct, aad=_aad_for(npub))
+
+
+async def escrow_nsec_delete(npub: str) -> bool:
+    """Delete the escrowed nsec column. Returns True if a value was
+    cleared, False if there was nothing escrowed."""
+    row = await fetchrow(
+        "SELECT escrowed_nsec_b64 FROM patrons WHERE npub = $1",
+        npub,
+    )
+    if not row or not row.get("escrowed_nsec_b64"):
+        return False
+    await execute(
+        "UPDATE patrons SET escrowed_nsec_b64 = NULL WHERE npub = $1",
+        npub,
+    )
+    return True
+
+
+async def escrow_nsec_present(npub: str) -> bool:
+    """Quick boolean check — used by get_profile so the FE knows whether
+    to render the Withdraw button. Doesn't decrypt the ciphertext."""
+    row = await fetchrow(
+        "SELECT (escrowed_nsec_b64 IS NOT NULL) AS present FROM patrons WHERE npub = $1",
+        npub,
+    )
+    return bool(row and row.get("present"))
+
+
 async def get_profile(npub: str) -> dict[str, Any]:
     """Return the patron's profile fields as a plain dict.
 
@@ -188,7 +266,7 @@ async def get_profile(npub: str) -> dict[str, Any]:
     """
     await upsert_patron(npub)
     row = await fetchrow(
-        "SELECT npub, display_name, avatar, bio, relays, created_at "
+        "SELECT npub, display_name, avatar, bio, relays, escrowed_nsec_b64, created_at "
         "FROM patrons WHERE npub = $1",
         npub,
     )
@@ -217,5 +295,6 @@ async def get_profile(npub: str) -> dict[str, Any]:
         "avatar": row.get("avatar"),
         "bio": row.get("bio"),
         "relays": relays_list,
+        "escrowed": bool(row.get("escrowed_nsec_b64")),
         "created_at": row.get("created_at"),
     }

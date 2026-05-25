@@ -143,6 +143,10 @@ export interface PatronProfile {
   avatar?: string | null;
   bio?: string | null;
   relays: string[];
+  /// True when Optionality holds an AES-encrypted copy of the patron's
+  /// nsec. Drives the DM modal routing (escrow → BE-signed) and the
+  /// Profile page's Game Persona Key panel (Withdraw vs Deposit).
+  escrowed?: boolean;
   created_at?: string | null;
 }
 

@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.5"
+__version__ = "0.1.6"
 
 logger = logging.getLogger(__name__)
 
@@ -148,6 +148,32 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         capability="set_profile",
         category="free",
         intent="Update any subset of the caller's profile fields",
+    ),
+    # ---- Opt-in nsec escrow + operator-signed DMs. Lets patrons who
+    # generate a fresh game-persona keypair hand the nsec to Optionality
+    # so the operator can sign Nostr DMs on their behalf (iPad-friendly,
+    # no signer-extension required). Same custody posture as Anthropic
+    # api_key — AES-256-GCM at rest, decrypted only in-process during
+    # signing. See tools/escrow.py for the full trade-off discussion.
+    ToolIdentity(
+        capability="escrow_nsec",
+        category="free",
+        intent="Deposit a freshly-generated nsec for operator-managed Nostr signing",
+    ),
+    ToolIdentity(
+        capability="withdraw_nsec",
+        category="free",
+        intent="Return the plaintext nsec once and remove it from operator storage",
+    ),
+    ToolIdentity(
+        capability="send_patron_dm",
+        category="write",
+        intent="Sign and publish a Nostr DM as the patron using the escrowed nsec",
+    ),
+    ToolIdentity(
+        capability="get_escrow_status",
+        category="free",
+        intent="Quick presence check for whether the patron has an escrowed nsec",
     ),
     # ---- Transparency — free so checking the usage view doesn't itself
     # cost sats. Matches taxsort-mcp's pricing for the parallel tool.
@@ -420,6 +446,85 @@ async def set_profile(
         bio=bio,
         relays=relays,
     )
+
+
+@tool
+@runtime.paid_tool(capability_uuid("escrow_nsec"))
+async def escrow_nsec(
+    nsec: str,
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Deposit a freshly-generated nsec for operator-managed Nostr signing.
+
+    Trade-off: sovereignty for UX. Optionality holds the nsec encrypted
+    in Neon (AES-256-GCM, key derived from operator nsec). Until you
+    withdraw it, the operator can sign Nostr DMs on your behalf. Use
+    this only for fresh game-persona keypairs — never for an existing
+    Nostr identity that lives elsewhere.
+
+    The nsec MUST derive to the same npub that authenticated this call,
+    or the deposit is rejected.
+    """
+    from tools.escrow import escrow_nsec as _impl
+    return await _impl(npub=npub, nsec_bech32=nsec)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("withdraw_nsec"))
+async def withdraw_nsec(
+    acknowledgment: str,
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Return the plaintext nsec once and remove it from operator storage.
+
+    Required acknowledgment string (exact match):
+    "I understand I am now solely responsible for this nsec."
+
+    After this call you regain full self-custody; the operator forgets
+    the key. You're now responsible for stashing it in a Nostr client
+    (0xchat, Damus, Amber) and signing DMs locally via NIP-07.
+    """
+    from tools.escrow import withdraw_nsec as _impl
+    return await _impl(npub=npub, acknowledgment=acknowledgment)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("send_patron_dm"))
+async def send_patron_dm(
+    target_npub: str,
+    message: str,
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Sign and publish a Nostr DM as the patron, using the escrowed nsec.
+
+    The patron's escrowed nsec is loaded, decrypted in-process, used to
+    sign a kind-4 NIP-04 DM + a kind-1059 NIP-17 gift wrap, broadcast
+    via the operator's relay pool, then the plaintext drops out of
+    scope. The DM's `pubkey` is the patron's own — recipients see it
+    as authored by the patron, not relayed.
+
+    Returns {"success": True, "sender_npub", "target_npub"} on the
+    happy path; {"success": False, "error"} on validation or send
+    failure.
+    """
+    from tools.escrow import send_patron_dm as _impl
+    return await _impl(npub=npub, target_npub=target_npub, message=message)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("get_escrow_status"))
+async def get_escrow_status(
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Return ``{"escrowed": bool}`` — whether Optionality holds the
+    patron's nsec. Free; the FE polls this to render Withdraw vs
+    Deposit affordances on the Profile page."""
+    from tools.escrow import get_escrow_status as _impl
+    return await _impl(npub=npub)
 
 
 @tool

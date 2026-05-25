@@ -544,6 +544,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Profile-tab edits via a Profile-component callback (not wired here
   // for Phase 2 — relays change ~never per session).
   const [userRelays, setUserRelays] = useState<string[]>([]);
+  // Escrow status — true when Optionality holds the patron's nsec and
+  // the DM modal can route through the BE signer instead of requiring
+  // a NIP-07 browser extension. Loaded at the same time as relays.
+  const [escrowed, setEscrowed] = useState<boolean>(false);
   const [mode, setMode] = useState<Mode>("historical");
   const [difficulty, setDifficulty] = useState<Difficulty>("journeyman");
   // Per-trade max-loss envelope in USD. Empty string = no constraint.
@@ -596,6 +600,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       try {
         const r = await getPatronProfile();
         if (r.profile?.relays) setUserRelays(r.profile.relays);
+        if (typeof r.profile?.escrowed === "boolean") setEscrowed(r.profile.escrowed);
       } catch {
         /* silent — DM modal will tell the user if relays are missing */
       }
@@ -1738,6 +1743,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         <DMComposeModal
           target={dmTarget}
           relays={userRelays}
+          escrowed={escrowed}
           onClose={() => setDmTarget(null)}
         />
       )}

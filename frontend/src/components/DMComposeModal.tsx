@@ -18,12 +18,17 @@ import {
   sendNip04DM,
   type RelayPublishResult,
 } from "../lib/nostr";
-import { getStoredNpub } from "../lib/mcp";
+import { getStoredNpub, sendPatronDm } from "../lib/mcp";
 import Avatar, { shortNpub } from "./Avatar";
 
 interface Props {
   target: { npub: string; displayName?: string | null; avatar?: string | null };
   relays: string[];
+  /// True when Optionality holds the sender's nsec — DMs route through
+  /// the BE escrow tool instead of requiring a NIP-07 browser
+  /// extension. Falls back to NIP-07 (and the existing install
+  /// notice) when false.
+  escrowed: boolean;
   onClose: () => void;
 }
 
@@ -35,10 +40,16 @@ type Stage =
 
 const MAX_MESSAGE = 2000;
 
-export default function DMComposeModal({ target, relays, onClose }: Props) {
+export default function DMComposeModal({ target, relays, escrowed, onClose }: Props) {
   const [text, setText] = useState<string>("");
   const [stage, setStage] = useState<Stage>({ kind: "compose" });
   const [nip07] = useState<boolean>(() => hasNip07());
+  /// Which signing path is in play. Escrow takes precedence: if
+  /// Optionality holds the sender's nsec, the BE signs and the
+  /// patron doesn't need a browser extension. NIP-07 fallback covers
+  /// self-custodied patrons on desktop. Neither path → install notice.
+  const signingMode: "escrow" | "nip07" | "none" =
+    escrowed ? "escrow" : nip07 ? "nip07" : "none";
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -52,6 +63,24 @@ export default function DMComposeModal({ target, relays, onClose }: Props) {
     if (!text.trim()) return;
     setStage({ kind: "sending" });
     try {
+      if (signingMode === "escrow") {
+        // BE signs with the escrowed nsec via the wheel's Secure
+        // Courier. Per-relay status isn't surfaced by the BE today;
+        // we display a generic "sent" with the BE's confirmation.
+        const r = await sendPatronDm(target.npub, text.trim());
+        if (r.success) {
+          setStage({
+            kind: "sent",
+            results: [],
+            successCount: 1,
+            eventId: "<server-signed>",
+          });
+        } else {
+          setStage({ kind: "error", message: r.error || "DM send failed." });
+        }
+        return;
+      }
+      // NIP-07 path: client-side sign + publish.
       const r = await sendNip04DM({
         targetNpub: target.npub,
         plaintext: text.trim(),
@@ -95,11 +124,11 @@ export default function DMComposeModal({ target, relays, onClose }: Props) {
           </div>
         )}
 
-        {!nip07 && (
+        {signingMode === "none" && (
           <NoSignerNotice onClose={onClose} />
         )}
 
-        {nip07 && relays.length === 0 && (
+        {signingMode === "nip07" && relays.length === 0 && (
           <div style={STYLES.warn}>
             No Nostr relays configured. Open <b>Profile → Nostr Relays</b> and add at least one
             (we recommend <code>wss://relay.damus.io</code>).
@@ -109,7 +138,8 @@ export default function DMComposeModal({ target, relays, onClose }: Props) {
           </div>
         )}
 
-        {nip07 && relays.length > 0 && stage.kind === "compose" && (
+        {((signingMode === "escrow") ||
+          (signingMode === "nip07" && relays.length > 0)) && stage.kind === "compose" && (
           <>
             <textarea
               value={text}
@@ -122,9 +152,19 @@ export default function DMComposeModal({ target, relays, onClose }: Props) {
             <div style={STYLES.charCount}>{text.length} / {MAX_MESSAGE}</div>
 
             <p style={STYLES.fine}>
-              Signed locally by your NIP-07 extension (your nsec never reaches Optionality).
-              Published to <b>{relays.length}</b> relay{relays.length === 1 ? "" : "s"} from your
-              Profile.
+              {signingMode === "escrow" ? (
+                <>
+                  Signed by Optionality with your escrowed nsec (in operator-managed
+                  storage). DM appears on Nostr authored by your npub. Withdraw the
+                  key any time in <b>Profile → Game Persona Key</b>.
+                </>
+              ) : (
+                <>
+                  Signed locally by your NIP-07 extension (your nsec never reaches
+                  Optionality). Published to <b>{relays.length}</b>{" "}
+                  relay{relays.length === 1 ? "" : "s"} from your Profile.
+                </>
+              )}
             </p>
 
             <div style={STYLES.actions}>
@@ -153,27 +193,37 @@ export default function DMComposeModal({ target, relays, onClose }: Props) {
               marginBottom: 12,
             }}>
               {stage.successCount > 0 ? "✓ Sent" : "✗ Not Accepted"}
-              <span style={{ fontSize: 12, color: "var(--ink-faint)", marginLeft: 8, letterSpacing: "0.1em" }}>
-                {stage.successCount} / {stage.results.length} relays
-              </span>
+              {stage.results.length > 0 && (
+                <span style={{ fontSize: 12, color: "var(--ink-faint)", marginLeft: 8, letterSpacing: "0.1em" }}>
+                  {stage.successCount} / {stage.results.length} relays
+                </span>
+              )}
             </div>
-            <details style={{ marginBottom: 12 }}>
-              <summary style={STYLES.detailsHead}>Per-relay results</summary>
-              <div style={{ marginTop: 8 }}>
-                {stage.results.map((r) => (
-                  <div key={r.url} style={STYLES.relayRow}>
-                    <span style={{ color: r.ok ? "var(--jade)" : "var(--rust)" }}>
-                      {r.ok ? "✓" : "✗"}
-                    </span>
-                    <code style={STYLES.relayUrl}>{r.url}</code>
-                    <span style={{ fontSize: 10, color: "var(--ink-faint)" }}>{r.status}</span>
-                  </div>
-                ))}
-              </div>
-            </details>
+            {stage.results.length > 0 && (
+              <details style={{ marginBottom: 12 }}>
+                <summary style={STYLES.detailsHead}>Per-relay results</summary>
+                <div style={{ marginTop: 8 }}>
+                  {stage.results.map((r) => (
+                    <div key={r.url} style={STYLES.relayRow}>
+                      <span style={{ color: r.ok ? "var(--jade)" : "var(--rust)" }}>
+                        {r.ok ? "✓" : "✗"}
+                      </span>
+                      <code style={STYLES.relayUrl}>{r.url}</code>
+                      <span style={{ fontSize: 10, color: "var(--ink-faint)" }}>{r.status}</span>
+                    </div>
+                  ))}
+                </div>
+              </details>
+            )}
             <p style={STYLES.fine}>
-              Event id <code style={{ fontSize: 10, color: "var(--ink-faint)" }}>{stage.eventId.slice(0, 16)}…</code>
-              {" "}— the recipient sees this in any Nostr client that subscribes to one of these relays.
+              {stage.results.length > 0 ? (
+                <>
+                  Event id <code style={{ fontSize: 10, color: "var(--ink-faint)" }}>{stage.eventId.slice(0, 16)}…</code>
+                  {" "}— the recipient sees this in any Nostr client that subscribes to one of these relays.
+                </>
+              ) : (
+                <>The DM is on its way via Optionality's relay pool. The recipient will see it in their Nostr client.</>
+              )}
             </p>
             <div style={STYLES.actions}>
               <button onClick={onClose} style={STYLES.btnPrimary}>Done</button>

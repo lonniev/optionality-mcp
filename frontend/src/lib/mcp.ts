@@ -430,6 +430,63 @@ export async function setProfile(patch: SetProfilePatch): Promise<SetProfileResu
   return callTool<SetProfileResult>("set_profile", args);
 }
 
+// ─── Opt-in nsec escrow + operator-signed DMs ────────────────────────────
+
+export interface EscrowNsecResult {
+  success?: boolean;
+  escrowed?: boolean;
+  error?: string;
+  error_code?: string;
+}
+
+export async function escrowNsec(nsec: string): Promise<EscrowNsecResult> {
+  return callTool<EscrowNsecResult>("escrow_nsec", { nsec });
+}
+
+export interface WithdrawNsecResult {
+  success?: boolean;
+  nsec?: string;
+  escrowed?: boolean;
+  expected_acknowledgment?: string;
+  error?: string;
+  error_code?: string;
+}
+
+export const WITHDRAW_ACKNOWLEDGMENT =
+  "I understand I am now solely responsible for this nsec.";
+
+export async function withdrawNsec(acknowledgment: string): Promise<WithdrawNsecResult> {
+  return callTool<WithdrawNsecResult>("withdraw_nsec", { acknowledgment });
+}
+
+export interface SendPatronDmResult {
+  success?: boolean;
+  sender_npub?: string;
+  target_npub?: string;
+  error?: string;
+  error_code?: string;
+}
+
+export async function sendPatronDm(
+  targetNpub: string,
+  message: string,
+): Promise<SendPatronDmResult> {
+  return callTool<SendPatronDmResult>("send_patron_dm", {
+    target_npub: targetNpub,
+    message,
+  });
+}
+
+export interface GetEscrowStatusResult {
+  success?: boolean;
+  escrowed?: boolean;
+  error?: string;
+}
+
+export async function getEscrowStatus(): Promise<GetEscrowStatusResult> {
+  return callTool<GetEscrowStatusResult>("get_escrow_status", {});
+}
+
 export interface CheckPriceResult {
   success: boolean;
   tool_id?: string;

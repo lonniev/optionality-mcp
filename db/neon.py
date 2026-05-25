@@ -93,6 +93,13 @@ async def _ensure_domain_schema(vault: Any) -> None:
         f"ALTER TABLE {t('optionality_patrons')} ADD COLUMN IF NOT EXISTS bio TEXT",
         f"ALTER TABLE {t('optionality_patrons')} ADD COLUMN IF NOT EXISTS relays JSONB",
 
+        # Opt-in nsec escrow — AES-256-GCM ciphertext of the patron's
+        # nsec, encrypted with a key derived from the OPERATOR's nsec
+        # via HKDF. AAD binds the row to the patron's npub so a leak +
+        # row swap doesn't decrypt under a different patron's identity.
+        # NULL = patron is self-custodied (default).
+        f"ALTER TABLE {t('optionality_patrons')} ADD COLUMN IF NOT EXISTS escrowed_nsec_b64 TEXT",
+
         f"CREATE TABLE IF NOT EXISTS {t('optionality_journal_entries')} ("
         "id UUID PRIMARY KEY DEFAULT gen_random_uuid(), "
         f"npub TEXT NOT NULL REFERENCES {t('optionality_patrons')}(npub) ON DELETE CASCADE, "
