@@ -467,11 +467,42 @@ export async function checkPayment(invoiceId: string): Promise<CheckPaymentResul
   return callTool<CheckPaymentResult>("check_payment", { invoice_id: invoiceId });
 }
 
+/// Per-tool usage entry. Keyed by tool name in the today_usage dict the
+/// wheel returns. ``api_sats`` is the cumulative spend on that tool for
+/// the current UTC day.
+export interface ToolUsage {
+  calls: number;
+  api_sats: number;
+}
+
+/// Per-tranche credit record. A "tranche" is a single purchase_credits
+/// invoice's worth of sats, with its own creation time and expiry. The
+/// patron can have multiple tranches active simultaneously; the wheel
+/// consumes from oldest-first.
+export interface CreditTranche {
+  id: string;
+  amount_sats: number;
+  remaining_sats: number;
+  expires_at: string | null;
+  created_at: string | null;
+}
+
 export interface CheckBalanceResult {
   success?: boolean;
   balance_api_sats?: number;
   total_deposited_api_sats?: number;
   total_consumed_api_sats?: number;
+  total_expired_api_sats?: number;
+  pending_invoices?: number;
+  active_tranches?: number;
+  tranches?: CreditTranche[];
+  today_usage?: Record<string, ToolUsage>;
+  last_deposit_at?: string | null;
+  expiring_within_24h_sats?: number;
+  next_expiration_iso?: string;
+  seed_balance_granted?: boolean;
+  vault_unavailable?: boolean;
+  warning?: string;
   npub?: string;
   error?: string;
   error_code?: string;

@@ -20,6 +20,7 @@ import type {
 } from "../types";
 import {
   askTip,
+  checkBalance,
   checkPrice,
   dealScenario,
   getApiUsageStats,
@@ -28,6 +29,7 @@ import {
   judgeTrade,
   ProofRequiredError,
   saveDraft,
+  type CheckBalanceResult,
 } from "../lib/mcp";
 import { annotate } from "../lib/annotate";
 
@@ -523,6 +525,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Profile/Usage state (TaxSort-style transparency view).
   const [apiUsage, setApiUsage] = useState<ApiUsageResult | null>(null);
   const [apiUsageLoading, setApiUsageLoading] = useState<boolean>(false);
+  // DPYC ledger snapshot for the Usage tab — sats balance + per-tool
+  // spend today + tranche detail. Loaded on tab open alongside apiUsage.
+  const [ledger, setLedger] = useState<CheckBalanceResult | null>(null);
+  const [ledgerLoading, setLedgerLoading] = useState<boolean>(false);
   // Effective price preview for the current (mode, difficulty) selection.
   // null = not yet looked up; -1 = lookup failed (e.g. pricing model has no
   // multipliers configured yet). Positive integers are the wheel's authoritative
@@ -742,10 +748,24 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
   }
 
-  // Auto-load usage stats the first time the Usage tab is opened.
+  async function loadLedger(): Promise<void> {
+    setLedgerLoading(true);
+    try {
+      const res = await checkBalance();
+      setLedger(res);
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      console.error("ledger load failed", e);
+    } finally {
+      setLedgerLoading(false);
+    }
+  }
+
+  // Auto-load usage stats + DPYC ledger the first time the Usage tab is opened.
   useEffect(() => {
-    if (tab === "usage" && apiUsage === null && !apiUsageLoading) {
-      void loadApiUsage();
+    if (tab === "usage") {
+      if (apiUsage === null && !apiUsageLoading) void loadApiUsage();
+      if (ledger === null && !ledgerLoading) void loadLedger();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -1223,6 +1243,140 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         )}
 
         {tab === "sample" && <SampleAssessment />}
+
+        {tab === "usage" && (
+          <div className="panel">
+            <span className="panel-label">DPYC Ledger</span>
+            <h2 className="serif">Sats balance & MCP tool usage</h2>
+            <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
+              Your live balance at Optionality MCP, what you've spent today, and the active
+              credit tranches funding it. Tolls are deducted at call time; the operator's
+              accounting flushes to Neon after each settle.
+            </p>
+
+            <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => { void loadLedger(); }}
+                disabled={ledgerLoading}
+                style={{ padding: "8px 14px", fontSize: 10 }}
+              >
+                {ledgerLoading ? "Loading…" : "Refresh"}
+              </button>
+              <button
+                className="btn"
+                onClick={() => setTopOffOpen(true)}
+                style={{ padding: "8px 14px", fontSize: 10 }}
+                title="Buy sats from the operator via Bitcoin Lightning"
+              >
+                Top Off
+              </button>
+            </div>
+
+            {ledgerLoading && ledger === null && (
+              <div className="loading" style={{ display: "block", padding: "20px 0" }}>Pulling the ledger</div>
+            )}
+
+            {ledger !== null && ledger.error && (
+              <div className="error">{ledger.error}</div>
+            )}
+
+            {ledger !== null && !ledger.error && (() => {
+              const balance = ledger.balance_api_sats ?? 0;
+              const deposited = ledger.total_deposited_api_sats ?? 0;
+              const consumed = ledger.total_consumed_api_sats ?? 0;
+              const expired = ledger.total_expired_api_sats ?? 0;
+              const todayUsage = ledger.today_usage ?? {};
+              const toolRows = Object.entries(todayUsage)
+                .map(([tool, u]) => ({ tool, calls: u.calls, sats: u.api_sats }))
+                .sort((a, b) => b.sats - a.sats);
+              const todaySpend = toolRows.reduce((s, r) => s + r.sats, 0);
+              const todayCalls = toolRows.reduce((s, r) => s + r.calls, 0);
+
+              return (
+                <>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 18 }}>
+                    <div style={{ background: "rgba(212,163,91,0.06)", border: "1px solid var(--amber)", padding: 16 }}>
+                      <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
+                        Balance
+                      </div>
+                      <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500 }}>
+                        {balance.toLocaleString()}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
+                        sats · {ledger.active_tranches ?? 0} tranche{(ledger.active_tranches ?? 0) === 1 ? "" : "s"}
+                      </div>
+                    </div>
+                    <div style={{ background: "var(--bg-soft)", border: "1px solid var(--panel-edge)", padding: 16 }}>
+                      <div style={{ fontSize: 10, color: "var(--ink-soft)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
+                        Deposited
+                      </div>
+                      <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, color: "var(--ink)" }}>
+                        {deposited.toLocaleString()}
+                      </div>
+                    </div>
+                    <div style={{ background: "var(--bg-soft)", border: "1px solid var(--panel-edge)", padding: 16 }}>
+                      <div style={{ fontSize: 10, color: "var(--ink-soft)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
+                        Consumed
+                      </div>
+                      <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, color: "var(--ink)" }}>
+                        {consumed.toLocaleString()}
+                      </div>
+                    </div>
+                    {expired > 0 && (
+                      <div style={{ background: "var(--bg-soft)", border: "1px solid var(--panel-edge)", padding: 16 }}>
+                        <div style={{ fontSize: 10, color: "var(--rust)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
+                          Expired
+                        </div>
+                        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, color: "var(--rust)" }}>
+                          {expired.toLocaleString()}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {ledger.expiring_within_24h_sats && ledger.expiring_within_24h_sats > 0 && (
+                    <div style={{ background: "rgba(184,85,58,0.06)", border: "1px solid var(--rust)", borderLeft: "3px solid var(--rust)", padding: 12, fontSize: 12, marginBottom: 14 }}>
+                      <b>{ledger.expiring_within_24h_sats.toLocaleString()} sats</b> expire within 24 hours.
+                      {ledger.next_expiration_iso && <> Next expiration: {new Date(ledger.next_expiration_iso).toLocaleString()}.</>}
+                    </div>
+                  )}
+
+                  <h3 className="serif">Today's MCP tool usage</h3>
+                  {toolRows.length === 0 ? (
+                    <div className="empty">No paid tool calls today.</div>
+                  ) : (
+                    <>
+                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                        <thead>
+                          <tr style={{ borderBottom: "1px solid var(--panel-edge)", color: "var(--ink-faint)", letterSpacing: "0.15em", textTransform: "uppercase", fontSize: 10 }}>
+                            <th style={{ textAlign: "left", padding: "8px 6px" }}>Tool</th>
+                            <th style={{ textAlign: "right", padding: "8px 6px" }}>Calls</th>
+                            <th style={{ textAlign: "right", padding: "8px 6px" }}>Sats</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {toolRows.map((r) => (
+                            <tr key={r.tool} style={{ borderBottom: "1px solid var(--panel-edge)" }}>
+                              <td style={{ padding: "8px 6px", fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{r.tool}</td>
+                              <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink-soft)" }}>{r.calls}</td>
+                              <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>{r.sats.toLocaleString()}</td>
+                            </tr>
+                          ))}
+                          <tr style={{ borderTop: "2px solid var(--panel-edge)", fontWeight: 600 }}>
+                            <td style={{ padding: "8px 6px", color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase", fontSize: 10 }}>Today</td>
+                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{todayCalls}</td>
+                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>{todaySpend.toLocaleString()}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </>
+                  )}
+                </>
+              );
+            })()}
+          </div>
+        )}
 
         {tab === "usage" && (() => {
           const models: ModelUsage[] = apiUsage?.models ?? [];
