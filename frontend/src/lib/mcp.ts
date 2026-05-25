@@ -79,6 +79,97 @@ export function setStoredProof(proof: string): void {
 /// no journal / leaderboard / usage. Persisted so a reload survives.
 const GUEST_STORAGE_KEY = "optionality:guest";
 
+/// Cache of recently-authenticated (npub, proof_token, expiresAt) tuples.
+/// Lets a returning patron skip the DM exchange on re-entry as long as
+/// the server-side proof cache hasn't expired (default 2h). Cap at the
+/// five most-recently-used entries; older or expired entries get pruned
+/// on every read. Stored as a single JSON blob under one key.
+const RECENT_LOGINS_KEY = "optionality:recent-logins:v1";
+const MAX_RECENT_LOGINS = 5;
+
+export interface RecentLogin {
+  /// Bech32 npub the user signed in with.
+  npub: string;
+  /// Server-issued proof_token (e.g. poison phrase "rare-lake-49").
+  proof: string;
+  /// Unix ms timestamp when the server-side cache expires.
+  expiresAt: number;
+  /// Unix ms timestamp of most recent successful use — drives ordering
+  /// and eviction.
+  lastUsed: number;
+}
+
+function readRecentLogins(): RecentLogin[] {
+  try {
+    const raw = window.localStorage.getItem(RECENT_LOGINS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (e): e is RecentLogin =>
+        typeof e === "object" && e !== null &&
+        typeof e.npub === "string" &&
+        typeof e.proof === "string" &&
+        typeof e.expiresAt === "number" &&
+        typeof e.lastUsed === "number",
+    );
+  } catch {
+    return [];
+  }
+}
+
+function writeRecentLogins(entries: RecentLogin[]): void {
+  window.localStorage.setItem(RECENT_LOGINS_KEY, JSON.stringify(entries));
+}
+
+/// Return all unexpired recent logins, sorted by lastUsed descending.
+/// Prunes expired entries from storage as a side effect — a returning
+/// patron sees a clean list.
+export function getValidRecentLogins(): RecentLogin[] {
+  const now = Date.now();
+  const entries = readRecentLogins();
+  const valid = entries.filter((e) => e.expiresAt > now);
+  if (valid.length !== entries.length) writeRecentLogins(valid);
+  valid.sort((a, b) => b.lastUsed - a.lastUsed);
+  return valid;
+}
+
+/// Look up a still-valid cached entry for a specific npub. Returns null
+/// if not cached or already expired.
+export function findRecentLogin(npub: string): RecentLogin | null {
+  const now = Date.now();
+  const hit = readRecentLogins().find((e) => e.npub === npub && e.expiresAt > now);
+  return hit ?? null;
+}
+
+/// Record (or refresh) a successful login. Called on the success path of
+/// receiveNpubProof. expiresInSec comes from the server response; we
+/// derate by 30s so cache stragglers don't end up serving an
+/// already-expired token to the next paid call.
+export function recordRecentLogin(npub: string, proof: string, expiresInSec: number): void {
+  const safeTtl = Math.max(0, expiresInSec - 30);
+  const next: RecentLogin = {
+    npub,
+    proof,
+    expiresAt: Date.now() + safeTtl * 1000,
+    lastUsed: Date.now(),
+  };
+  // Drop any prior entry for this npub and prepend the new one. Cap to
+  // MAX_RECENT_LOGINS, evicting the oldest if over.
+  const others = readRecentLogins().filter((e) => e.npub !== npub);
+  const combined = [next, ...others]
+    .sort((a, b) => b.lastUsed - a.lastUsed)
+    .slice(0, MAX_RECENT_LOGINS);
+  writeRecentLogins(combined);
+}
+
+/// Remove one cached identity. Used by the gate's per-row "forget"
+/// affordance and by the auth-bounce path when a proof_token is
+/// rejected by the server (cache miss / mismatch).
+export function forgetRecentLogin(npub: string): void {
+  writeRecentLogins(readRecentLogins().filter((e) => e.npub !== npub));
+}
+
 export function isGuestMode(): boolean {
   return window.localStorage.getItem(GUEST_STORAGE_KEY) === "1";
 }
@@ -197,6 +288,11 @@ async function callTool<T = unknown>(
     const p = payload as Record<string, unknown>;
     const errCode = String(p.error_code ?? "");
     if (p.success === false && (errCode === "PROOF_REQUIRED" || errCode === "PROOF_REFRESH_NEEDED")) {
+      // Also evict the cached entry for this npub so the gate's
+      // "Recent identities" picker doesn't immediately re-arm the same
+      // dead proof_token on the next visit.
+      const currentNpub = getStoredNpub();
+      if (currentNpub) forgetRecentLogin(currentNpub);
       window.localStorage.removeItem(PROOF_STORAGE_KEY);
       throw new ProofRequiredError(String(p.error ?? "Sign-in required."));
     }

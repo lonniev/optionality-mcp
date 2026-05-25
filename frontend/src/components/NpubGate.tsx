@@ -2,13 +2,17 @@ import { useEffect, useState } from "react";
 import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
 
 import {
+  forgetRecentLogin,
   getStoredNpub,
+  getValidRecentLogins,
   receiveNpubProof,
+  recordRecentLogin,
   requestNpubProof,
   serviceStatus,
   setGuestMode,
   setStoredNpub,
   setStoredProof,
+  type RecentLogin,
 } from "../lib/mcp";
 
 /**
@@ -36,6 +40,51 @@ import {
  * Errors at any step are surfaced in-place; the user can retry without
  * leaving the gate.
  */
+/// One row in the "Recent identities" picker. Renders an npub
+/// (truncated for line length), an "expires in N" hint, a primary
+/// click-target that re-enters the app on the cached proof, and a
+/// trash button to forget the entry without using it.
+function RecentRow({
+  entry,
+  onUse,
+  onForget,
+  disabled,
+}: {
+  entry: RecentLogin;
+  onUse: () => void;
+  onForget: () => void;
+  disabled: boolean;
+}) {
+  const remainingMs = entry.expiresAt - Date.now();
+  const remainingMin = Math.max(0, Math.floor(remainingMs / 60000));
+  const remainingHr = Math.floor(remainingMin / 60);
+  const ttl =
+    remainingHr >= 1 ? `${remainingHr}h ${remainingMin % 60}m` : `${remainingMin}m`;
+  const npubShort = `${entry.npub.slice(0, 12)}…${entry.npub.slice(-6)}`;
+
+  return (
+    <div style={STYLES.recentRow}>
+      <button
+        onClick={onUse}
+        disabled={disabled}
+        style={STYLES.recentMain}
+        title={`Sign in as ${entry.npub} using the cached proof_token`}
+      >
+        <span style={STYLES.recentNpub}>{npubShort}</span>
+        <span style={STYLES.recentTtl}>{ttl} left</span>
+      </button>
+      <button
+        onClick={onForget}
+        disabled={disabled}
+        style={STYLES.recentForget}
+        title={`Remove this identity from the cache`}
+      >
+        ×
+      </button>
+    </div>
+  );
+}
+
 /// Modal shown after "Generate Your Npub" — displays the freshly-minted
 /// nsec/npub pair with copy-to-clipboard affordances and a link to a
 /// Nostr client. The keys are never sent to the server; the user is
@@ -145,6 +194,28 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
   // their own device before closing the modal.
   const [showGenerator, setShowGenerator] = useState<boolean>(false);
   const [generated, setGenerated] = useState<{ nsec: string; npub: string } | null>(null);
+  // Snapshot of valid (unexpired) recent logins shown as a picker on
+  // the gate. Refreshed when the user forgets a row or signs in fresh.
+  const [recents, setRecents] = useState<RecentLogin[]>(() => getValidRecentLogins());
+
+  /// Re-enter using a cached (npub, proof) tuple. No DM exchange — the
+  /// server-side proof_token is still valid until expiresAt, so the
+  /// patron can simply land in Optionality. The first paid call will
+  /// re-validate; if the server's own cache has dropped the entry,
+  /// callTool's auth-bounce path will evict the cache row and force a
+  /// fresh DM exchange on the next try.
+  function handleReuseRecent(entry: RecentLogin): void {
+    setStoredNpub(entry.npub);
+    setStoredProof(entry.proof);
+    // Refresh lastUsed so MRU ordering reflects this re-entry.
+    recordRecentLogin(entry.npub, entry.proof, Math.floor((entry.expiresAt - Date.now()) / 1000));
+    onAuthenticated();
+  }
+
+  function handleForgetRecent(npub: string): void {
+    forgetRecentLogin(npub);
+    setRecents(getValidRecentLogins());
+  }
 
   function handleGenerateKeypair(): void {
     const sk = generateSecretKey();
@@ -235,6 +306,12 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
         const hours = Math.floor(result.expires_in_seconds / 3600);
         setPendingDuration(hours > 0 ? `${hours}h` : `${Math.round(result.expires_in_seconds / 60)}m`);
       }
+      // Cache this (npub, proof, expiresAt) tuple so a future return —
+      // after sign-out or a cleared session — can skip the DM exchange
+      // until the server-side proof_token actually expires.
+      if (result.expires_in_seconds && result.expires_in_seconds > 0) {
+        recordRecentLogin(trimmed, token, result.expires_in_seconds);
+      }
       onAuthenticated();
     } catch (e) {
       setError(`Verification failed: ${(e as Error).message}`);
@@ -271,9 +348,29 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
           your signed reply proves ownership. No email. No password. No KYC.
         </p>
 
+        {stage === "begin" && recents.length > 0 && (
+          <div style={STYLES.recentBlock}>
+            <div style={STYLES.recentLabel}>Recent identities — skip the DM</div>
+            {recents.map((entry) => (
+              <RecentRow
+                key={entry.npub}
+                entry={entry}
+                onUse={() => handleReuseRecent(entry)}
+                onForget={() => handleForgetRecent(entry.npub)}
+                disabled={busy}
+              />
+            ))}
+            <div style={STYLES.recentHint}>
+              Cached proof is still valid; clicking signs you in without a fresh DM exchange.
+            </div>
+          </div>
+        )}
+
         {stage === "begin" && (
           <>
-            <label style={STYLES.label} htmlFor="npub-input">Your patron npub</label>
+            <label style={STYLES.label} htmlFor="npub-input">
+              {recents.length > 0 ? "Or sign in with a different npub" : "Your patron npub"}
+            </label>
             <input
               id="npub-input"
               type="text"
@@ -723,5 +820,58 @@ const STYLES: Record<string, React.CSSProperties> = {
     marginTop: 18,
     justifyContent: "flex-end",
     flexWrap: "wrap",
+  },
+  recentBlock: {
+    marginBottom: 18,
+  },
+  recentLabel: {
+    display: "block",
+    fontSize: 10,
+    letterSpacing: "0.25em",
+    textTransform: "uppercase",
+    color: "var(--amber)",
+    marginBottom: 8,
+  },
+  recentRow: {
+    display: "flex",
+    gap: 6,
+    marginBottom: 6,
+  },
+  recentMain: {
+    flex: 1,
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: "10px 12px",
+    background: "transparent",
+    border: "1px solid var(--panel-edge)",
+    color: "var(--ivory-bright)",
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 12,
+    cursor: "pointer",
+    textAlign: "left",
+  },
+  recentNpub: {
+    letterSpacing: "0.02em",
+  },
+  recentTtl: {
+    fontSize: 10,
+    color: "var(--amber)",
+    letterSpacing: "0.05em",
+  },
+  recentForget: {
+    width: 34,
+    background: "transparent",
+    border: "1px solid var(--panel-edge)",
+    color: "var(--ink-faint)",
+    fontFamily: "'JetBrains Mono', monospace",
+    fontSize: 16,
+    cursor: "pointer",
+  },
+  recentHint: {
+    fontSize: 11,
+    color: "var(--ink-faint)",
+    fontStyle: "italic",
+    marginTop: 6,
   },
 };
