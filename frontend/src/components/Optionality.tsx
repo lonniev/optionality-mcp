@@ -565,6 +565,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // loaded (don't render the auto-route); 0 = patron is at zero and
   // we surface the onboarding panels; >0 = play tab default.
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
+  // Patron display name — surfaced in the Welcome greeting and the
+  // header chip. Loaded from get_patron_profile alongside relays
+  // + escrowed flag.
+  const [patronDisplayName, setPatronDisplayName] = useState<string | null>(null);
   // One-shot guard so the initial-zero auto-route to Welcome fires
   // exactly once per session. After the patron navigates away (or
   // tops off), they can return to Welcome via the tab button while
@@ -656,6 +660,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         const r = await getPatronProfile();
         if (r.profile?.relays) setUserRelays(r.profile.relays);
         if (typeof r.profile?.escrowed === "boolean") setEscrowed(r.profile.escrowed);
+        if (r.profile?.display_name) setPatronDisplayName(r.profile.display_name);
       } catch {
         /* silent — DM modal will tell the user if relays are missing */
       }
@@ -1581,6 +1586,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             onTopOff={() => (guest ? onSignOut?.() : setTopOffOpen(true))}
             onSeeAssessment={() => setTab("sample")}
             isGuest={guest}
+            npub={guest ? null : getStoredNpub()}
+            displayName={patronDisplayName}
           />
         )}
 

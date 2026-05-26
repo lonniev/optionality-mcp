@@ -15,11 +15,16 @@
 
 import { useEffect, useState } from "react";
 import { checkPrice } from "../lib/mcp";
+import { shortNpub } from "./Avatar";
 
 interface Props {
   onTopOff: () => void;
   onSeeAssessment: () => void;
   isGuest: boolean;
+  /// Patron's bech32 npub when signed in; null for guests.
+  npub: string | null;
+  /// Patron's chosen display name from Profile, if set.
+  displayName: string | null;
 }
 
 interface PriceQuote {
@@ -44,7 +49,7 @@ function readCost(r: Awaited<ReturnType<typeof checkPrice>>): number | null {
   return null;
 }
 
-export default function Welcome({ onTopOff, onSeeAssessment, isGuest }: Props) {
+export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, displayName }: Props) {
   // Live pricing from the BE — null until the lookup completes; -1
   // sentinel if the lookup failed and we should avoid quoting numbers.
   const [prices, setPrices] = useState<PriceQuote | null | -1>(null);
@@ -109,6 +114,25 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest }: Props) {
       />
       <div className="panel" style={{ borderLeft: "3px solid var(--amber)" }}>
         <span className="panel-label">Welcome</span>
+        {!isGuest && npub && (
+          <div style={{
+            fontSize: 13,
+            color: "var(--ink)",
+            marginTop: 6,
+            marginBottom: 4,
+            lineHeight: 1.5,
+          }}>
+            Welcome{displayName ? <>, <b style={{ color: "var(--amber-bright)" }}>{displayName}</b></> : ""}.
+            Signed in as{" "}
+            <code style={{
+              color: "var(--amber-bright)",
+              fontFamily: "JetBrains Mono, monospace",
+              fontSize: 12,
+            }}>
+              {shortNpub(npub)}
+            </code>.
+          </div>
+        )}
         <h2 className="serif" style={{ marginTop: 4, fontSize: 28 }}>
           Why Optionality.
         </h2>
