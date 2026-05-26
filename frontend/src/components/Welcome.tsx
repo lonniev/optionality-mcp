@@ -119,7 +119,7 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest }: Props) {
           structure choice, strikes &amp; tenor, risk/reward, macro integration, and tail risk.
         </p>
         <p className="briefing-prose">
-          The dealer LLM composes scenarios — real historical setups, counterfactual
+          The firm composes opportunities — real historical setups, counterfactual
           regimes, or live tape with web search — and asks you the question every desk
           asks: <i>What is your trade, and why?</i> You pitch it in plain English. A
           second LLM, playing the role of senior PM, grades the pitch and returns the
@@ -167,7 +167,7 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest }: Props) {
             </p>
             <ul className="briefing-prose" style={{ paddingLeft: 22, lineHeight: 1.7, marginBottom: 12 }}>
               <li>
-                Cheapest deal — fiction × apprentice:{" "}
+                Cheapest opportunity — fiction × apprentice:{" "}
                 <b>{prices.cheap} sat{prices.cheap === 1 ? "" : "s"}</b>
               </li>
               <li>

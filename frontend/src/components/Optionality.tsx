@@ -837,7 +837,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   async function handleAskTip(): Promise<void> {
     const q = tipQuestion.trim();
     if (!q) return;
-    if (!entryId) { setError("Deal a Trade Scenario before asking for a clue."); return; }
+    if (!entryId) { setError("Accept a challenge before asking for a clue."); return; }
     setError("");
     setTipAsking(true);
     try {
@@ -1191,7 +1191,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <span className="panel-label">Briefing</span>
                 <h2 className="serif">The desk is open.</h2>
                 <p className="briefing-prose">
-                  A card is dealt: a moment in markets — perhaps real, perhaps invented, perhaps unfolding right now.
+                  The firm presents an opportunity: a moment in markets — perhaps real, perhaps invented, perhaps unfolding right now.
                   You&apos;ll see a date, a macro backdrop, an asset, a catalyst, key levels, and the constraints of your book.
                   Read it like a courtroom brief. Then write your trade — structure, strikes, expiry, sizing, and your reasoning, in your own words.
                 </p>
@@ -1199,19 +1199,19 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <div className="briefing-rule">
                   <span className="rule-mark">§</span>
                   <div>
-                    <b>Integration is rewarded.</b> A strong answer accounts for the political, monetary, and cross-asset facts the dealer put in front of you. The more relevant facts you weave into your thesis, the higher you score — particularly on the Macro Context dimension.
+                    <b>Integration is rewarded.</b> A strong answer accounts for the political, monetary, and cross-asset facts the firm put in front of you. The more relevant facts you weave into your thesis, the higher you score — particularly on the Macro Context dimension.
                   </div>
                 </div>
 
                 <div className="briefing-rule warn">
                   <span className="rule-mark">⚑</span>
                   <div>
-                    <b>Red herrings are planted.</b> The dealer will embed one or two facts that are perfectly true but immaterial to the ideal trade — real-world noise that a trader could reasonably notice and overweight. A skew note may be color, not catalyst. A headline may already be in the tape. A disclosed position may be stale. They aren&apos;t traps in the sense of falsehood; they&apos;re traps in the sense of relevance. Building your thesis on one will cost you points; recognizing it as noise and setting it aside earns you them.
+                    <b>Red herrings are planted.</b> The firm will embed one or two facts that are perfectly true but immaterial to the ideal trade — real-world noise that a trader could reasonably notice and overweight. A skew note may be color, not catalyst. A headline may already be in the tape. A disclosed position may be stale. They aren&apos;t traps in the sense of falsehood; they&apos;re traps in the sense of relevance. Building your thesis on one will cost you points; recognizing it as noise and setting it aside earns you them.
                   </div>
                 </div>
 
                 <p className="briefing-coda">
-                  Choose your historicity. Choose your persona. Deal the card.
+                  Choose your historicity. Choose your persona. Accept the challenge.
                 </p>
 
                 <div style={{ fontSize: 10, color: "var(--ivory)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 20, marginBottom: 8, fontStyle: "italic" }}>Historicity</div>
@@ -1310,7 +1310,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   )}
                 </div>
                 <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4, fontStyle: "italic" }}>
-                  Optional. When set, the dealer sizes the scenario&apos;s account and constraints so a well-chosen structure fits your envelope. The judge will score down trades whose worst case exceeds it.
+                  Optional. When set, the firm sizes the opportunity&apos;s account and constraints so a well-chosen structure fits your envelope. The judge will score down trades whose worst case exceeds it.
                 </div>
 
                 <div className="actions">
@@ -1759,7 +1759,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               )}
 
               {apiUsage !== null && models.length === 0 && (
-                <div className="empty">No model calls recorded yet. Deal a scenario.</div>
+                <div className="empty">No model calls recorded yet. Accept a challenge.</div>
               )}
 
               {apiUsage !== null && models.length > 0 && (

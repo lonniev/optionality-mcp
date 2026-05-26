@@ -32,10 +32,11 @@ export default function SampleAssessment() {
           What an Optionality pitch review looks like.
         </h2>
         <p className="briefing-prose" style={{ marginBottom: 0 }}>
-          A real round is dealt fresh by an LLM grounded in the mode &amp; persona you choose,
-          pitched to a second LLM that grades you across five dimensions, and persisted to
-          your Journal. This one is fixed — a March 2023 Trade Scenario, a credit put spread
-          pitch, a full review. Use it to see what the game ships before you put sats on the table.
+          A real round is composed fresh by the firm — grounded in the mode &amp; persona you
+          choose — then pitched to a second LLM that grades you across five dimensions, and
+          persisted to your Journal. This one is fixed: a March 2023 opportunity, a credit
+          put spread pitch, a full review. Use it to see what the game ships before you put
+          sats on the table.
         </p>
       </div>
 

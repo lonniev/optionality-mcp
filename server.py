@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.10"
+__version__ = "0.1.11"
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +40,8 @@ mcp = FastMCP(
         "Optionality MCP — an AI-judged options trading drill, monetized "
         "via Tollbooth DPYC Bitcoin Lightning micropayments.\n\n"
         "## What it does\n"
-        "A dealer LLM composes options trading scenarios; the trainee writes "
-        "a free-text trade; a judge LLM evaluates the trade across five "
+        "The firm composes options trading opportunities; the trainee writes "
+        "a free-text trade pitch; a judge LLM evaluates the pitch across five "
         "dimensions, parses it into structured legs, and emits a Facts Ledger "
         "showing fact-integration discipline. Three historicity modes "
         "(historical, fiction, live) and four difficulty personas.\n\n"
@@ -269,12 +269,12 @@ async def deal_scenario(
 
     Args:
         mode: ``historical`` | ``fiction`` | ``live`` — controls how the
-            dealer LLM grounds the scenario. ``live`` uses Anthropic's
-            web_search tool and costs more tokens.
+            firm grounds the scenario. ``live`` uses Anthropic's web_search
+            tool and costs more tokens.
         difficulty: ``apprentice`` | ``journeyman`` | ``adept`` | ``sovereign``
-            for a fresh deal; ``mulligan`` only paired with replay_entry_id.
+            for a fresh opportunity; ``mulligan`` only paired with replay_entry_id.
         max_loss_usd: Optional per-trade risk envelope in USD. When set, the
-            dealer scales the constraints (account size, sizing limits) so a
+            firm sizes the constraints (account size, sizing limits) so a
             thoughtful structure can fit the budget. Useful for trainees who
             reason better about $250 than $10,000 versions of the same trade.
         replay_entry_id: Optional id of an evaluated journal entry. When set,
