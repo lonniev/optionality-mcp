@@ -1161,7 +1161,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>Guest pass</div>
             <div style={{ fontSize: 14, color: "var(--ink)", lineHeight: 1.55 }}>
               You&apos;re browsing as a guest. The chooser, the briefing, and the live pricing display work.
-              Dealing a Trade Scenario, pitching trades, asking for clues, and saving to your Journal all require a Nostr sign-in.
+              Accepting a challenge, pitching trades, asking for clues, and saving to your Journal all require a Nostr sign-in.
               {onSignOut && (
                 <>
                   {" "}
