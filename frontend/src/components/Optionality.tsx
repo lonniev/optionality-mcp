@@ -94,7 +94,7 @@ import Avatar, { shortNpub } from "./Avatar";
 import ProfileTab from "./Profile";
 import DMComposeModal from "./DMComposeModal";
 import Welcome from "./Welcome";
-import { getPatronProfile, getStoredNpub } from "../lib/mcp";
+import { getGuestId, getPatronProfile, getStoredNpub } from "../lib/mcp";
 
 // ============================================================
 //  OPTIONALITY — A Sovereign Trader's Drill
@@ -1159,9 +1159,20 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         {guest && (
           <div className="panel" style={{ borderLeft: "3px solid var(--amber)", background: "rgba(212,163,91,0.04)" }}>
             <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>Guest pass</div>
-            <div style={{ fontSize: 14, color: "var(--ink)", lineHeight: 1.55 }}>
-              You&apos;re browsing as a guest. The chooser, the briefing, and the live pricing display work.
-              Accepting a challenge, pitching trades, asking for clues, and saving to your Journal all require a Nostr sign-in.
+            <div style={{ fontSize: 14, color: "var(--ink)", lineHeight: 1.6 }}>
+              <b>
+                Welcome Guest Trader{" "}
+                <code style={{ color: "var(--amber-bright)", fontFamily: "JetBrains Mono, monospace" }}>
+                  {getGuestId()}
+                </code>.
+              </b>{" "}
+              The site is live but you only can use the free services until you buy some DPYC tokens.
+              Visit the <b>Usage</b> tab to see your account and to buy tokens.
+              Getting a Challenge, asking for clues, Getting Assessed — these all are paid services but the
+              fees are tiny: just a few sats each. Once you have your Nostr credentials, you can Top Off
+              here and then work your challenges, save your work in progress, message peers on the
+              Leaderboard — and hopefully become more proficient about pitching options trades to
+              professional audiences. Welcome.
               {onSignOut && (
                 <>
                   {" "}
