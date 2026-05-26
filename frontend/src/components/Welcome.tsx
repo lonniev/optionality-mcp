@@ -14,7 +14,7 @@
 // figures so we never misstate the operator's actual toll.
 
 import { useEffect, useState } from "react";
-import { checkPrice } from "../lib/mcp";
+import { checkPrice, getGuestId } from "../lib/mcp";
 import { shortNpub } from "./Avatar";
 
 interface Props {
@@ -112,27 +112,57 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
           WebkitMaskImage: "radial-gradient(ellipse at center, black 30%, transparent 85%)",
         }}
       />
-      <div className="panel" style={{ borderLeft: "3px solid var(--amber)" }}>
-        <span className="panel-label">Welcome</span>
-        {!isGuest && npub && (
-          <div style={{
-            fontSize: 13,
-            color: "var(--ink)",
-            marginTop: 6,
-            marginBottom: 4,
-            lineHeight: 1.5,
-          }}>
-            Welcome{displayName ? <>, <b style={{ color: "var(--amber-bright)" }}>{displayName}</b></> : ""}.
-            Signed in as{" "}
-            <code style={{
-              color: "var(--amber-bright)",
-              fontFamily: "JetBrains Mono, monospace",
-              fontSize: 12,
+      {(() => {
+        // Greeting name fallback chain — guaranteed to render a non-empty
+        // identifier. displayName (preferred) → short npub (signed-in
+        // without a display name) → "Guest <id>" (browsing without
+        // sign-in) → "Anonymous Visitor" (defensive last resort).
+        let greetingName: string;
+        let greetingMono = false;
+        if (!isGuest && displayName) {
+          greetingName = displayName;
+        } else if (!isGuest && npub) {
+          greetingName = shortNpub(npub);
+          greetingMono = true;
+        } else if (isGuest) {
+          greetingName = `Guest ${getGuestId()}`;
+          greetingMono = true;
+        } else {
+          greetingName = "Anonymous Visitor";
+        }
+        const showNpubLine = !isGuest && !!npub && !!displayName;
+        return (
+          <div className="panel" style={{ borderLeft: "3px solid var(--amber)" }}>
+            <span className="panel-label">Welcome</span>
+            <div style={{
+              fontSize: 13,
+              color: "var(--ink)",
+              marginTop: 6,
+              marginBottom: 4,
+              lineHeight: 1.5,
             }}>
-              {shortNpub(npub)}
-            </code>.
-          </div>
-        )}
+              Welcome,{" "}
+              {greetingMono ? (
+                <code style={{
+                  color: "var(--amber-bright)",
+                  fontFamily: "JetBrains Mono, monospace",
+                  fontSize: 12,
+                }}>{greetingName}</code>
+              ) : (
+                <b style={{ color: "var(--amber-bright)" }}>{greetingName}</b>
+              )}
+              .
+              {showNpubLine && (
+                <>
+                  {" "}Signed in as{" "}
+                  <code style={{
+                    color: "var(--amber-bright)",
+                    fontFamily: "JetBrains Mono, monospace",
+                    fontSize: 12,
+                  }}>{shortNpub(npub!)}</code>.
+                </>
+              )}
+            </div>
         <h2 className="serif" style={{ marginTop: 4, fontSize: 28 }}>
           Why Optionality.
         </h2>
@@ -151,7 +181,9 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
           internalizing. Sometimes the best pitch is to <i>not</i> enter the trade —
           a deliberate stand-aside scores higher than a forced answer.
         </p>
-      </div>
+          </div>
+        );
+      })()}
 
       <div className="panel">
         <span className="panel-label">How it's played</span>
