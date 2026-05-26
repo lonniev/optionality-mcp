@@ -71,15 +71,24 @@ function displayToolName(rawKey: string): string {
     .join(" ");
 }
 
-// Anthropic per-million-token pricing for the models Optionality uses.
-// Mirrors taxsort's ProfilePage so the math is identical across our
-// transparency surfaces.
-const MODEL_PRICING: Record<string, { input: number; output: number }> = {
-  "claude-sonnet-4-20250514": { input: 3, output: 15 },
-  "claude-sonnet-4-6-20250514": { input: 3, output: 15 },
-  "claude-haiku-4-5-20251001": { input: 1, output: 5 },
-};
+// Anthropic per-million-token pricing, refreshed at build time from
+// OpenRouter's /api/v1/models (they pass through Anthropic rates with
+// no per-token markup). See scripts/fetch-anthropic-pricing.mjs.
+import {
+  MODEL_PRICING as GENERATED_PRICING,
+  PRICING_FETCHED_AT,
+} from "../data/anthropicPricing.generated";
+
 const DEFAULT_PRICING = { input: 3, output: 15 };
+
+// Look up a model's per-Mtok rate. Strips any trailing date suffix
+// (e.g. "-20251015") so dated API ids resolve to the base entry.
+function priceFor(model: string): { input: number; output: number } {
+  if (GENERATED_PRICING[model]) return GENERATED_PRICING[model];
+  const stripped = model.replace(/-\d{8}$/, "");
+  if (GENERATED_PRICING[stripped]) return GENERATED_PRICING[stripped];
+  return DEFAULT_PRICING;
+}
 
 function fmt$(n: number) {
   return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
@@ -1743,7 +1752,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             totalInputTokens += m.total_input_tokens;
             totalOutputTokens += m.total_output_tokens;
             totalRuns += m.runs;
-            const p = MODEL_PRICING[m.model] ?? DEFAULT_PRICING;
+            const p = priceFor(m.model);
             estimatedCostUsd +=
               (m.total_input_tokens / 1_000_000) * p.input +
               (m.total_output_tokens / 1_000_000) * p.output;
@@ -1757,9 +1766,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               <span className="panel-label">Usage</span>
               <h2 className="serif">Claude API usage & estimated cost</h2>
               <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
-                Optionality calls Anthropic's Claude for every scenario, tip, and verdict.
+                Optionality calls Anthropic's Claude for every scenario, clue, and verdict.
                 {" "}This is what your tool calls have spent in tokens — and what those tokens
-                {" "}cost the operator. Your toll covers this plus operator overhead. No hidden margin.
+                {" "}cost the operator at Anthropic's published rates. Your toll covers this plus operator overhead.
+                {" "}No hidden margin.
+              </p>
+              <p style={{ color: "var(--ink-faint)", fontSize: 10, marginTop: -10, marginBottom: 16 }}>
+                Rates via OpenRouter pass-through, fetched {PRICING_FETCHED_AT.slice(0, 10)}.
               </p>
 
               <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
@@ -1785,7 +1798,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <>
                   {/* Per-model breakdown */}
                   {models.map((m, i) => {
-                    const p = MODEL_PRICING[m.model] ?? DEFAULT_PRICING;
+                    const p = priceFor(m.model);
                     const cost =
                       (m.total_input_tokens / 1_000_000) * p.input +
                       (m.total_output_tokens / 1_000_000) * p.output;
