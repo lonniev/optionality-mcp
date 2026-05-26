@@ -105,6 +105,7 @@ import ProfileTab from "./Profile";
 import DMComposeModal from "./DMComposeModal";
 import Welcome from "./Welcome";
 import JudgeAnimation from "./JudgeAnimation";
+import QuoteScroller from "./QuoteScroller";
 import { getGuestId, getPatronProfile, getStoredNpub } from "../lib/mcp";
 
 // ============================================================
@@ -1419,8 +1420,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   <JudgeAnimation />
                 ) : (
                   <>
-                    <div className="loading">{loadingMsg}</div>
-                    {mode === "live" && loading && (
+                    <QuoteScroller heading={loadingMsg} />
+                    {mode === "live" && (
                       <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 8, fontStyle: "italic" }}>
                         Live mode searches the web — expect 15–30s.
                       </div>
