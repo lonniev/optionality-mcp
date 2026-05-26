@@ -104,6 +104,7 @@ import Avatar, { shortNpub } from "./Avatar";
 import ProfileTab from "./Profile";
 import DMComposeModal from "./DMComposeModal";
 import Welcome from "./Welcome";
+import JudgeAnimation from "./JudgeAnimation";
 import { getGuestId, getPatronProfile, getStoredNpub } from "../lib/mcp";
 
 // ============================================================
@@ -786,7 +787,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
     setError("");
     setLoading(true);
-    setLoadingMsg("Marking your card");
+    setLoadingMsg("Judging your Pitch");
     try {
       const result = await judgeTrade(entryId, answer);
       if (result.error) throw new Error(result.error);
@@ -1414,11 +1415,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
             {loading && (
               <div className="panel" style={{ textAlign: "center" }}>
-                <div className="loading">{loadingMsg}</div>
-                {mode === "live" && loading && (
-                  <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 8, fontStyle: "italic" }}>
-                    Live mode searches the web — expect 15–30s.
-                  </div>
+                {loadingMsg === "Judging your Pitch" ? (
+                  <JudgeAnimation />
+                ) : (
+                  <>
+                    <div className="loading">{loadingMsg}</div>
+                    {mode === "live" && loading && (
+                      <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 8, fontStyle: "italic" }}>
+                        Live mode searches the web — expect 15–30s.
+                      </div>
+                    )}
+                  </>
                 )}
               </div>
             )}
