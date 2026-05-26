@@ -1207,7 +1207,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <span className="panel-label">Briefing</span>
                 <h2 className="serif">The desk is open.</h2>
                 <p className="briefing-prose">
-                  The firm presents an opportunity: a moment in markets — perhaps real, perhaps invented, perhaps unfolding right now.
+                  The Firm presents an opportunity: a moment in markets — perhaps real, perhaps invented, perhaps unfolding right now.
                   You&apos;ll see a date, a macro backdrop, an asset, a catalyst, key levels, and the constraints of your book.
                   Read it like a courtroom brief. Then write your trade — structure, strikes, expiry, sizing, and your reasoning, in your own words.
                 </p>
@@ -1215,14 +1215,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <div className="briefing-rule">
                   <span className="rule-mark">§</span>
                   <div>
-                    <b>Integration is rewarded.</b> A strong answer accounts for the political, monetary, and cross-asset facts the firm put in front of you. The more relevant facts you weave into your thesis, the higher you score — particularly on the Macro Context dimension.
+                    <b>Integration is rewarded.</b> A strong answer accounts for the political, monetary, and cross-asset facts The Firm put in front of you. The more relevant facts you weave into your thesis, the higher you score — particularly on the Macro Context dimension.
                   </div>
                 </div>
 
                 <div className="briefing-rule warn">
                   <span className="rule-mark">⚑</span>
                   <div>
-                    <b>Red herrings are planted.</b> The firm will embed one or two facts that are perfectly true but immaterial to the ideal trade — real-world noise that a trader could reasonably notice and overweight. A skew note may be color, not catalyst. A headline may already be in the tape. A disclosed position may be stale. They aren&apos;t traps in the sense of falsehood; they&apos;re traps in the sense of relevance. Building your thesis on one will cost you points; recognizing it as noise and setting it aside earns you them.
+                    <b>Red herrings are planted.</b> The Firm will embed one or two facts that are perfectly true but immaterial to the ideal trade — real-world noise that a trader could reasonably notice and overweight. A skew note may be color, not catalyst. A headline may already be in the tape. A disclosed position may be stale. They aren&apos;t traps in the sense of falsehood; they&apos;re traps in the sense of relevance. Building your thesis on one will cost you points; recognizing it as noise and setting it aside earns you them.
                   </div>
                 </div>
 
@@ -1326,7 +1326,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   )}
                 </div>
                 <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4, fontStyle: "italic" }}>
-                  Optional. When set, the firm sizes the opportunity&apos;s account and constraints so a well-chosen structure fits your envelope. The judge will score down trades whose worst case exceeds it.
+                  Optional. When set, The Firm sizes the opportunity&apos;s account and constraints so a well-chosen structure fits your envelope. The judge will score down trades whose worst case exceeds it.
                 </div>
 
                 <div className="actions">

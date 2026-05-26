@@ -169,14 +169,14 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
         <p className="briefing-prose" style={{ marginTop: 8 }}>
           Most traders carry a good thesis in their head and lose it on the way to the pitch.
           Optionality is a drill for the second half of that work — articulating the
-          trade so a senior PM, a risk committee, or your own future self can grade it on
+          trade so a senior Portfolio Manager, a risk committee, or your own future self can grade it on
           structure choice, strikes &amp; tenor, risk/reward, macro integration, and tail risk.
         </p>
         <p className="briefing-prose">
-          The firm composes opportunities — real historical setups, counterfactual
+          The Firm composes opportunities — real historical setups, counterfactual
           regimes, or live tape with web search — and asks you the question every desk
           asks: <i>What is your trade, and why?</i> You pitch it in plain English. A
-          second LLM, playing the role of senior PM, grades the pitch and returns the
+          second LLM, playing the role of senior Portfolio Manager, grades the pitch and returns the
           structured legs, the alternative trade, and the deeper context worth
           internalizing. Sometimes the best pitch is to <i>not</i> enter the trade —
           a deliberate stand-aside scores higher than a forced answer.
