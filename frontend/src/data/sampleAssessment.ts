@@ -108,6 +108,14 @@ export const SAMPLE_EVALUATION: Evaluation = {
         "left-tail. Could have noted the pin-risk if KRE closes near 45 on Friday — early assignment " +
         "on the short leg is a real possibility around a policy announcement.",
     },
+    communication: {
+      score: 17,
+      feedback:
+        "Crisp paragraph that lands the thesis in two beats — IV regime, then sized defined-risk. " +
+        "Jargon is used at a senior-PM register (skew, RR, IV rank, gamma walls) without over-explaining. " +
+        "Slight hedging-clause drag in the last sentence; tightening it to a single declarative line " +
+        "would push this into a forward-able pitch.",
+    },
   },
   facts_integrated: [
     "IV rank at 94 favors net premium-selling structures over premium buying",

@@ -83,12 +83,18 @@ STAND-ASIDE IS A LEGITIMATE PROPOSAL. If the trainee explicitly declines to ente
 
 LEAD THE HEADLINE WITH A STRUCTURED TRADE CLASSIFICATION. The headline MUST begin with "We'd summarize your trade as a <directional bias> <structure name>" — for example "We'd summarize your trade as a bullish short put spread", "We'd summarize your trade as a delta-neutral long calendar", "We'd summarize your trade as a tail-hedged short strangle". For stand-aside proposals: "We'd summarize your decision as a deliberate stand-aside" or "We'd summarize your decision as a no-trade call on this setup". After the summary clause, follow with one vivid sentence on the verdict.
 
-Evaluate across five dimensions, each scored 0-20:
+Evaluate across six dimensions, each scored 0-20. overall_score (0-100) is the AVERAGE of the six dimensions × 5 — i.e., (sum / 6) × 5, rounded to the nearest integer.
+
 - strategy_selection: Did they pick a structure that fits the directional/vol/skew thesis?
 - strikes_and_tenor: Are strikes and expiry sensibly chosen given the spot, IV, catalyst timing?
 - risk_reward: Is max-loss, max-gain, breakeven, and probability of profit reasoned about? If the scenario carries a ``max_loss_usd`` envelope, the trainee's structure should be sized so its max-loss fits inside that envelope — score down trades whose worst case exceeds the stated budget by more than a small rounding amount.
 - macro_integration: How many of the scenario's relevant_facts did the trainee weave into their reasoning, and how cleanly? Did they avoid being driven by red_herrings? Note: red_herrings are factually TRUE within the scenario but immaterial to the trade decision — they are noise, not falsehoods. The trainee is not penalized for failing to declare a red herring false; they are penalized only for treating an immaterial fact as a driver of the trade. A high score (16-20) requires citing most of the relevant_facts in the trade rationale AND keeping any red_herrings out of the driving thesis (either by ignoring them or by explicitly noting them as immaterial). A low score is given if relevant facts were neglected OR if the trade was driven by a red_herring. Cite specifics in your feedback.
 - tail_risk: Did they account for what could go catastrophically wrong (gaps, vol crush, assignment, IV blowout)?
+- communication: How well does the pitch read as something a trader would actually present to a senior Portfolio Manager? Three sub-axes folded into one score:
+    (a) Grammar + mechanics — complete sentences, agreement, punctuation. Sloppy prose loses points even if the trade idea is sound.
+    (b) Jargon fluency — uses the right terms with confidence and economy. Too little jargon (over-explaining basics, hedging like a beginner) loses points; too much jargon (chains of Greeks, acronyms a peer outside the desk wouldn't follow without notes) also loses points. The target is a senior PM's natural register: precise terms used sparingly, with the audience understanding implicit.
+    (c) Brevity + density — the pitch communicates the trade efficiently. Long technically-correct prose that buries the thesis under hedging clauses scores below a crisp paragraph that nails the same idea. Reward signal-to-noise. Stand-aside pitches that explain the no-trade thesis in one or two clean sentences score high; rambling stand-asides lose points.
+  Score 16-20 for pitches that a senior PM could screenshot and forward; 8-12 for technically-OK but poorly-written; below 8 for incoherent / sprawling / unprofessional prose.
 
 Return STRICTLY a JSON object (no prose, no markdown fences):
 {
@@ -100,7 +106,8 @@ Return STRICTLY a JSON object (no prose, no markdown fences):
     "strikes_and_tenor": { "score": 0-20, "feedback": "2-3 sentences" },
     "risk_reward": { "score": 0-20, "feedback": "2-3 sentences" },
     "macro_integration": { "score": 0-20, "feedback": "2-3 sentences — name the relevant_facts they cited and any red_herrings they fell for or dismissed" },
-    "tail_risk": { "score": 0-20, "feedback": "2-3 sentences" }
+    "tail_risk": { "score": 0-20, "feedback": "2-3 sentences" },
+    "communication": { "score": 0-20, "feedback": "2-3 sentences naming the grammar / jargon-fluency / brevity strengths and gaps. Concrete examples from the prose where possible." }
   },
   "facts_integrated": [
     "List of scenario.relevant_facts the trainee CITED or clearly relied on in their reasoning. Use the exact phrasing from relevant_facts where possible."

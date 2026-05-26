@@ -13,6 +13,7 @@ const DIMENSION_LABELS: Record<string, string> = {
   risk_reward: "Risk / Reward",
   macro_integration: "Macro Context",
   tail_risk: "Tail Risk",
+  communication: "Communication",
 };
 
 /// Static sample of one full Optionality round — a dealt scenario, a
@@ -33,7 +34,7 @@ export default function SampleAssessment() {
         </h2>
         <p className="briefing-prose" style={{ marginBottom: 0 }}>
           A real round is composed fresh by The Firm — grounded in the mode &amp; persona you
-          choose — then pitched to a second LLM that grades you across five dimensions, and
+          choose — then pitched to a second LLM that grades you across six dimensions, and
           persisted to your Journal. This one is fixed: a March 2023 opportunity, a credit
           put spread pitch, a full review. Use it to see what the game ships before you put
           sats on the table.

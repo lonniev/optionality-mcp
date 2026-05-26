@@ -164,6 +164,7 @@ const DIMENSION_LABELS: Record<string, string> = {
   risk_reward: "Risk / Reward",
   macro_integration: "Macro Context",
   tail_risk: "Tail Awareness",
+  communication: "Communication",
 };
 
 // ============================================================
