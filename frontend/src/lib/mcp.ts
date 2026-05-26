@@ -298,6 +298,10 @@ const BOOTSTRAP_TOOLS = new Set([
   // check_payment, etc.) explicitly declare (npub: str, proof: str)
   // in their signature and remain fine.
   "service_status",
+  // get_shared_entries is a public read — anyone (guests too) can
+  // browse a peer's shared trades. The wheel-side signature has no
+  // npub/proof params, so injecting them is a Pydantic-strict error.
+  "get_shared_entries",
 ]);
 
 async function callTool<T = unknown>(
@@ -490,6 +494,32 @@ export async function getJournal(entryId: string): Promise<{
     "get_journal",
     { entry_id: entryId },
   );
+}
+
+/// Toggle a journal entry's share flag. Shared evaluated entries
+/// appear under the patron's row on the public Leaderboard for peer
+/// learning. Free (zero sats).
+export async function shareEntry(
+  entryId: string,
+  shared: boolean,
+): Promise<{ entry_id?: string; is_shared?: boolean; error?: string }> {
+  return callTool<{ entry_id?: string; is_shared?: boolean; error?: string }>(
+    "share_entry",
+    { entry_id: entryId, shared },
+  );
+}
+
+/// Fetch a target patron's shared trades — public read, no auth.
+/// Eager-loads evaluation + trade_proposal so the leaderboard expansion
+/// renders the full assessment in one call.
+export async function getSharedEntries(
+  targetNpub: string,
+  limit: number = 20,
+): Promise<import("../types").SharedEntriesResult> {
+  return callTool<import("../types").SharedEntriesResult>("get_shared_entries", {
+    target_npub: targetNpub,
+    limit,
+  });
 }
 
 /// Aggregated Claude API token usage scoped to the caller's npub.

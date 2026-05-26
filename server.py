@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.13"
+__version__ = "0.1.14"
 
 logger = logging.getLogger(__name__)
 
@@ -118,6 +118,18 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         capability="delete_journal",
         category="write",
         intent="Hard-delete a journal entry and recompute the leaderboard",
+    ),
+    ToolIdentity(
+        capability="share_entry",
+        category="write",
+        intent="Toggle a journal entry's share flag so peers can see it under the patron's leaderboard row",
+        pricing_hint_value=0,
+    ),
+    ToolIdentity(
+        capability="get_shared_entries",
+        category="read",
+        intent="List a target patron's shared, evaluated entries — public peer-learning read",
+        pricing_hint_value=0,
     ),
     # ---- Leaderboard
     ToolIdentity(
@@ -375,6 +387,49 @@ async def delete_journal(
     """Hard-delete a journal entry and recompute the leaderboard cache."""
     from tools.journal import delete_journal as _impl
     return await _impl(npub=npub, entry_id=entry_id)
+
+
+@tool
+@runtime.paid_tool(capability_uuid("share_entry"))
+async def share_entry(
+    entry_id: str,
+    shared: bool = True,
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Toggle a journal entry's share flag.
+
+    Shared, evaluated entries appear under the patron's row on the
+    public Leaderboard for peer learning. Priced at 0 sats — the social
+    value of sharing is the point, not the revenue.
+
+    Args:
+        entry_id: UUID of the journal entry to toggle.
+        shared:   True to share, False to unshare. Defaults to True.
+    """
+    from tools.journal import share_entry as _impl
+    return await _impl(npub=npub, entry_id=entry_id, shared=shared)
+
+
+@tool
+async def get_shared_entries(
+    target_npub: str,
+    limit: int = 20,
+) -> dict[str, Any]:
+    """List a target patron's shared evaluated entries — newest first.
+
+    Public, free read: anyone (including guests) can browse the trades
+    a leaderboard peer has chosen to share. Eager-loads the evaluation
+    and trade proposal so the FE can render the full assessment with
+    no follow-up call. No npub/proof envelope — this is a bootstrap-style
+    tool the FE invokes without identity injection.
+
+    Args:
+        target_npub: Whose shared entries to fetch.
+        limit:       Max rows (1..50, default 20).
+    """
+    from tools.journal import get_shared_entries as _impl
+    return await _impl(target_npub=target_npub, limit=limit)
 
 
 @tool

@@ -126,7 +126,7 @@ async def list_entries(
         return await fetch(
             """
             SELECT id::text AS id, status, mode, difficulty, ticker, score, letter_grade,
-                   created_at, updated_at
+                   is_shared, created_at, updated_at
             FROM journal_entries
             WHERE npub = $1 AND status = $2 AND created_at < $3::timestamptz
             ORDER BY created_at DESC
@@ -138,7 +138,7 @@ async def list_entries(
         return await fetch(
             """
             SELECT id::text AS id, status, mode, difficulty, ticker, score, letter_grade,
-                   created_at, updated_at
+                   is_shared, created_at, updated_at
             FROM journal_entries
             WHERE npub = $1 AND status = $2
             ORDER BY created_at DESC
@@ -150,7 +150,7 @@ async def list_entries(
         return await fetch(
             """
             SELECT id::text AS id, status, mode, difficulty, ticker, score, letter_grade,
-                   created_at, updated_at
+                   is_shared, created_at, updated_at
             FROM journal_entries
             WHERE npub = $1 AND created_at < $2::timestamptz
             ORDER BY created_at DESC
@@ -177,7 +177,7 @@ async def get_entry(npub: str, entry_id: str) -> dict[str, Any] | None:
         """
         SELECT id::text AS id, status, mode, difficulty, scenario, trade_proposal,
                trade_legs, evaluation, score, letter_grade, ticker,
-               created_at, updated_at
+               is_shared, created_at, updated_at
         FROM journal_entries
         WHERE id = $2::uuid AND npub = $1
         """,
@@ -192,3 +192,42 @@ async def delete_entry(npub: str, entry_id: str) -> bool:
         npub, entry_id,
     )
     return (result.get("rowcount") or 0) > 0
+
+
+async def set_shared(npub: str, entry_id: str, shared: bool) -> bool:
+    """Toggle the patron's per-entry share flag.
+
+    Only evaluated entries can be shared — pre-judgment drafts have no
+    evaluation to compare against. Returns ``True`` if a row matched and
+    was updated; ``False`` for missing / un-evaluated / wrong-owner.
+    """
+    result = await execute(
+        """
+        UPDATE journal_entries
+        SET is_shared = $3, updated_at = NOW()
+        WHERE id = $2::uuid AND npub = $1 AND status = 'evaluated'
+        """,
+        npub, entry_id, shared,
+    )
+    return (result.get("rowcount") or 0) > 0
+
+
+async def list_shared_for(target_npub: str, limit: int = 20) -> list[dict[str, Any]]:
+    """Return the target patron's shared, evaluated entries — newest first.
+
+    Eager-loads ``evaluation``, ``trade_proposal``, ``trade_legs`` so the
+    FE peer-view can expand a row without a second round trip. Limit is
+    capped at 50 to keep the payload bounded.
+    """
+    lim = max(1, min(50, limit))
+    return await fetch(
+        """
+        SELECT id::text AS id, mode, difficulty, ticker, score, letter_grade,
+               trade_proposal, trade_legs, evaluation, created_at
+        FROM journal_entries
+        WHERE npub = $1 AND is_shared = TRUE AND status = 'evaluated'
+        ORDER BY created_at DESC
+        LIMIT $2
+        """,
+        target_npub, lim,
+    )

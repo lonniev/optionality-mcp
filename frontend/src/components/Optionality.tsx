@@ -27,13 +27,16 @@ import {
   getApiUsageStats,
   getJournal,
   getLeaderboard,
+  getSharedEntries,
   isGuestMode,
   judgeTrade,
   listJournal,
   ProofRequiredError,
   saveDraft,
+  shareEntry,
   type CheckBalanceResult,
 } from "../lib/mcp";
+import type { SharedEntry } from "../types";
 import { annotate } from "../lib/annotate";
 import { useHashTab } from "../lib/hashTab";
 
@@ -632,6 +635,16 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   /// free. Cleared on sign-out via the storage-scoped slot mechanism.
   const [journalDetails, setJournalDetails] = useState<Record<string, JournalDetail>>({});
   const [journalDetailLoading, setJournalDetailLoading] = useState<Record<string, boolean>>({});
+  // Per-entry share toggle in flight — disables the button so quick
+  // taps don't double-fire share_entry.
+  const [sharingInFlight, setSharingInFlight] = useState<Record<string, boolean>>({});
+  // Leaderboard row expansion: which peer's shared trades are open,
+  // and cached payloads keyed by their npub.
+  const [expandedPeer, setExpandedPeer] = useState<string | null>(null);
+  const [peerShared, setPeerShared] = useState<Record<string, SharedEntry[]>>({});
+  const [peerSharedLoading, setPeerSharedLoading] = useState<Record<string, boolean>>({});
+  const [peerSharedError, setPeerSharedError] = useState<Record<string, string>>({});
+  const [expandedSharedTrade, setExpandedSharedTrade] = useState<string | null>(null);
   const [entryId, setEntryId] = useState<string | null>(null);
   const answerRef = useRef<HTMLTextAreaElement | null>(null);
   // Save-draft transient state — last server-confirmed save timestamp so
@@ -984,6 +997,72 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         const next = { ...prev };
         delete next[entryId];
         return next;
+      });
+    }
+  }
+
+  // Toggle is_shared on one of the patron's evaluated entries.
+  // Optimistic — flips the local flag immediately, calls the BE, and
+  // reverts on error. Free tool (zero sats).
+  async function toggleShareEntry(entryId: string, current: boolean): Promise<void> {
+    if (sharingInFlight[entryId]) return;
+    const next = !current;
+    setSharingInFlight((prev) => ({ ...prev, [entryId]: true }));
+    setJournalEntries((prev) =>
+      prev.map((r) => (r.id === entryId ? { ...r, is_shared: next } : r)),
+    );
+    setJournalDetails((prev) =>
+      prev[entryId] ? { ...prev, [entryId]: { ...prev[entryId], is_shared: next } } : prev,
+    );
+    try {
+      const r = await shareEntry(entryId, next);
+      if (r.error) throw new Error(r.error);
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      // Revert on failure.
+      setJournalEntries((prev) =>
+        prev.map((r) => (r.id === entryId ? { ...r, is_shared: current } : r)),
+      );
+      setJournalDetails((prev) =>
+        prev[entryId] ? { ...prev, [entryId]: { ...prev[entryId], is_shared: current } } : prev,
+      );
+      setJournalError((e as Error).message);
+    } finally {
+      setSharingInFlight((prev) => {
+        const m = { ...prev };
+        delete m[entryId];
+        return m;
+      });
+    }
+  }
+
+  // Toggle the row expansion for a peer on the Leaderboard, lazy-loading
+  // their shared entries on first open. Public free read.
+  async function togglePeerExpansion(peerNpub: string): Promise<void> {
+    if (expandedPeer === peerNpub) {
+      setExpandedPeer(null);
+      return;
+    }
+    setExpandedPeer(peerNpub);
+    setExpandedSharedTrade(null);
+    if (peerShared[peerNpub] || peerSharedLoading[peerNpub]) return;
+    setPeerSharedLoading((prev) => ({ ...prev, [peerNpub]: true }));
+    setPeerSharedError((prev) => {
+      const m = { ...prev };
+      delete m[peerNpub];
+      return m;
+    });
+    try {
+      const r = await getSharedEntries(peerNpub, 20);
+      if (r.error) throw new Error(r.error);
+      setPeerShared((prev) => ({ ...prev, [peerNpub]: r.entries || [] }));
+    } catch (e) {
+      setPeerSharedError((prev) => ({ ...prev, [peerNpub]: (e as Error).message }));
+    } finally {
+      setPeerSharedLoading((prev) => {
+        const m = { ...prev };
+        delete m[peerNpub];
+        return m;
       });
     }
   }
@@ -1955,24 +2034,36 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 </div>
                 {leaderboard.rows.map((row: LeaderboardRow, i: number) => {
                   const isYou = row.npub === getStoredNpub();
+                  const isExpanded = expandedPeer === row.npub;
+                  const shared = peerShared[row.npub];
+                  const sharedLoading = !!peerSharedLoading[row.npub];
+                  const sharedError = peerSharedError[row.npub];
                   return (
+                    <div key={row.npub}>
                     <div
-                      key={row.npub}
                       className="history-row"
+                      onClick={() => { void togglePeerExpansion(row.npub); }}
                       style={{
                         gridTemplateColumns: "40px 56px 1fr 84px 84px 60px 60px 60px",
                         background: isYou ? "var(--amber-glow)" : undefined,
                         alignItems: "center",
+                        cursor: "pointer",
                       }}
+                      title="Click to see this trader's shared pitches"
                     >
-                      <div style={{ color: "var(--amber)", fontFamily: "Fraunces, serif", fontSize: 16 }}>{i + 1}</div>
-                      <div>
+                      <div style={{ color: "var(--amber)", fontFamily: "Fraunces, serif", fontSize: 16 }}>
+                        <span style={{ display: "inline-block", marginRight: 4, transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 180ms ease", fontSize: 10, color: "var(--ink-faint)" }}>▶</span>
+                        {i + 1}
+                      </div>
+                      <div onClick={(e) => e.stopPropagation()}>
                         {/* Click → DM via NIP-07. Self-row clicks open
                             a DM to yourself — useful for verifying the
                             NIP-07 signer + relay path end-to-end
                             without pinging a peer. NIP-04 encryption
                             works on (own_priv, own_pub) ECDH; the DM
-                            shows up in your own Nostr client's inbox. */}
+                            shows up in your own Nostr client's inbox.
+                            stopPropagation so the avatar tap doesn't
+                            also expand the row's shared-pitches list. */}
                         <Avatar
                           value={row.avatar}
                           size={40}
@@ -2008,6 +2099,84 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       <div className="h-score" style={{ color: "var(--ink-faint)" }}>{row.avg_score}</div>
                       <div className="h-score">{row.longest_streak ?? row.current_streak}</div>
                       <div className="h-score">{row.total_played}</div>
+                    </div>
+
+                    {isExpanded && (
+                      <div style={{ background: "var(--bg-soft)", borderLeft: "2px solid var(--amber)", padding: "12px 16px 16px 22px", marginBottom: 6 }}>
+                        {sharedLoading && (
+                          <div className="loading" style={{ display: "block", padding: "12px 0" }}>Fetching shared pitches</div>
+                        )}
+                        {sharedError && (
+                          <div className="error" style={{ marginTop: 4 }}>{sharedError}</div>
+                        )}
+                        {!sharedLoading && !sharedError && Array.isArray(shared) && shared.length === 0 && (
+                          <div style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic", padding: "8px 0" }}>
+                            {isYou
+                              ? "You haven't shared any pitches yet. Open one of your evaluated journal entries and tap Share."
+                              : "This trader hasn't shared any pitches yet."}
+                          </div>
+                        )}
+                        {Array.isArray(shared) && shared.length > 0 && (
+                          <>
+                            <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: 10 }}>
+                              {isYou ? "Your shared pitches" : "Shared pitches"} · {shared.length}
+                            </div>
+                            {shared.map((s) => {
+                              const open = expandedSharedTrade === s.id;
+                              return (
+                                <div key={s.id} style={{ marginBottom: 6 }}>
+                                  <div
+                                    className="history-row"
+                                    onClick={() => setExpandedSharedTrade(open ? null : s.id)}
+                                    style={{ cursor: "pointer", gridTemplateColumns: "1fr 80px 80px 64px", padding: "8px 12px", background: open ? "var(--bg)" : undefined }}
+                                  >
+                                    <div>
+                                      <div style={{ color: "var(--ink)" }}>
+                                        <span style={{ color: "var(--ink-faint)", marginRight: 8, fontSize: 10 }}>{open ? "▼" : "▶"}</span>
+                                        {s.ticker || "—"} <span style={{ color: "var(--ink-faint)", fontSize: 11 }}>· {s.mode} · {s.difficulty}</span>
+                                      </div>
+                                      <div className="h-date">{s.created_at ? new Date(s.created_at).toLocaleString() : ""}</div>
+                                    </div>
+                                    <div className="h-grade">{s.letter_grade ?? "—"}</div>
+                                    <div className="h-score">{s.score != null ? `${s.score}/100` : "—"}</div>
+                                    <div></div>
+                                  </div>
+                                  {open && (
+                                    <div style={{ padding: "10px 16px 14px", background: "var(--bg)" }}>
+                                      {s.trade_proposal && (
+                                        <>
+                                          <h3 className="serif">Their pitch</h3>
+                                          <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12, whiteSpace: "pre-wrap" }}>
+                                            {annotate(s.trade_proposal)}
+                                          </div>
+                                        </>
+                                      )}
+                                      {s.evaluation?.headline && (
+                                        <>
+                                          <h3 className="serif">Headline</h3>
+                                          <div style={{ fontFamily: "Fraunces, serif", fontStyle: "italic", color: "var(--ink)", marginBottom: 12 }}>
+                                            &ldquo;{annotate(s.evaluation.headline)}&rdquo;
+                                          </div>
+                                        </>
+                                      )}
+                                      {s.evaluation && (
+                                        <FactsLedger evaluation={s.evaluation} />
+                                      )}
+                                      {s.evaluation?.alternative_trade && (
+                                        <>
+                                          <h3 className="serif">House alternative</h3>
+                                          <div className="alt-trade">{annotate(s.evaluation.alternative_trade)}</div>
+                                        </>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </>
+                        )}
+                      </div>
+                    )}
                     </div>
                   );
                 })}
@@ -2065,6 +2234,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         </div>
                         <div className="h-date">
                           {row.created_at ? new Date(row.created_at).toLocaleString() : ""}
+                          {row.is_shared && (
+                            <span style={{ marginLeft: 8, fontSize: 9, color: "var(--amber)", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                              · shared
+                            </span>
+                          )}
                         </div>
                       </div>
                       <div className="h-grade">{row.letter_grade ?? "—"}</div>
@@ -2119,7 +2293,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           </>
                         )}
                         {detail.status === "evaluated" && (
-                          <div className="actions" style={{ marginTop: 16 }}>
+                          <div className="actions" style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
                             <button
                               className="btn"
                               onClick={() => { void replayJournalEntry(detail.id); }}
@@ -2127,6 +2301,25 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             >
                               Redo Again
                             </button>
+                            <button
+                              className={`btn ${row.is_shared ? "" : "btn-ghost"}`}
+                              onClick={() => { void toggleShareEntry(row.id, !!row.is_shared); }}
+                              disabled={!!sharingInFlight[row.id]}
+                              title={row.is_shared
+                                ? "Currently shared on your Leaderboard row — click to make private"
+                                : "Share this pitch on your Leaderboard row so peers can compare"}
+                            >
+                              {sharingInFlight[row.id]
+                                ? "…"
+                                : row.is_shared
+                                ? "✓ Shared"
+                                : "Share"}
+                            </button>
+                            {row.is_shared && (
+                              <span style={{ fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                                Visible to all
+                              </span>
+                            )}
                           </div>
                         )}
                         {!detail.evaluation && detail.status !== "evaluated" && (

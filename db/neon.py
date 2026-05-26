@@ -122,6 +122,15 @@ async def _ensure_domain_schema(vault: Any) -> None:
         f"CREATE INDEX IF NOT EXISTS idx_journal_npub_status "
         f"ON {t('optionality_journal_entries')}(npub, status)",
 
+        # is_shared: patron opts in per-entry to expose that pitch +
+        # evaluation under their leaderboard row, so peers can compare.
+        f"ALTER TABLE {t('optionality_journal_entries')} "
+        f"ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE",
+
+        f"CREATE INDEX IF NOT EXISTS idx_journal_shared "
+        f"ON {t('optionality_journal_entries')}(npub, is_shared) "
+        f"WHERE is_shared = TRUE",
+
         # NOTE: effective_price_sats column was added briefly in 0.1.8
         # but is no longer used — the leaderboard now queries the live
         # pricing model at recompute time instead of snapshotting per

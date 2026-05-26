@@ -90,8 +90,32 @@ export interface JournalListEntry {
   ticker?: string | null;
   score?: number | null;
   letter_grade?: string | null;
+  is_shared?: boolean;
   created_at: string;
   updated_at: string;
+}
+
+/// One entry that a peer has chosen to share — appears under their
+/// row on the public Leaderboard. Eager-loads the full evaluation +
+/// trade proposal so the row expansion needs no follow-up fetch.
+export interface SharedEntry {
+  id: string;
+  mode: Mode;
+  difficulty: Difficulty | string;
+  ticker?: string | null;
+  score?: number | null;
+  letter_grade?: string | null;
+  trade_proposal?: string | null;
+  trade_legs?: TradeLeg[] | null;
+  evaluation?: Evaluation | null;
+  created_at: string;
+}
+
+export interface SharedEntriesResult {
+  target_npub?: string;
+  entries: SharedEntry[];
+  count?: number;
+  error?: string;
 }
 
 export interface JournalListResult {
@@ -115,6 +139,7 @@ export interface JournalDetail {
   trade_proposal?: string | null;
   trade_legs?: TradeLeg[] | null;
   evaluation?: Evaluation | null;
+  is_shared?: boolean;
   created_at: string;
   updated_at: string;
 }
