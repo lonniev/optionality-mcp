@@ -35,6 +35,7 @@ import {
   type CheckBalanceResult,
 } from "../lib/mcp";
 import { annotate } from "../lib/annotate";
+import { useHashTab } from "../lib/hashTab";
 
 /// Map MCP-namespaced tool names (the wheel's debit ledger key) to
 /// friendlier labels for the Usage panel. Keys are the
@@ -546,7 +547,10 @@ interface OptionalityProps {
 }
 
 export default function Optionality({ onSignOut }: OptionalityProps = {}) {
-  const [tab, setTab] = useState<TabId>("play");
+  // Hash-routed tab. Browser back/forward and refresh restore the view.
+  // `setTab` is user-initiated and adds a history entry; `replaceTab` is
+  // for system-initiated bounces (auto-route, guest guard) and doesn't.
+  const { tab, setTab, replaceTab } = useHashTab("play");
   // Guest mode: came in via "Continue as Guest" on the gate. The scenario
   // chooser and briefing render, but every paid surface is suppressed.
   const guest = isGuestMode();
@@ -1017,8 +1021,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Welcome stays permanently in the tab strip, so no auto-route off.
   useEffect(() => {
     if (!guest && currentBalance !== null && currentBalance > 0 && tab === "sample") {
-      setTab("play");
+      replaceTab("play");
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBalance, tab, guest]);
 
   // Auto-route brand-new arrivals to the Welcome panel exactly once
@@ -1030,16 +1035,28 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   useEffect(() => {
     if (welcomeAutoRouted || tab !== "play") return;
     if (guest) {
-      setTab("welcome");
+      replaceTab("welcome");
       setWelcomeAutoRouted(true);
       return;
     }
     if (currentBalance === 0) {
-      setTab("welcome");
+      replaceTab("welcome");
       setWelcomeAutoRouted(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentBalance, guest]);
+
+  // Guard: a guest who deep-links to a restricted tab (e.g. someone
+  // shared an #/journal URL) gets bounced to Welcome rather than
+  // landing on a tab their UI strip doesn't even expose.
+  useEffect(() => {
+    if (!guest) return;
+    const allowed: TabId[] = ["welcome", "play", "sample"];
+    if (!allowed.includes(tab)) {
+      replaceTab("welcome");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, guest]);
 
   // Auto-load Journal on tab open. Re-fetches when the cached page is
   // empty (initial open, or after a fresh trade submission invalidated
