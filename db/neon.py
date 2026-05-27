@@ -127,6 +127,12 @@ async def _ensure_domain_schema(vault: Any) -> None:
         f"ALTER TABLE {t('optionality_journal_entries')} "
         f"ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE",
 
+        # tips_count: number of ask_tip calls the trainee made on this
+        # entry. Surfaced to the judge so it can apply a score penalty
+        # ("paid for clues" → small ding on overall_score).
+        f"ALTER TABLE {t('optionality_journal_entries')} "
+        f"ADD COLUMN IF NOT EXISTS tips_count INT NOT NULL DEFAULT 0",
+
         f"CREATE INDEX IF NOT EXISTS idx_journal_shared "
         f"ON {t('optionality_journal_entries')}(npub, is_shared) "
         f"WHERE is_shared = TRUE",

@@ -177,7 +177,7 @@ async def get_entry(npub: str, entry_id: str) -> dict[str, Any] | None:
         """
         SELECT id::text AS id, status, mode, difficulty, scenario, trade_proposal,
                trade_legs, evaluation, score, letter_grade, ticker,
-               is_shared, created_at, updated_at
+               is_shared, tips_count, created_at, updated_at
         FROM journal_entries
         WHERE id = $2::uuid AND npub = $1
         """,
@@ -193,6 +193,24 @@ async def delete_entry(npub: str, entry_id: str) -> bool:
     )
     # Neon HTTP SQL API returns "rowCount" (capital C), not "rowcount".
     return (result.get("rowCount") or 0) > 0
+
+
+async def increment_tips_count(npub: str, entry_id: str) -> int:
+    """Bump tips_count for an open entry, return the new count.
+
+    Returns 0 if the entry doesn't exist or isn't owned by this patron
+    (caller treats this as a no-op).
+    """
+    row = await fetchrow(
+        """
+        UPDATE journal_entries
+        SET tips_count = tips_count + 1, updated_at = NOW()
+        WHERE id = $2::uuid AND npub = $1
+        RETURNING tips_count
+        """,
+        npub, entry_id,
+    )
+    return int(row["tips_count"]) if row and row.get("tips_count") is not None else 0
 
 
 async def set_shared(npub: str, entry_id: str, shared: bool) -> bool:

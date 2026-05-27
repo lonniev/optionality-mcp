@@ -176,9 +176,17 @@ async def ask_tip(npub: str, entry_id: str, question: str) -> dict[str, Any]:
     )
     try:
         text = await call_claude(
-            prompt, prompts.TIP_SYSTEM, max_tokens=400,
+            prompt, prompts.TIP_SYSTEM, max_tokens=700,
             npub=npub, tool="ask_tip",
         )
     except ClaudeError as e:
         return {"error": str(e)}
+    # Count this clue against the entry so the judge can apply a small
+    # score penalty per clue used. Best-effort; failure shouldn't deny
+    # the patron the answer they paid for.
+    try:
+        from db import journal as journal_db
+        await journal_db.increment_tips_count(npub, entry_id)
+    except Exception:
+        pass
     return {"tip": text}

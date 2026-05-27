@@ -22,10 +22,12 @@ async def judge_trade(npub: str, entry_id: str, trade_proposal: str) -> dict[str
     if not entry:
         return {"error": f"journal entry {entry_id} not found for this patron"}
     scenario = entry.get("scenario") or {}
+    clues_used = int(entry.get("tips_count") or 0)
 
     prompt = (
         f"Scenario:\n{json.dumps(scenario)}\n\n"
         f"Trainee's proposed trade:\n{trade_proposal}\n\n"
+        f"Clues the trainee requested during this scenario: {clues_used}\n\n"
         f"Return evaluation JSON only."
     )
 
