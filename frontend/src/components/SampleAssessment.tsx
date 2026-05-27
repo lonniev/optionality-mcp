@@ -1,6 +1,6 @@
 import FactsLedger from "./FactsLedger";
+import RichText from "./RichText";
 import RiskProfileChart from "./RiskProfileChart";
-import { annotate } from "../lib/annotate";
 import {
   SAMPLE_EVALUATION,
   SAMPLE_SCENARIO,
@@ -55,19 +55,19 @@ export default function SampleAssessment() {
         </div>
 
         <h3 className="serif" style={{ marginTop: 18 }}>Macro backdrop</h3>
-        <p className="briefing-prose">{annotate(scenario.macro_backdrop)}</p>
+        <div className="briefing-prose"><RichText text={scenario.macro_backdrop} /></div>
 
         <h3 className="serif">Catalyst</h3>
-        <p className="briefing-prose">{annotate(scenario.catalyst)}</p>
+        <div className="briefing-prose"><RichText text={scenario.catalyst} /></div>
 
         <h3 className="serif">Key levels</h3>
-        <p className="briefing-prose">{annotate(scenario.key_levels)}</p>
+        <div className="briefing-prose"><RichText text={scenario.key_levels} /></div>
 
         <h3 className="serif">Skew note</h3>
-        <p className="briefing-prose">{annotate(scenario.asset.skew_note || "")}</p>
+        <div className="briefing-prose"><RichText text={scenario.asset.skew_note || ""} /></div>
 
         <h3 className="serif">Constraints</h3>
-        <p className="briefing-prose">{annotate(scenario.constraints)}</p>
+        <div className="briefing-prose"><RichText text={scenario.constraints} /></div>
 
         <h3 className="serif">The question</h3>
         <p className="briefing-prose" style={{ fontStyle: "italic", color: "var(--amber-bright)" }}>
@@ -77,9 +77,9 @@ export default function SampleAssessment() {
 
       <div className="panel">
         <span className="panel-label">Trainee's Pitch</span>
-        <p className="briefing-prose" style={{ whiteSpace: "pre-wrap", lineHeight: 1.6 }}>
-          {annotate(SAMPLE_TRADE_PROPOSAL)}
-        </p>
+        <div className="briefing-prose" style={{ lineHeight: 1.6 }}>
+          <RichText text={SAMPLE_TRADE_PROPOSAL} />
+        </div>
       </div>
 
       <div className="panel">
@@ -87,7 +87,7 @@ export default function SampleAssessment() {
         <div className="score-banner">
           <div className="grade">{evaluation.letter_grade}</div>
           <div className="score">Overall<b>{evaluation.overall_score} / 100</b></div>
-          <div className="headline">&ldquo;{annotate(evaluation.headline)}&rdquo;</div>
+          <div className="headline">&ldquo;<RichText inline text={evaluation.headline} />&rdquo;</div>
         </div>
 
         <h3 className="serif">By Dimension</h3>
@@ -98,7 +98,7 @@ export default function SampleAssessment() {
               <div className="dim-score">
                 {v.score}<span style={{ fontSize: 12, color: "var(--ink-faint)" }}> / 20</span>
               </div>
-              <div className="dim-fb">{annotate(v.feedback)}</div>
+              <div className="dim-fb"><RichText text={v.feedback} /></div>
             </div>
           ))}
         </div>
@@ -114,19 +114,19 @@ export default function SampleAssessment() {
 
         <h3 className="serif">What you got right</h3>
         <ul className="bullet-list good">
-          {(evaluation.what_you_got_right || []).map((b, i) => <li key={i}>{annotate(b)}</li>)}
+          {(evaluation.what_you_got_right || []).map((b, i) => <li key={i}><RichText inline text={b} /></li>)}
         </ul>
 
         <h3 className="serif">What to sharpen</h3>
         <ul className="bullet-list bad">
-          {(evaluation.what_to_improve || []).map((b, i) => <li key={i}>{annotate(b)}</li>)}
+          {(evaluation.what_to_improve || []).map((b, i) => <li key={i}><RichText inline text={b} /></li>)}
         </ul>
 
         <h3 className="serif">An alternative the house would have taken</h3>
-        <div className="alt-trade">{annotate(evaluation.alternative_trade || "")}</div>
+        <div className="alt-trade"><RichText text={evaluation.alternative_trade || ""} /></div>
 
         <h3 className="serif">Deeper context</h3>
-        <div className="deeper">{annotate(evaluation.deeper_context || "")}</div>
+        <div className="deeper"><RichText text={evaluation.deeper_context || ""} /></div>
       </div>
     </>
   );

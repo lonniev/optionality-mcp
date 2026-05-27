@@ -1,5 +1,8 @@
+import { Children, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+
+import { annotate } from "../lib/annotate";
 
 // Lightweight markdown renderer for LLM responses (clues, headlines,
 // feedback). Honors bold, italic, code, code fences with JSON, lists,
@@ -9,31 +12,67 @@ import remarkGfm from "remark-gfm";
 // Plain text without any markdown markers renders as-is; the wrapper
 // just becomes a styled paragraph container. No surprises for the
 // common case.
+//
+// Concept tooltips and $TICKER links from the existing annotate()
+// helper are woven in at every text-bearing renderer. react-markdown
+// calls our custom renderer per markdown element, so a paragraph
+// containing both `**a calendar spread**` and bare prose gets both
+// the bold styling AND the concept tooltips on "calendar spread"
+// without us having to walk the AST manually.
 
 interface RichTextProps {
   text: string;
-  /** Optional inline override on the outermost wrapper. */
+  /** Optional inline style override on the outermost wrapper. */
   style?: React.CSSProperties;
+  /**
+   * Render without a wrapping `<div>` and with paragraphs as fragments
+   * (no margin). Use inside `<li>`, `<span>`-style hosts, or anywhere
+   * the caller already provides block context.
+   */
+  inline?: boolean;
 }
 
-export default function RichText({ text, style }: RichTextProps) {
+/// Run annotate() on string children at this level — leaves nested
+/// React elements alone (their own component renderer will handle
+/// their text). One-level walk is sufficient because each markdown
+/// element's children are either plain strings or already-rendered
+/// child elements.
+function annotateChildren(children: ReactNode): ReactNode[] {
+  return Children.toArray(children).flatMap((child) => {
+    if (typeof child === "string") return annotate(child);
+    return [child];
+  });
+}
+
+export default function RichText({ text, style, inline = false }: RichTextProps) {
+  const Wrapper = inline ? "span" : "div";
+  const wrapperClass = inline ? "rich-text rich-text-inline" : "rich-text";
+
+  const paragraphRenderer = inline
+    ? ({ children }: { children?: ReactNode }) => <>{annotateChildren(children)}</>
+    : ({ children }: { children?: ReactNode }) => (
+        <p style={{ margin: "0 0 8px", lineHeight: 1.55 }}>
+          {annotateChildren(children)}
+        </p>
+      );
+
   return (
-    <div className="rich-text" style={style}>
+    <Wrapper className={wrapperClass} style={style}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
         // Pin renderers so headings, links, code don't inherit weird
         // browser defaults. Keep the list short — just what the LLM
         // actually emits.
         components={{
-          p: ({ children }) => (
-            <p style={{ margin: "0 0 8px", lineHeight: 1.55 }}>{children}</p>
-          ),
+          p: paragraphRenderer,
           strong: ({ children }) => (
             <strong style={{ color: "var(--amber-bright)", fontWeight: 600 }}>
-              {children}
+              {annotateChildren(children)}
             </strong>
           ),
-          em: ({ children }) => <em style={{ fontStyle: "italic" }}>{children}</em>,
+          em: ({ children }) => (
+            <em style={{ fontStyle: "italic" }}>{annotateChildren(children)}</em>
+          ),
           code: ({ children, className, ...rest }) => {
             const isInline = !className;
             if (isInline) {
@@ -92,7 +131,9 @@ export default function RichText({ text, style }: RichTextProps) {
             <ol style={{ margin: "4px 0 8px 0", paddingLeft: 22 }}>{children}</ol>
           ),
           li: ({ children }) => (
-            <li style={{ margin: "2px 0", lineHeight: 1.5 }}>{children}</li>
+            <li style={{ margin: "2px 0", lineHeight: 1.5 }}>
+              {annotateChildren(children)}
+            </li>
           ),
           blockquote: ({ children }) => (
             <blockquote
@@ -104,7 +145,7 @@ export default function RichText({ text, style }: RichTextProps) {
                 fontStyle: "italic",
               }}
             >
-              {children}
+              {annotateChildren(children)}
             </blockquote>
           ),
           a: ({ children, href }) => (
@@ -138,12 +179,14 @@ export default function RichText({ text, style }: RichTextProps) {
             </th>
           ),
           td: ({ children }) => (
-            <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--panel-edge)" }}>{children}</td>
+            <td style={{ padding: "6px 8px", borderBottom: "1px solid var(--panel-edge)" }}>
+              {annotateChildren(children)}
+            </td>
           ),
         }}
       >
         {text}
       </ReactMarkdown>
-    </div>
+    </Wrapper>
   );
 }

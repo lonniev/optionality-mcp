@@ -37,7 +37,6 @@ import {
   type CheckBalanceResult,
 } from "../lib/mcp";
 import type { SharedEntry } from "../types";
-import { annotate } from "../lib/annotate";
 import { useHashTab } from "../lib/hashTab";
 
 /// Map MCP-namespaced tool names (the wheel's debit ledger key) to
@@ -1669,7 +1668,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <div className="score-banner">
                   <div className="grade">{evaluation.letter_grade}</div>
                   <div className="score">Overall<b>{evaluation.overall_score} / 100</b></div>
-                  <div className="headline">&ldquo;{annotate(evaluation.headline)}&rdquo;</div>
+                  <div className="headline">&ldquo;<RichText inline text={evaluation.headline} />&rdquo;</div>
                 </div>
 
                 <h3 className="serif">By Dimension</h3>
@@ -1678,7 +1677,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     <div className="dim-card" key={k}>
                       <div className="dim-name">{DIMENSION_LABELS[k] || k}</div>
                       <div className="dim-score">{v.score}<span style={{ fontSize: 12, color: "var(--ink-faint)" }}> / 20</span></div>
-                      <div className="dim-fb">{annotate(v.feedback)}</div>
+                      <div className="dim-fb"><RichText text={v.feedback} /></div>
                     </div>
                   ))}
                 </div>
@@ -1694,19 +1693,19 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
                 <h3 className="serif">What you got right</h3>
                 <ul className="bullet-list good">
-                  {(evaluation.what_you_got_right || []).map((b, i) => <li key={i}>{annotate(b)}</li>)}
+                  {(evaluation.what_you_got_right || []).map((b, i) => <li key={i}><RichText inline text={b} /></li>)}
                 </ul>
 
                 <h3 className="serif">What to sharpen</h3>
                 <ul className="bullet-list bad">
-                  {(evaluation.what_to_improve || []).map((b, i) => <li key={i}>{annotate(b)}</li>)}
+                  {(evaluation.what_to_improve || []).map((b, i) => <li key={i}><RichText inline text={b} /></li>)}
                 </ul>
 
                 <h3 className="serif">An alternative the house would have taken</h3>
-                <div className="alt-trade">{annotate(evaluation.alternative_trade || "")}</div>
+                <div className="alt-trade"><RichText text={evaluation.alternative_trade || ""} /></div>
 
                 <h3 className="serif">Deeper context</h3>
-                <div className="deeper">{annotate(evaluation.deeper_context || "")}</div>
+                <div className="deeper"><RichText text={evaluation.deeper_context || ""} /></div>
 
                 <div className="actions" style={{ marginTop: 22 }}>
                   <button className="btn btn-ghost" onClick={nextRound}>Back to setup</button>
@@ -2177,8 +2176,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                       {s.trade_proposal && (
                                         <>
                                           <h3 className="serif">Their pitch</h3>
-                                          <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12, whiteSpace: "pre-wrap" }}>
-                                            {annotate(s.trade_proposal)}
+                                          <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12 }}>
+                                            <RichText text={s.trade_proposal} />
                                           </div>
                                         </>
                                       )}
@@ -2186,7 +2185,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                         <>
                                           <h3 className="serif">Headline</h3>
                                           <div style={{ fontFamily: "Fraunces, serif", fontStyle: "italic", color: "var(--ink)", marginBottom: 12 }}>
-                                            &ldquo;{annotate(s.evaluation.headline)}&rdquo;
+                                            &ldquo;<RichText inline text={s.evaluation.headline} />&rdquo;
                                           </div>
                                         </>
                                       )}
@@ -2196,7 +2195,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                       {s.evaluation?.alternative_trade && (
                                         <>
                                           <h3 className="serif">House alternative</h3>
-                                          <div className="alt-trade">{annotate(s.evaluation.alternative_trade)}</div>
+                                          <div className="alt-trade"><RichText text={s.evaluation.alternative_trade} /></div>
                                         </>
                                       )}
                                     </div>
@@ -2285,8 +2284,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         {detail.trade_proposal && (
                           <>
                             <h3 className="serif">Your trade</h3>
-                            <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12, whiteSpace: "pre-wrap" }}>
-                              {annotate(detail.trade_proposal)}
+                            <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12 }}>
+                              <RichText text={detail.trade_proposal} />
                             </div>
                           </>
                         )}
@@ -2294,7 +2293,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           <>
                             <h3 className="serif">Headline</h3>
                             <div style={{ fontFamily: "Fraunces, serif", fontStyle: "italic", color: "var(--ink)", marginBottom: 12 }}>
-                              &ldquo;{annotate(detail.evaluation.headline)}&rdquo;
+                              &ldquo;<RichText inline text={detail.evaluation.headline} />&rdquo;
                             </div>
                           </>
                         )}
@@ -2314,13 +2313,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         {detail.evaluation?.alternative_trade && (
                           <>
                             <h3 className="serif">Alternative</h3>
-                            <div className="alt-trade">{annotate(detail.evaluation.alternative_trade)}</div>
+                            <div className="alt-trade"><RichText text={detail.evaluation.alternative_trade} /></div>
                           </>
                         )}
                         {detail.evaluation?.deeper_context && (
                           <>
                             <h3 className="serif">Deeper context</h3>
-                            <div className="deeper">{annotate(detail.evaluation.deeper_context)}</div>
+                            <div className="deeper"><RichText text={detail.evaluation.deeper_context} /></div>
                           </>
                         )}
                         {detail.status === "evaluated" && (
