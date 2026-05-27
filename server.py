@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.18"
+__version__ = "0.1.19"
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +101,12 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
                 ("journeyman", 2.0),
                 ("adept", 3.0),
                 ("sovereign", 4.0),
+                # Replay an evaluated entry as a fresh mulligan attempt.
+                # Not a starting choice in The Pit — only reached via
+                # "Redo Again" on a journal row. Priced as a parity tier
+                # with apprentice so the patron isn't double-charged for
+                # the same scenario at a premium rate.
+                ("mulligan", 1.0),
             )),
             ("mode", (
                 ("fiction", 1.0),
