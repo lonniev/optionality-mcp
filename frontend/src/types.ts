@@ -239,8 +239,19 @@ export interface ModelUsage {
   total_output_tokens: number;
 }
 
+/// Per-tool aggregation of the same Claude calls — useful for showing
+/// "what did the patron spend on" lifetime breakdowns. tool is the
+/// "<slug>_<capability>" string the wheel writes.
+export interface ToolUsage {
+  tool: string;
+  runs: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+}
+
 export interface ApiUsageResult {
   models: ModelUsage[];
+  tools?: ToolUsage[];
 }
 
 export interface DifficultyDef {

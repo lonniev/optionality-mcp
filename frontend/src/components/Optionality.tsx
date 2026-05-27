@@ -1749,12 +1749,23 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               const deposited = ledger.total_deposited_api_sats ?? 0;
               const consumed = ledger.total_consumed_api_sats ?? 0;
               const expired = ledger.total_expired_api_sats ?? 0;
-              const todayUsage = ledger.today_usage ?? {};
-              const toolRows = Object.entries(todayUsage)
-                .map(([tool, u]) => ({ tool, calls: u.calls, sats: u.api_sats }))
-                .sort((a, b) => b.sats - a.sats);
-              const todaySpend = toolRows.reduce((s, r) => s + r.sats, 0);
-              const todayCalls = toolRows.reduce((s, r) => s + r.calls, 0);
+              // Lifetime per-tool from optionality_api_usage (every
+              // Claude call we recorded). Drives the Tool Usage table
+              // below — replaces the prior today-only view from the
+              // wheel's today_usage snapshot.
+              const lifetimeTools = (apiUsage?.tools ?? [])
+                .map((t) => ({
+                  tool: t.tool,
+                  calls: t.runs,
+                  inputTokens: t.total_input_tokens,
+                  outputTokens: t.total_output_tokens,
+                }))
+                .sort((a, b) => b.calls - a.calls);
+              const lifetimeCalls = lifetimeTools.reduce((s, r) => s + r.calls, 0);
+              const lifetimeTokens = lifetimeTools.reduce(
+                (s, r) => s + r.inputTokens + r.outputTokens,
+                0,
+              );
 
               return (
                 <>
@@ -1805,40 +1816,45 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     </div>
                   )}
 
-                  <h3 className="serif">Today's MCP tool usage</h3>
-                  {toolRows.length === 0 ? (
-                    <div className="empty">No paid tool calls today.</div>
+                  <h3 className="serif">MCP tool usage — all time</h3>
+                  <p style={{ color: "var(--ink-faint)", fontSize: 11, marginTop: -4, marginBottom: 12 }}>
+                    Calls and Anthropic-side token consumption per tool across your entire history.
+                  </p>
+                  {lifetimeTools.length === 0 ? (
+                    <div className="empty">No tool calls recorded yet.</div>
                   ) : (
-                    <>
-                      <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                        <thead>
-                          <tr style={{ borderBottom: "1px solid var(--panel-edge)", color: "var(--ink-faint)", letterSpacing: "0.15em", textTransform: "uppercase", fontSize: 10 }}>
-                            <th style={{ textAlign: "left", padding: "8px 6px" }}>Tool</th>
-                            <th style={{ textAlign: "right", padding: "8px 6px" }}>Calls</th>
-                            <th style={{ textAlign: "right", padding: "8px 6px" }}>Sats</th>
+                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
+                      <thead>
+                        <tr style={{ borderBottom: "1px solid var(--panel-edge)", color: "var(--ink-faint)", letterSpacing: "0.15em", textTransform: "uppercase", fontSize: 10 }}>
+                          <th style={{ textAlign: "left", padding: "8px 6px" }}>Tool</th>
+                          <th style={{ textAlign: "right", padding: "8px 6px" }}>Calls</th>
+                          <th style={{ textAlign: "right", padding: "8px 6px" }}>Input tok</th>
+                          <th style={{ textAlign: "right", padding: "8px 6px" }}>Output tok</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {lifetimeTools.map((r) => (
+                          <tr key={r.tool} style={{ borderBottom: "1px solid var(--panel-edge)" }}>
+                            <td style={{ padding: "8px 6px", color: "var(--ink)" }}>
+                              {displayToolName(r.tool)}
+                              <span style={{ marginLeft: 8, color: "var(--ink-faint)", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}>
+                                {r.tool}
+                              </span>
+                            </td>
+                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink-soft)" }}>{r.calls.toLocaleString()}</td>
+                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink-soft)" }}>{r.inputTokens.toLocaleString()}</td>
+                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink-soft)" }}>{r.outputTokens.toLocaleString()}</td>
                           </tr>
-                        </thead>
-                        <tbody>
-                          {toolRows.map((r) => (
-                            <tr key={r.tool} style={{ borderBottom: "1px solid var(--panel-edge)" }}>
-                              <td style={{ padding: "8px 6px", color: "var(--ink)" }}>
-                                {displayToolName(r.tool)}
-                                <span style={{ marginLeft: 8, color: "var(--ink-faint)", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}>
-                                  {r.tool}
-                                </span>
-                              </td>
-                              <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink-soft)" }}>{r.calls}</td>
-                              <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>{r.sats.toLocaleString()}</td>
-                            </tr>
-                          ))}
-                          <tr style={{ borderTop: "2px solid var(--panel-edge)", fontWeight: 600 }}>
-                            <td style={{ padding: "8px 6px", color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase", fontSize: 10 }}>Today</td>
-                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{todayCalls}</td>
-                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>{todaySpend.toLocaleString()}</td>
-                          </tr>
-                        </tbody>
-                      </table>
-                    </>
+                        ))}
+                        <tr style={{ borderTop: "2px solid var(--panel-edge)", fontWeight: 600 }}>
+                          <td style={{ padding: "8px 6px", color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase", fontSize: 10 }}>Total</td>
+                          <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{lifetimeCalls.toLocaleString()}</td>
+                          <td colSpan={2} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>
+                            {lifetimeTokens.toLocaleString()} tokens
+                          </td>
+                        </tr>
+                      </tbody>
+                    </table>
                   )}
                 </>
               );

@@ -44,38 +44,46 @@ async def record_call(
 
 
 async def get_usage_stats(npub: str = "") -> dict[str, Any]:
-    """Aggregated per-model usage. Scoped to `npub` when provided.
+    """Aggregated all-time Claude API usage. Scoped to `npub` when provided.
 
-    Mirrors taxsort's shape so the FE can be near-identical:
-        {"models": [{"model", "runs", "total_calls",
-                      "total_input_tokens", "total_output_tokens"}, …]}
+    Returns two aggregations of the same underlying rows:
+        {
+          "models": [{"model", "runs", "total_calls",
+                       "total_input_tokens", "total_output_tokens"}, …],
+          "tools":  [{"tool",  "runs",
+                       "total_input_tokens", "total_output_tokens"}, …]
+        }
 
-    `runs` is the count of recorded calls (one per messages.create);
-    `total_calls` is kept for shape parity with taxsort and equals
-    `runs` for now since each insert is a single call.
+    `runs` is the count of recorded calls (one per messages.create).
+    Aggregations are over the full optionality_api_usage table — no
+    today/week/month filter — so the FE can show lifetime spend.
+    Caller filters or windows in the UI as needed.
     """
-    if npub:
-        rows = await fetch(
-            "SELECT model, "
-            "COUNT(*) AS runs, "
-            "SUM(input_tokens) AS total_input_tokens, "
-            "SUM(output_tokens) AS total_output_tokens "
-            "FROM optionality_api_usage "
-            "WHERE npub = $1 "
-            "GROUP BY model "
-            "ORDER BY total_input_tokens DESC NULLS LAST",
-            npub,
-        )
-    else:
-        rows = await fetch(
-            "SELECT model, "
-            "COUNT(*) AS runs, "
-            "SUM(input_tokens) AS total_input_tokens, "
-            "SUM(output_tokens) AS total_output_tokens "
-            "FROM optionality_api_usage "
-            "GROUP BY model "
-            "ORDER BY total_input_tokens DESC NULLS LAST",
-        )
+    where_clause = "WHERE npub = $1" if npub else ""
+    args = [npub] if npub else []
+
+    model_rows = await fetch(
+        f"SELECT model, "
+        f"COUNT(*) AS runs, "
+        f"SUM(input_tokens) AS total_input_tokens, "
+        f"SUM(output_tokens) AS total_output_tokens "
+        f"FROM optionality_api_usage "
+        f"{where_clause} "
+        f"GROUP BY model "
+        f"ORDER BY total_input_tokens DESC NULLS LAST",
+        *args,
+    )
+    tool_rows = await fetch(
+        f"SELECT tool, "
+        f"COUNT(*) AS runs, "
+        f"SUM(input_tokens) AS total_input_tokens, "
+        f"SUM(output_tokens) AS total_output_tokens "
+        f"FROM optionality_api_usage "
+        f"{where_clause} "
+        f"GROUP BY tool "
+        f"ORDER BY runs DESC NULLS LAST",
+        *args,
+    )
     return {
         "models": [
             {
@@ -85,6 +93,15 @@ async def get_usage_stats(npub: str = "") -> dict[str, Any]:
                 "total_input_tokens": int(r["total_input_tokens"] or 0),
                 "total_output_tokens": int(r["total_output_tokens"] or 0),
             }
-            for r in rows
+            for r in model_rows
+        ],
+        "tools": [
+            {
+                "tool": str(r["tool"] or "unknown"),
+                "runs": int(r["runs"] or 0),
+                "total_input_tokens": int(r["total_input_tokens"] or 0),
+                "total_output_tokens": int(r["total_output_tokens"] or 0),
+            }
+            for r in tool_rows
         ],
     }
