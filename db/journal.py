@@ -191,7 +191,8 @@ async def delete_entry(npub: str, entry_id: str) -> bool:
         "DELETE FROM journal_entries WHERE id = $2::uuid AND npub = $1",
         npub, entry_id,
     )
-    return (result.get("rowcount") or 0) > 0
+    # Neon HTTP SQL API returns "rowCount" (capital C), not "rowcount".
+    return (result.get("rowCount") or 0) > 0
 
 
 async def set_shared(npub: str, entry_id: str, shared: bool) -> bool:
@@ -209,7 +210,8 @@ async def set_shared(npub: str, entry_id: str, shared: bool) -> bool:
         """,
         npub, entry_id, shared,
     )
-    return (result.get("rowcount") or 0) > 0
+    # Neon HTTP SQL API returns "rowCount" (capital C), not "rowcount".
+    return (result.get("rowCount") or 0) > 0
 
 
 async def list_shared_for(target_npub: str, limit: int = 20) -> list[dict[str, Any]]:
