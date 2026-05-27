@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.17"
+__version__ = "0.1.18"
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +58,30 @@ mcp = FastMCP(
 )
 
 
+# Frozen UUIDs — declared once at tool birth and never changed.
+# Renaming function names, capability labels, or any display field
+# below leaves the pricing-model rows in Neon keyed correctly.
+DEAL_SCENARIO_UUID         = "3aaf11e4-1594-570d-9a6f-f45dab0ecf0f"
+ASK_TIP_UUID               = "b25f82c6-a414-52bd-b829-90fbbc340afa"
+JUDGE_TRADE_UUID           = "2d4f4988-8199-5753-9ed2-17f458b0d17a"
+SAVE_DRAFT_UUID            = "54060513-452a-5846-a68b-3aa5c973a0f5"
+LIST_JOURNAL_UUID          = "df86ea6b-4361-59db-a2ac-c30d1bf81abb"
+GET_JOURNAL_UUID           = "c28c0078-f58e-55da-ae61-15ff0f9e8641"
+DELETE_JOURNAL_UUID        = "bfd56e01-77b7-5b7b-b2fc-c81bef985a25"
+SHARE_ENTRY_UUID           = "6accf6b4-617e-5727-9337-1df52729c116"
+GET_SHARED_ENTRIES_UUID    = "d3d20dc0-20de-59ac-9188-22b472fd82a1"
+GET_LEADERBOARD_UUID       = "e6605c8c-190f-57c8-9754-ca0ab1e8fc5e"
+GET_MY_RANK_UUID           = "d8817936-afa5-5e6a-a919-ce71a3500dae"
+SET_DISPLAY_NAME_UUID      = "a57d69bb-79cf-5f2a-9b15-031589d7d62d"
+GET_PATRON_PROFILE_UUID    = "fcf05c7e-40c6-5347-ac2c-71e6cceb9607"
+SET_PROFILE_UUID           = "0f1d5cbb-3277-5d9b-bbc3-4ad17779c80d"
+ESCROW_NSEC_UUID           = "60f0f7dc-d669-5b91-a742-6d1e21f16730"
+WITHDRAW_NSEC_UUID         = "7dff25a2-ac19-551f-882f-33a69a0b429d"
+SEND_PATRON_DM_UUID        = "e42208e1-1d24-5bdb-b72f-22f5d14a92aa"
+GET_ESCROW_STATUS_UUID     = "156997e1-eea3-544a-a1b2-cd80491aaefe"
+GET_API_USAGE_STATS_UUID   = "3d10ca59-8279-5c98-af7d-301bf469c6c1"
+
+
 _DOMAIN_TOOLS: list[ToolIdentity] = [
     # ---- Dealer (heavy LLM)
     # Pricing: base 1 sat × difficulty × historicity. Apprentice/Fiction
@@ -66,6 +90,7 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     # The FE renders the effective price via check_price(tool_kwargs) so
     # the patron sees what their selections cost before committing.
     ToolIdentity(
+        tool_id=DEAL_SCENARIO_UUID,
         capability="deal_scenario",
         category="heavy",
         intent="Generate a fresh options trading scenario and open a journal entry",
@@ -85,12 +110,14 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         ),
     ),
     ToolIdentity(
+        tool_id=ASK_TIP_UUID,
         capability="ask_tip",
         category="write",
         intent="Get a Socratic, non-spoiler hint on the open scenario",
     ),
     # ---- Judge (heavy LLM)
     ToolIdentity(
+        tool_id=JUDGE_TRADE_UUID,
         capability="judge_trade",
         category="heavy",
         intent="Evaluate the trainee's trade across five dimensions and parse trade legs",
@@ -99,33 +126,39 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     # Flat 1 sat — covers a single Neon round-trip; transparent fee for
     # parking an in-progress draft.
     ToolIdentity(
+        tool_id=SAVE_DRAFT_UUID,
         capability="save_draft",
         category="write",
         intent="Persist a draft trade proposal without running the judge",
         pricing_hint_value=1,
     ),
     ToolIdentity(
+        tool_id=LIST_JOURNAL_UUID,
         capability="list_journal",
         category="read",
         intent="Paginated list of the patron's past journal entries",
     ),
     ToolIdentity(
+        tool_id=GET_JOURNAL_UUID,
         capability="get_journal",
         category="read",
         intent="Fetch a single journal entry including scenario + evaluation",
     ),
     ToolIdentity(
+        tool_id=DELETE_JOURNAL_UUID,
         capability="delete_journal",
         category="write",
         intent="Hard-delete a journal entry and recompute the leaderboard",
     ),
     ToolIdentity(
+        tool_id=SHARE_ENTRY_UUID,
         capability="share_entry",
         category="write",
         intent="Toggle a journal entry's share flag so peers can see it under the patron's leaderboard row",
         pricing_hint_value=0,
     ),
     ToolIdentity(
+        tool_id=GET_SHARED_ENTRIES_UUID,
         capability="get_shared_entries",
         category="read",
         intent="List a target patron's shared, evaluated entries — public peer-learning read",
@@ -133,16 +166,19 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ),
     # ---- Leaderboard
     ToolIdentity(
+        tool_id=GET_LEADERBOARD_UUID,
         capability="get_leaderboard",
         category="read",
         intent="Global leaderboard with optional mode/difficulty scope",
     ),
     ToolIdentity(
+        tool_id=GET_MY_RANK_UUID,
         capability="get_my_rank",
         category="read",
         intent="The caller's rank and stats under a chosen sort",
     ),
     ToolIdentity(
+        tool_id=SET_DISPLAY_NAME_UUID,
         capability="set_display_name",
         category="write",
         intent="Set the caller's display name on the leaderboard",
@@ -152,11 +188,13 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     # use playing. Visible on the leaderboard and the soon-to-arrive
     # patron-to-patron Nostr DM affordance.
     ToolIdentity(
+        tool_id=GET_PATRON_PROFILE_UUID,
         capability="get_patron_profile",
         category="free",
         intent="Read the caller's profile — display name, avatar, bio, preferred relays",
     ),
     ToolIdentity(
+        tool_id=SET_PROFILE_UUID,
         capability="set_profile",
         category="free",
         intent="Update any subset of the caller's profile fields",
@@ -168,16 +206,19 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     # api_key — AES-256-GCM at rest, decrypted only in-process during
     # signing. See tools/escrow.py for the full trade-off discussion.
     ToolIdentity(
+        tool_id=ESCROW_NSEC_UUID,
         capability="escrow_nsec",
         category="free",
         intent="Deposit a freshly-generated nsec for operator-managed Nostr signing",
     ),
     ToolIdentity(
+        tool_id=WITHDRAW_NSEC_UUID,
         capability="withdraw_nsec",
         category="free",
         intent="Return the plaintext nsec once and remove it from operator storage",
     ),
     ToolIdentity(
+        tool_id=SEND_PATRON_DM_UUID,
         capability="send_patron_dm",
         category="write",
         intent="Sign and publish a Nostr DM as the patron using the escrowed nsec",
@@ -186,6 +227,7 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         pricing_hint_value=5,
     ),
     ToolIdentity(
+        tool_id=GET_ESCROW_STATUS_UUID,
         capability="get_escrow_status",
         category="free",
         intent="Quick presence check for whether the patron has an escrowed nsec",
@@ -193,6 +235,7 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     # ---- Transparency — free so checking the usage view doesn't itself
     # cost sats. Matches taxsort-mcp's pricing for the parallel tool.
     ToolIdentity(
+        tool_id=GET_API_USAGE_STATS_UUID,
         capability="get_api_usage_stats",
         category="free",
         intent="Aggregated Claude API token usage per model, scoped to the caller",
