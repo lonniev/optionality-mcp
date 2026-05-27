@@ -672,6 +672,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // spend today + tranche detail. Loaded on tab open alongside apiUsage.
   const [ledger, setLedger] = useState<CheckBalanceResult | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState<boolean>(false);
+  // Wheel's account_statement — authoritative all-time per-tool spend
+  // with real sats. Loaded on Usage tab open. Covers every paid tool,
+  // not just Claude-burning ones.
+  const [statement, setStatement] = useState<import("../types").AccountStatementResult | null>(null);
+  const [statementLoading, setStatementLoading] = useState<boolean>(false);
   // Effective price preview for the current (mode, difficulty) selection.
   // null = not yet looked up; -1 = lookup failed (e.g. pricing model has no
   // multipliers configured yet). Positive integers are the wheel's authoritative
@@ -1176,11 +1181,26 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
   }
 
-  // Auto-load usage stats + DPYC ledger the first time the Usage tab is opened.
+  async function loadStatement(): Promise<void> {
+    setStatementLoading(true);
+    try {
+      const { getAccountStatement } = await import("../lib/mcp");
+      const res = await getAccountStatement(30);
+      setStatement(res);
+    } catch (e) {
+      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
+      console.error("account_statement load failed", e);
+    } finally {
+      setStatementLoading(false);
+    }
+  }
+
+  // Auto-load usage stats + DPYC ledger + account statement on Usage tab open.
   useEffect(() => {
     if (tab === "usage") {
       if (apiUsage === null && !apiUsageLoading) void loadApiUsage();
       if (ledger === null && !ledgerLoading) void loadLedger();
+      if (statement === null && !statementLoading) void loadStatement();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -1749,23 +1769,18 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               const deposited = ledger.total_deposited_api_sats ?? 0;
               const consumed = ledger.total_consumed_api_sats ?? 0;
               const expired = ledger.total_expired_api_sats ?? 0;
-              // Lifetime per-tool from optionality_api_usage (every
-              // Claude call we recorded). Drives the Tool Usage table
-              // below — replaces the prior today-only view from the
-              // wheel's today_usage snapshot.
-              const lifetimeTools = (apiUsage?.tools ?? [])
+              // Lifetime per-tool from the wheel's account_statement —
+              // authoritative source with REAL sats per tool. Covers
+              // every paid tool, not just Claude-burning ones.
+              const lifetimeTools = (statement?.tool_usage_all_time ?? [])
                 .map((t) => ({
                   tool: t.tool,
-                  calls: t.runs,
-                  inputTokens: t.total_input_tokens,
-                  outputTokens: t.total_output_tokens,
+                  calls: t.calls,
+                  sats: t.api_sats,
                 }))
-                .sort((a, b) => b.calls - a.calls);
+                .sort((a, b) => b.sats - a.sats);
               const lifetimeCalls = lifetimeTools.reduce((s, r) => s + r.calls, 0);
-              const lifetimeTokens = lifetimeTools.reduce(
-                (s, r) => s + r.inputTokens + r.outputTokens,
-                0,
-              );
+              const lifetimeSats = lifetimeTools.reduce((s, r) => s + r.sats, 0);
 
               return (
                 <>
@@ -1818,18 +1833,19 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
                   <h3 className="serif">MCP tool usage — all time</h3>
                   <p style={{ color: "var(--ink-faint)", fontSize: 11, marginTop: -4, marginBottom: 12 }}>
-                    Calls and Anthropic-side token consumption per tool across your entire history.
+                    Every paid tool you've ever called at this operator, with the sats actually charged. Source: the wheel's <code>account_statement</code> ledger.
                   </p>
-                  {lifetimeTools.length === 0 ? (
-                    <div className="empty">No tool calls recorded yet.</div>
+                  {statementLoading && lifetimeTools.length === 0 ? (
+                    <div className="loading" style={{ display: "block", padding: "12px 0" }}>Fetching statement</div>
+                  ) : lifetimeTools.length === 0 ? (
+                    <div className="empty">No paid tool calls recorded yet.</div>
                   ) : (
                     <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
                       <thead>
                         <tr style={{ borderBottom: "1px solid var(--panel-edge)", color: "var(--ink-faint)", letterSpacing: "0.15em", textTransform: "uppercase", fontSize: 10 }}>
                           <th style={{ textAlign: "left", padding: "8px 6px" }}>Tool</th>
                           <th style={{ textAlign: "right", padding: "8px 6px" }}>Calls</th>
-                          <th style={{ textAlign: "right", padding: "8px 6px" }}>Input tok</th>
-                          <th style={{ textAlign: "right", padding: "8px 6px" }}>Output tok</th>
+                          <th style={{ textAlign: "right", padding: "8px 6px" }}>Sats</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -1842,16 +1858,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                               </span>
                             </td>
                             <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink-soft)" }}>{r.calls.toLocaleString()}</td>
-                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink-soft)" }}>{r.inputTokens.toLocaleString()}</td>
-                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink-soft)" }}>{r.outputTokens.toLocaleString()}</td>
+                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>{r.sats.toLocaleString()}</td>
                           </tr>
                         ))}
                         <tr style={{ borderTop: "2px solid var(--panel-edge)", fontWeight: 600 }}>
-                          <td style={{ padding: "8px 6px", color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase", fontSize: 10 }}>Total</td>
+                          <td style={{ padding: "8px 6px", color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase", fontSize: 10 }}>Lifetime</td>
                           <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{lifetimeCalls.toLocaleString()}</td>
-                          <td colSpan={2} style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>
-                            {lifetimeTokens.toLocaleString()} tokens
-                          </td>
+                          <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>{lifetimeSats.toLocaleString()}</td>
                         </tr>
                       </tbody>
                     </table>

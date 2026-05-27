@@ -239,19 +239,43 @@ export interface ModelUsage {
   total_output_tokens: number;
 }
 
-/// Per-tool aggregation of the same Claude calls — useful for showing
-/// "what did the patron spend on" lifetime breakdowns. tool is the
-/// "<slug>_<capability>" string the wheel writes.
-export interface ToolUsage {
-  tool: string;
-  runs: number;
-  total_input_tokens: number;
-  total_output_tokens: number;
-}
-
 export interface ApiUsageResult {
   models: ModelUsage[];
-  tools?: ToolUsage[];
+}
+
+/// Lifetime per-tool entry from the wheel's account_statement. The
+/// authoritative source — covers every paid tool, not just Claude-
+/// burning ones, and reports actual sats charged.
+export interface AccountStatementToolUsage {
+  tool: string;
+  calls: number;
+  api_sats: number;
+}
+
+export interface AccountStatementDailyUsage {
+  date: string;
+  total_calls: number;
+  total_api_sats: number;
+  tools: Record<string, { calls: number; api_sats: number }>;
+}
+
+export interface AccountStatementSummary {
+  balance_api_sats: number;
+  total_deposited_api_sats: number;
+  total_consumed_api_sats: number;
+  total_expired_api_sats: number;
+}
+
+export interface AccountStatementResult {
+  success?: boolean;
+  generated_at?: string;
+  statement_period_days?: number;
+  account_summary?: AccountStatementSummary;
+  purchase_history?: unknown[];
+  active_tranches?: unknown[];
+  tool_usage_all_time?: AccountStatementToolUsage[];
+  daily_usage?: AccountStatementDailyUsage[];
+  error?: string;
 }
 
 export interface DifficultyDef {

@@ -765,6 +765,17 @@ export async function checkBalance(): Promise<CheckBalanceResult> {
   return callTool<CheckBalanceResult>("check_balance", {});
 }
 
+/// Free wheel-standard tool. Returns the patron's all-time spending
+/// statement: account summary, purchase history, active tranches,
+/// per-tool lifetime usage (with sats!), and a day-by-day breakdown.
+/// Authoritative source for "what did the patron spend on" reporting —
+/// includes every paid tool, not just Claude-burning ones.
+export async function getAccountStatement(
+  days: number = 30,
+): Promise<import("../types").AccountStatementResult> {
+  return callTool<import("../types").AccountStatementResult>("account_statement", { days });
+}
+
 // ─── Login / auth — free tools, no proof required ─────────────────────────
 
 export interface ServiceStatus {
