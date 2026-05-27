@@ -242,7 +242,20 @@ export function setGuestMode(on: boolean): void {
  */
 export function isLoggedIn(): boolean {
   if (isGuestMode()) return true;
-  return Boolean(getStoredNpub() && getStoredProof());
+  const npub = getStoredNpub();
+  if (!npub) return false;
+  // Two valid auth tactics:
+  //   1. Cached proof_token (poison-phrase). Used by patrons who went
+  //      through the DM-based proof flow.
+  //   2. Session nsec whose derived npub matches the stored npub —
+  //      every paid call inline-signs a fresh kind-27235 proof, no
+  //      cached token needed. Used by patrons who pasted their nsec
+  //      on the gate ("Sign In Directly").
+  // Tactic 2 users never set a proof_token, so checking only that
+  // bounces them to the gate on every page refresh.
+  if (getStoredProof()) return true;
+  if (hasSessionNsec() && sessionNsecNpub() === npub) return true;
+  return false;
 }
 
 export function logOut(): void {
