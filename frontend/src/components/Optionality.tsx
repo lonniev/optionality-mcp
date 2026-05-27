@@ -109,6 +109,7 @@ import DMComposeModal from "./DMComposeModal";
 import Welcome from "./Welcome";
 import JudgeAnimation from "./JudgeAnimation";
 import QuoteScroller from "./QuoteScroller";
+import RichText from "./RichText";
 import { getGuestId, getPatronProfile, getStoredNpub } from "../lib/mcp";
 
 // ============================================================
@@ -1632,9 +1633,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                               <div style={{ fontSize: 12, color: "var(--ink-soft)", fontStyle: "italic", marginBottom: 4 }}>
                                 Q · {t.question}
                               </div>
-                              <div style={{ fontSize: 13, color: "var(--ink)", whiteSpace: "pre-wrap", lineHeight: 1.55 }}>
-                                {t.answer}
-                              </div>
+                              <RichText
+                                text={t.answer}
+                                style={{ fontSize: 13, color: "var(--ink)" }}
+                              />
                             </div>
                           ))}
 
