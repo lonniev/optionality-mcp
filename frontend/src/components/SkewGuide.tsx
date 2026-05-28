@@ -9,7 +9,7 @@
 // (reverse smirk / smile / forward) let the trainee feel how the
 // curve's tilt changes which leg of a vertical spread is the rich one.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 interface SkewGuideProps {
   ticker: string;
@@ -58,6 +58,22 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
   const [open, setOpen] = useState(false);
   const [shape, setShape] = useState<Shape>(() => inferShape(skewNote));
   const [widthMult, setWidthMult] = useState<1 | 2>(1);
+
+  // While the modal is open: Escape closes it and the page behind it
+  // is scroll-locked so the backdrop doesn't drift under the overlay.
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [open]);
 
   const geom = useMemo(() => {
     const baseIV = Math.min(0.9, Math.max(0.08, (iv30d || 24) / 100));
@@ -151,7 +167,19 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
       </button>
 
       {open && (
-        <div className="sg-body">
+        <div className="sg-scrim" onClick={() => setOpen(false)}>
+          <div className="sg-modal" onClick={(e) => e.stopPropagation()}>
+            <div className="sg-topbar">
+              <button
+                type="button"
+                className="sg-close"
+                onClick={() => setOpen(false)}
+                aria-label="Close guide"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="sg-body">
           <h3 className="serif sg-title">Guide to Skew</h3>
           <p className="sg-lede">
             Implied volatility is not one number — it's a <em>curve</em> across strikes, a map of
@@ -350,6 +378,8 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
           <div className="sg-foot">
             Curve shown is an illustrative model anchored to {ticker}'s ${fmtK(spot)} spot and {ivPct}% ATM IV — not live chain data. Implied vol is the market's forward guess, not a forecast: read it as sentiment priced, then verify the actual bid/ask before committing a spread.
           </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -380,17 +410,56 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
         .sg-trigger:hover { color: var(--amber-bright); border-bottom-color: var(--amber-bright); }
         .sg-chevron { color: var(--ink-faint); font-size: 11px; }
 
-        .sg-body {
-          border: 1px solid var(--panel-edge);
-          border-left: 3px solid var(--amber);
-          padding: 16px 14px 18px;
-          margin-top: 10px;
+        .sg-scrim {
+          position: fixed;
+          inset: 0;
+          background: rgba(0, 0, 0, 0.65);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 100;
+          padding: 20px;
+          backdrop-filter: blur(4px);
+          -webkit-backdrop-filter: blur(4px);
+        }
+        .sg-modal {
+          position: relative;
+          width: 80vw;
+          height: 80vh;
           background: var(--panel);
+          border: 1px solid var(--amber);
+          box-shadow: 0 16px 56px rgba(0, 0, 0, 0.6);
+          overflow-y: auto;
+          overflow-x: hidden;
+        }
+        /* Zero-height sticky bar so the close button stays pinned to the
+           modal's top-right as the content scrolls beneath it. */
+        .sg-topbar { position: sticky; top: 0; height: 0; z-index: 3; }
+        .sg-close {
+          position: absolute;
+          top: 12px;
+          right: 14px;
+          width: 30px;
+          height: 30px;
+          line-height: 1;
+          font-size: 14px;
+          background: var(--bg-soft);
+          border: 1px solid var(--panel-edge);
+          color: var(--ink-soft);
+          border-radius: 4px;
+          cursor: pointer;
+          transition: color 140ms ease, border-color 140ms ease;
+        }
+        .sg-close:hover { color: var(--amber-bright); border-color: var(--amber); }
+        .sg-body {
+          max-width: 900px;
+          margin: 0 auto;
+          padding: 22px 26px 30px;
         }
         .sg-title {
-          font-size: 20px;
+          font-size: 26px;
           color: var(--ink);
-          margin-bottom: 10px;
+          margin-bottom: 6px;
           letter-spacing: -0.01em;
         }
         .sg-lede {
