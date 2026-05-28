@@ -21,7 +21,8 @@ import {
 } from "../lib/mcp";
 import { useTheme, type Theme } from "../lib/theme";
 import type { PatronProfile } from "../types";
-import Avatar, { AVATAR_CHOICES, shortNpub } from "./Avatar";
+import Avatar, { shortNpub } from "./Avatar";
+import AvatarPicker from "./AvatarPicker";
 
 const DEFAULT_RELAYS = [
   "wss://relay.damus.io",
@@ -189,26 +190,8 @@ export default function ProfileTab({ npub }: { npub: string }) {
         />
 
         <FieldLabel>Avatar</FieldLabel>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 12 }}>
-          {AVATAR_CHOICES.map((emoji) => (
-            <button
-              key={emoji}
-              type="button"
-              onClick={() => setAvatarInput(emoji)}
-              style={{
-                background: avatarInput === emoji ? "var(--amber-glow)" : "transparent",
-                border: `1px solid ${avatarInput === emoji ? "var(--amber)" : "var(--panel-edge)"}`,
-                borderRadius: 6,
-                width: 40,
-                height: 40,
-                fontSize: 22,
-                cursor: "pointer",
-                padding: 0,
-              }}
-            >
-              {emoji}
-            </button>
-          ))}
+        <div style={{ marginBottom: 16 }}>
+          <AvatarPicker value={avatarInput} onChange={setAvatarInput} npub={npub} />
         </div>
 
         <FieldLabel>Bio</FieldLabel>

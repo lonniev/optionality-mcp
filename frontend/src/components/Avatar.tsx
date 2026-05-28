@@ -34,8 +34,17 @@ interface Props {
   style?: CSSProperties;
 }
 
+/// Distinguish a URL (DiceBear, hosted image, or data: URI) from a
+/// glyph (emoji / single character). URL-shaped avatars render as an
+/// <img> filling the circle; everything else renders as text centered
+/// in the circle, preserving the original emoji-picker behavior.
+function isAvatarUrl(value: string): boolean {
+  return /^(https?:\/\/|data:image\/)/i.test(value);
+}
+
 export default function Avatar({ value, size = 40, onClick, title, style }: Props) {
-  const display = value && value.trim() ? value : "🃏";
+  const raw = value && value.trim() ? value : "🃏";
+  const urlMode = isAvatarUrl(raw);
   const fontSize = Math.round(size * 0.55);
   const clickable = !!onClick;
   return (
@@ -69,6 +78,7 @@ export default function Avatar({ value, size = 40, onClick, title, style }: Prop
         lineHeight: 1,
         cursor: clickable ? "pointer" : "default",
         userSelect: "none",
+        overflow: "hidden",
         transition: "border-color 120ms ease, transform 120ms ease",
         ...style,
       }}
@@ -83,7 +93,21 @@ export default function Avatar({ value, size = 40, onClick, title, style }: Prop
           : undefined
       }
     >
-      {display}
+      {urlMode ? (
+        <img
+          src={raw}
+          alt=""
+          loading="lazy"
+          style={{
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            display: "block",
+          }}
+        />
+      ) : (
+        raw
+      )}
     </span>
   );
 }
