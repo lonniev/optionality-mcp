@@ -5,14 +5,24 @@ import { useEffect, useState } from "react";
 // scoring them in order. Loops if the call outlasts the cycle. The
 // "score" column never shows fake digits — just dots while active and
 // a tick once "weighed" — so this can't be mistaken for real progress.
+//
+// Visual treatment: themed backdrop image (drop /judge-bg.jpg into
+// frontend/public/) sepia-tinted and vignette-masked so the
+// dimension rows read on top. Each criterion gets a leading emoji
+// glyph for instant visual recognition.
 
-const JUDGE_DIMS: ReadonlyArray<string> = [
-  "Structure",
-  "Strikes & Tenor",
-  "Risk / Reward",
-  "Macro Context",
-  "Tail Risk",
-  "Communication",
+interface JudgeDim {
+  glyph: string;
+  label: string;
+}
+
+const JUDGE_DIMS: ReadonlyArray<JudgeDim> = [
+  { glyph: "📐", label: "Structure" },
+  { glyph: "🎯", label: "Strikes & Tenor" },
+  { glyph: "⚖️", label: "Risk / Reward" },
+  { glyph: "🌍", label: "Macro Context" },
+  { glyph: "🦢", label: "Tail Risk" },
+  { glyph: "🎤", label: "Communication" },
 ];
 
 const STEP_MS = 1400;             // Per-dimension dwell time.
@@ -43,17 +53,30 @@ export default function JudgeAnimation() {
 
   return (
     <div className="judge-anim">
+      {/* Themed backdrop. Drop a CC0 boardroom / executive-meeting
+          photo at frontend/public/judge-bg.jpg to give the scoring
+          ceremony a setting. If the file is missing the <img>
+          gracefully shows nothing (alt text is empty, no broken icon)
+          and the CSS gradient below carries the look. */}
+      <img
+        src="/judge-bg.jpg"
+        alt=""
+        aria-hidden="true"
+        className="judge-anim-bg"
+      />
+
       <div className="judge-anim-title">Judging your Pitch</div>
       <div className="judge-anim-sub">
         Weighing six dimensions of the proposal
       </div>
 
       <div className="judge-anim-rows">
-        {JUDGE_DIMS.map((label, i) => {
+        {JUDGE_DIMS.map((dim, i) => {
           const state = rowState(i, active);
           return (
-            <div key={label} className={`judge-anim-row state-${state}`}>
-              <div className="judge-anim-label">{label}</div>
+            <div key={dim.label} className={`judge-anim-row state-${state}`}>
+              <div className="judge-anim-glyph" aria-hidden="true">{dim.glyph}</div>
+              <div className="judge-anim-label">{dim.label}</div>
               <div className="judge-anim-meter">
                 <div className="judge-anim-meter-fill" />
               </div>
@@ -77,8 +100,31 @@ export default function JudgeAnimation() {
 
       <style>{`
         .judge-anim {
+          position: relative;
           padding: 18px 6px 8px;
           text-align: center;
+          overflow: hidden;
+        }
+        .judge-anim-bg {
+          position: absolute;
+          inset: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+          object-position: center;
+          opacity: 0.10;
+          filter: sepia(0.55) hue-rotate(-12deg) contrast(1.08) blur(0.3px);
+          transform: scale(1.05);
+          pointer-events: none;
+          z-index: 0;
+          mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+          -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+        }
+        .judge-anim-title,
+        .judge-anim-sub,
+        .judge-anim-rows {
+          position: relative;
+          z-index: 1;
         }
         .judge-anim-title {
           font-family: "JetBrains Mono", monospace;
@@ -98,30 +144,45 @@ export default function JudgeAnimation() {
           display: flex;
           flex-direction: column;
           gap: 6px;
-          max-width: 460px;
+          max-width: 480px;
           margin: 0 auto;
         }
         .judge-anim-row {
           display: grid;
-          grid-template-columns: 140px 1fr 36px;
-          gap: 14px;
+          grid-template-columns: 28px 140px 1fr 36px;
+          gap: 12px;
           align-items: center;
           padding: 10px 14px;
-          background: rgba(255, 255, 255, 0.02);
+          background: rgba(0, 0, 0, 0.32);
+          backdrop-filter: blur(2px);
           border: 1px solid var(--panel-edge);
           transition: opacity 280ms ease, border-color 280ms ease, background 280ms ease;
         }
         .judge-anim-row.state-pending {
-          opacity: 0.35;
+          opacity: 0.4;
         }
         .judge-anim-row.state-scoring {
           opacity: 1;
           border-color: var(--amber);
-          background: rgba(212, 163, 91, 0.06);
+          background: rgba(212, 163, 91, 0.14);
         }
         .judge-anim-row.state-scored {
-          opacity: 0.85;
+          opacity: 0.88;
           border-color: var(--panel-edge);
+        }
+        .judge-anim-glyph {
+          font-size: 18px;
+          line-height: 1;
+          text-align: center;
+          filter: grayscale(0.15);
+          transition: filter 280ms ease, transform 280ms ease;
+        }
+        .judge-anim-row.state-scoring .judge-anim-glyph {
+          filter: grayscale(0) drop-shadow(0 0 6px rgba(212, 163, 91, 0.55));
+          transform: scale(1.12);
+        }
+        .judge-anim-row.state-scored .judge-anim-glyph {
+          filter: grayscale(0.05);
         }
         .judge-anim-label {
           font-family: "JetBrains Mono", monospace;
