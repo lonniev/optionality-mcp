@@ -1,9 +1,8 @@
-// "Reading the Skew" — a baked-in, free FE training aid shown on the
-// scenario card right where Skew is presented. No MCP call, no LLM
-// regeneration: the prose and the interactive curve are static
-// pedagogy. The ONLY dynamic input is the scenario's own security and
-// its price info (spot + 30-day IV), so the chart and narrative are
-// immediately relevant to the challenge in front of the trainee.
+// "Guide to Skew" — an educational aid reachable from a discreet
+// "Skew Guide" button next to the scenario's Skew note. The prose and
+// the interactive curve are static pedagogy; the only dynamic input is
+// the scenario's own security and price info (spot + 30-day IV), so the
+// chart and narrative speak to the challenge in front of the trainee.
 //
 // The IV-vs-strike curve is an illustrative model anchored to the
 // scenario's spot and ATM IV — not live chain data. Three shapes
@@ -143,19 +142,17 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
     <div className="skew-guide">
       <button
         type="button"
-        className="sg-disclosure"
+        className="sg-trigger"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
       >
-        <span className="sg-disclosure-tag">Field Guide · Free</span>
-        <span className="sg-disclosure-title">
-          Reading the Skew on <b>{ticker}</b>
-        </span>
         <span className="sg-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+        Skew Guide
       </button>
 
       {open && (
         <div className="sg-body">
+          <h3 className="serif sg-title">Guide to Skew</h3>
           <p className="sg-lede">
             Implied volatility is not one number — it's a <em>curve</em> across strikes, a map of
             where the market is paying up for fear. For a premium seller it shows where the
@@ -364,42 +361,37 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
         }
         :root[data-theme="light"] .skew-guide { --sg-call: #3f7a8c; }
 
-        .sg-disclosure {
-          display: flex;
+        .sg-trigger {
+          display: inline-flex;
           align-items: center;
-          gap: 10px;
-          width: 100%;
-          text-align: left;
-          background: var(--bg-soft);
-          border: 1px solid var(--panel-edge);
-          border-left: 3px solid var(--amber);
-          color: var(--ink);
-          padding: 9px 12px;
+          gap: 6px;
+          background: transparent;
+          border: none;
+          padding: 2px 0;
           cursor: pointer;
-          transition: border-color 140ms ease, background 140ms ease;
-        }
-        .sg-disclosure:hover { border-color: var(--amber); }
-        .sg-disclosure-tag {
           font-family: 'JetBrains Mono', monospace;
-          font-size: 9px;
-          letter-spacing: 0.18em;
+          font-size: 11px;
+          letter-spacing: 0.12em;
           text-transform: uppercase;
           color: var(--amber);
-          white-space: nowrap;
+          border-bottom: 1px dashed color-mix(in srgb, var(--amber) 50%, transparent);
+          transition: color 140ms ease, border-color 140ms ease;
         }
-        .sg-disclosure-title {
-          font-family: 'Fraunces', serif;
-          font-size: 14px;
-          color: var(--ink);
-        }
-        .sg-disclosure-title b { color: var(--amber-bright); font-weight: 600; }
-        .sg-chevron { margin-left: auto; color: var(--ink-faint); font-size: 12px; }
+        .sg-trigger:hover { color: var(--amber-bright); border-bottom-color: var(--amber-bright); }
+        .sg-chevron { color: var(--ink-faint); font-size: 11px; }
 
         .sg-body {
           border: 1px solid var(--panel-edge);
-          border-top: none;
+          border-left: 3px solid var(--amber);
           padding: 16px 14px 18px;
+          margin-top: 10px;
           background: var(--panel);
+        }
+        .sg-title {
+          font-size: 20px;
+          color: var(--ink);
+          margin-bottom: 10px;
+          letter-spacing: -0.01em;
         }
         .sg-lede {
           font-family: 'Fraunces', Georgia, serif;
