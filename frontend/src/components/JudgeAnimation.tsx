@@ -6,10 +6,13 @@ import { useEffect, useState } from "react";
 // "score" column never shows fake digits — just dots while active and
 // a tick once "weighed" — so this can't be mistaken for real progress.
 //
-// Visual treatment: themed backdrop image (drop /judge-bg.jpg into
-// frontend/public/) sepia-tinted and vignette-masked so the
-// dimension rows read on top. Each criterion gets a leading emoji
-// glyph for instant visual recognition.
+// Visual treatment: while a pitch is being judged this takes over the
+// whole viewport as a fixed overlay, so the themed backdrop image
+// (drop /judge-bg.jpg into frontend/public/) bleeds across the entire
+// page rather than being boxed into a single panel. The image is
+// sepia-tinted and vignette-masked so the centered dimension rows read
+// on top. Each criterion gets a leading emoji glyph for instant
+// visual recognition.
 
 interface JudgeDim {
   glyph: string;
@@ -51,13 +54,23 @@ export default function JudgeAnimation() {
     return () => window.clearInterval(id);
   }, []);
 
+  // The scene is a fixed full-page overlay; lock the page behind it so
+  // it can't scroll out from under the judging animation.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   return (
     <div className="judge-anim">
       {/* Themed backdrop — Museum of the City of New York collection
           image (NYSE / Wall Street institutional setting), bundled
           locally at frontend/public/judge-bg.jpg so it survives any
-          CDN token rotation. Used as a decorative wash only: heavily
-          sepia-tinted, low opacity, and radial-masked so the
+          CDN token rotation. Full-bleed across the overlay: heavily
+          sepia-tinted, low opacity, and radial-masked so the centered
           dimension rows read on top. */}
       <img
         src="/judge-bg.jpg"
@@ -101,10 +114,17 @@ export default function JudgeAnimation() {
 
       <style>{`
         .judge-anim {
-          position: relative;
-          padding: 18px 6px 8px;
+          position: fixed;
+          inset: 0;
+          z-index: 50;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 32px 16px;
           text-align: center;
           overflow: hidden;
+          background: radial-gradient(ellipse at center, var(--bg-soft), var(--bg) 78%);
         }
         .judge-anim-bg {
           position: absolute;
@@ -113,13 +133,13 @@ export default function JudgeAnimation() {
           height: 100%;
           object-fit: cover;
           object-position: center;
-          opacity: 0.10;
+          opacity: 0.20;
           filter: sepia(0.55) hue-rotate(-12deg) contrast(1.08) blur(0.3px);
-          transform: scale(1.05);
+          transform: scale(1.04);
           pointer-events: none;
           z-index: 0;
-          mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
-          -webkit-mask-image: radial-gradient(ellipse at center, black 30%, transparent 80%);
+          mask-image: radial-gradient(ellipse at center, black 55%, transparent 95%);
+          -webkit-mask-image: radial-gradient(ellipse at center, black 55%, transparent 95%);
         }
         .judge-anim-title,
         .judge-anim-sub,

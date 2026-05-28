@@ -1622,22 +1622,22 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               </div>
             )}
 
-            {loading && (
-              <div className="panel" style={{ textAlign: "center" }}>
-                {loadingMsg === "Judging your Pitch" ? (
-                  <JudgeAnimation />
-                ) : (
-                  <>
-                    <QuoteScroller heading={loadingMsg} />
-                    {mode === "live" && (
-                      <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 8, fontStyle: "italic" }}>
-                        Live mode searches the web — expect 15–30s.
-                      </div>
-                    )}
-                  </>
-                )}
-              </div>
-            )}
+            {loading &&
+              (loadingMsg === "Judging your Pitch" ? (
+                // Full-viewport immersive scene — see JudgeAnimation; it
+                // renders its own fixed overlay, so it is deliberately not
+                // wrapped in an opaque .panel here.
+                <JudgeAnimation />
+              ) : (
+                <div className="panel" style={{ textAlign: "center" }}>
+                  <QuoteScroller heading={loadingMsg} />
+                  {mode === "live" && (
+                    <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 8, fontStyle: "italic" }}>
+                      Live mode searches the web — expect 15–30s.
+                    </div>
+                  )}
+                </div>
+              ))}
 
             {scenario && !loading && (
               <div className="panel">

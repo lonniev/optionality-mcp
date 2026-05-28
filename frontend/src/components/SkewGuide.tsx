@@ -132,7 +132,16 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
   const sIV = ivAt(shortStrike);
   const lIV = ivAt(longStrike);
   const gap = (lIV - sIV) * 100;
-  const fear = (ivAt(spot * 0.94) - ivAt(spot * 1.06)) * 100;
+
+  // The 25-delta skew compares the two OTM "wings": roughly the 25Δ put
+  // (~6% below spot) against the 25Δ call (~6% above). The fear gauge is
+  // put-wing IV minus call-wing IV; the chart marks both points and the
+  // tilt of the line joining them *is* the skew.
+  const putK25 = spot * 0.94;
+  const callK25 = spot * 1.06;
+  const putIV25 = ivAt(putK25);
+  const callIV25 = ivAt(callK25);
+  const fear = (putIV25 - callIV25) * 100;
 
   const verdict = (() => {
     if (shape === "reverse") {
@@ -229,6 +238,37 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
                 </defs>
                 <path d={curvePath} fill="none" stroke="url(#sg-cg)" strokeWidth={2.6} strokeLinecap="round" />
 
+                {/* 25-delta skew — mark the two OTM wings the fear gauge
+                    compares and join them. The connector's tilt encodes
+                    the regime: up-to-the-left = reverse/fear, flat = none,
+                    up-to-the-right = forward. */}
+                {(() => {
+                  const xP = xK(putK25);
+                  const yP = yIV(clampIV(putIV25));
+                  const xC = xK(callK25);
+                  const yC = yIV(clampIV(callIV25));
+                  const midX = (xP + xC) / 2;
+                  const midY = (yP + yC) / 2;
+                  const diamond = (cx: number, cy: number) =>
+                    `M${cx} ${cy - 6} L${cx + 6} ${cy} L${cx} ${cy + 6} L${cx - 6} ${cy} Z`;
+                  const sign = fear >= 0 ? "+" : "";
+                  return (
+                    <g className="sg-skew25" pointerEvents="none">
+                      <line x1={xP} y1={yP} x2={xC} y2={yC} stroke={C.gold} strokeWidth={1.6} strokeDasharray="5 4" opacity={0.9} />
+                      <path d={diamond(xP, yP)} fill="var(--panel)" stroke={C.put} strokeWidth={2} />
+                      <path d={diamond(xC, yC)} fill="var(--panel)" stroke={C.call} strokeWidth={2} />
+                      <text x={xP} y={yP - 11} textAnchor="middle" className="sg-axis" fill={C.put}>25Δ put</text>
+                      <text x={xC} y={yC + 20} textAnchor="middle" className="sg-axis" fill={C.call}>25Δ call</text>
+                      <g transform={`translate(${midX} ${midY})`}>
+                        <rect x={-37} y={-21} width={74} height={16} rx={8} fill="var(--panel)" stroke={C.gold} strokeWidth={1} opacity={0.96} />
+                        <text x={0} y={-10} textAnchor="middle" className="sg-tick" fill={C.goldSoft}>
+                          25Δ {sign}{fear.toFixed(1)} pts
+                        </text>
+                      </g>
+                    </g>
+                  );
+                })()}
+
                 {/* legs */}
                 {([
                   [longStrike, lIV, C.call, "long"],
@@ -273,6 +313,7 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
               <span><i className="sg-dot" style={{ background: C.gold }} />IV curve</span>
               <span><i className="sg-dot" style={{ background: C.put }} />short put (sold)</span>
               <span><i className="sg-dot" style={{ background: C.call }} />long put (bought)</span>
+              <span><i className="sg-diamond" />25Δ wings (skew)</span>
               <span><i className="sg-dot" style={{ background: "var(--ink-faint)" }} />spot ≈ ${fmtK(spot)}</span>
             </div>
 
@@ -509,6 +550,7 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
         }
         .sg-legend span { display: inline-flex; align-items: center; gap: 5px; }
         .sg-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+        .sg-diamond { width: 8px; height: 8px; display: inline-block; border: 1.5px solid var(--amber); transform: rotate(45deg); }
 
         .sg-slider-row { margin-top: 16px; }
         .sg-slider-row label {
