@@ -656,6 +656,15 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [tips, setTips] = useState<TipExchange[]>([]);
   const [tipQuestion, setTipQuestion] = useState<string>("");
   const [tipAsking, setTipAsking] = useState<boolean>(false);
+  /// Scroll container for the clue Q&A history. Capped at min(40vh, 360px)
+  /// so it never pushes the textarea below the fold; scrolls to the
+  /// newest clue automatically whenever a new tip lands.
+  const tipsScrollRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (tipsScrollRef.current && tips.length > 0) {
+      tipsScrollRef.current.scrollTop = tipsScrollRef.current.scrollHeight;
+    }
+  }, [tips.length]);
   // Leaderboard state, lazy-loaded when the tab is opened.
   const [leaderboard, setLeaderboard] = useState<LeaderboardResult | null>(null);
   const [leaderboardLoading, setLeaderboardLoading] = useState<boolean>(false);
@@ -1627,17 +1636,37 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             Socratic, non-spoiler. e.g. <span style={{ color: "var(--ink-soft)" }}>"What do you mean by Call Skew?"</span>
                           </div>
 
-                          {tips.map((t, i) => (
-                            <div key={i} style={{ marginBottom: 10, padding: "8px 10px", background: "var(--bg-soft)", borderLeft: "2px solid var(--bronze)" }}>
-                              <div style={{ fontSize: 12, color: "var(--ink-soft)", fontStyle: "italic", marginBottom: 4 }}>
-                                Q · {t.question}
-                              </div>
-                              <RichText
-                                text={t.answer}
-                                style={{ fontSize: 13, color: "var(--ink)" }}
-                              />
+                          {tips.length > 0 && (
+                            <div
+                              ref={tipsScrollRef}
+                              style={{
+                                // Cap at ~40% of viewport height (or 360px,
+                                // whichever is smaller) so a long Q&A
+                                // history doesn't push the textarea and
+                                // Pitch button below the fold on tall
+                                // sessions. Below the cap, scroll
+                                // internally with newest clue at the
+                                // bottom (auto-scrolled into view).
+                                maxHeight: "min(40vh, 360px)",
+                                overflowY: "auto",
+                                marginBottom: 10,
+                                paddingRight: 4,
+                                scrollBehavior: "smooth",
+                              }}
+                            >
+                              {tips.map((t, i) => (
+                                <div key={i} style={{ marginBottom: 10, padding: "8px 10px", background: "var(--bg-soft)", borderLeft: "2px solid var(--bronze)" }}>
+                                  <div style={{ fontSize: 12, color: "var(--ink-soft)", fontStyle: "italic", marginBottom: 4 }}>
+                                    Q · {t.question}
+                                  </div>
+                                  <RichText
+                                    text={t.answer}
+                                    style={{ fontSize: 13, color: "var(--ink)" }}
+                                  />
+                                </div>
+                              ))}
                             </div>
-                          ))}
+                          )}
 
                           <textarea
                             value={tipQuestion}
