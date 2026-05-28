@@ -42,6 +42,10 @@ export interface Scenario {
   // envelope. Drives the "fits the envelope?" check in the judge's
   // risk_reward dimension. Absent on scenarios dealt without a budget.
   max_loss_usd?: number;
+  // Echoed back when the patron requested a sector filter (e.g.,
+  // "biotech", "semis"). Surfaces on the scenario card so the trainee
+  // can confirm the dealer honored the request.
+  sector?: string;
 }
 
 export interface DimensionResult {
@@ -169,6 +173,11 @@ export interface ActiveSession {
   mode: Mode;
   difficulty: Difficulty;
   maxLossUsd?: number;
+  /// Optional market-sector filter (e.g., "biotech", "semis", "banks").
+  /// When set, the dealer picks an underlying from that sector and the
+  /// patron sees it persisted across reloads so a refresh doesn't clear
+  /// their chosen focus area.
+  sector?: string;
   evaluation?: Evaluation;
   tips?: TipExchange[];
   draftSavedAt?: number;

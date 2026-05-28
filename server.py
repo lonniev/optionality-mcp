@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.19"
+__version__ = "0.1.20"
 
 logger = logging.getLogger(__name__)
 
@@ -325,6 +325,7 @@ async def deal_scenario(
     proof: str = "",
     max_loss_usd: int | None = None,
     replay_entry_id: str | None = None,
+    sector: str = "",
 ) -> dict[str, Any]:
     """Generate a fresh options trading scenario and open a journal entry.
 
@@ -344,6 +345,11 @@ async def deal_scenario(
             no new generation cost, just the operator's toll per the pricing
             model. The new play is journaled as its own entry; the original
             is untouched.
+        sector: Optional market-sector hint (e.g., ``"biotech"``, ``"semis"``,
+            ``"banks"``). When set, the Firm picks the underlying ticker from
+            that sector and tailors catalysts / relevant_facts / red_herrings
+            to its dynamics. Empty string = no constraint, Firm picks freely.
+            Ignored on replays (the original scenario's ticker is reused).
     """
     from tools.dealer import deal_scenario as _impl
     return await _impl(
@@ -352,6 +358,7 @@ async def deal_scenario(
         difficulty=difficulty,
         max_loss_usd=max_loss_usd,
         replay_entry_id=replay_entry_id,
+        sector=sector,
     )
 
 

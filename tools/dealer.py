@@ -30,6 +30,7 @@ async def deal_scenario(
     difficulty: str,
     max_loss_usd: int | None = None,
     replay_entry_id: str | None = None,
+    sector: str = "",
 ) -> dict[str, Any]:
     """Generate one scenario and open a journal entry. Returns scenario JSON + entry_id.
 
@@ -110,12 +111,30 @@ async def deal_scenario(
             f"keep the macro, the catalyst, and the red-herring mechanic "
             f"as challenging as the persona demands."
         )
+    sector_clause = ""
+    sector_clean = (sector or "").strip()
+    if sector_clean:
+        sector_clause = (
+            f"\n\nSECTOR FOCUS: The trainee has requested a scenario in the "
+            f"\"{sector_clean}\" sector. Pick a ticker, asset, or company that "
+            f"genuinely belongs to that sector — not a tangential player. "
+            f"Catalysts, relevant_facts, red_herrings, and constraints should "
+            f"reflect the sector's actual dynamics (e.g., FDA decisions for "
+            f"biotech, fab capex / TSMC-Samsung dynamics for semis, rate-curve "
+            f"sensitivity for banks). If the requested sector genuinely has "
+            f"no live options-trading dynamic worth drilling on for this "
+            f"persona / mode, you may pick a closely-adjacent sector and "
+            f"explain the substitution in the briefing — but only as a last "
+            f"resort. Vary the SPECIFIC ticker from prior attempts within "
+            f"the same sector."
+        )
     prompt = (
         f"{mode_instr}\n\n"
         f'Generate ONE options drill scenario at difficulty level: "{difficulty}". '
         f'Set the "mode" field to "{mode}". Vary the asset class from any prior attempts. '
         f"Return JSON only."
         f"{risk_clause}"
+        f"{sector_clause}"
     )
     enable_web_search = mode == "live"
     max_tokens = 4000 if enable_web_search else 2500
@@ -142,6 +161,10 @@ async def deal_scenario(
     # FE, the judge, and the journal all see the same envelope.
     if max_loss_usd is not None:
         scenario["max_loss_usd"] = max_loss_usd
+    # Echo the requested sector so the FE can display it on the
+    # scenario card and the judge can verify the LLM stayed on-topic.
+    if sector_clean:
+        scenario["sector"] = sector_clean
 
     entry_id = await journal.open_entry(
         npub=npub,

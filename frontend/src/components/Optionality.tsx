@@ -173,6 +173,28 @@ const MODES: ModeDef[] = [
   },
 ];
 
+/// Curated sector chips the patron can constrain the dealer to. Each
+/// has a rich options-trading story — concentrated catalysts, distinctive
+/// IV regimes, recurring tape patterns — so the LLM has plenty to work
+/// with. "" = no constraint, dealer picks freely. The full string is
+/// passed verbatim to the dealer prompt so it can be a free-text label
+/// (e.g., "luxury goods", "uranium miners") via the inline override.
+const SECTORS: ReadonlyArray<{ id: string; label: string; glyph: string }> = [
+  { id: "", label: "Any", glyph: "🎲" },
+  { id: "biotech", label: "Biotech", glyph: "🧬" },
+  { id: "semis", label: "Semis", glyph: "💾" },
+  { id: "mega-cap tech", label: "Mega Tech", glyph: "🤖" },
+  { id: "banks", label: "Banks", glyph: "🏦" },
+  { id: "energy", label: "Energy", glyph: "🛢️" },
+  { id: "miners", label: "Miners", glyph: "⛏️" },
+  { id: "consumer discretionary", label: "Consumer", glyph: "🛍️" },
+  { id: "homebuilders", label: "Homebuilders", glyph: "🏗️" },
+  { id: "defense", label: "Defense", glyph: "🛡️" },
+  { id: "airlines", label: "Airlines", glyph: "✈️" },
+  { id: "crypto-adjacent equities", label: "Crypto Equities", glyph: "₿" },
+  { id: "index / ETF", label: "Index/ETF", glyph: "📈" },
+];
+
 const DIMENSION_LABELS: Record<string, string> = {
   strategy_selection: "Structure",
   strikes_and_tenor: "Strikes & Tenor",
@@ -611,6 +633,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Some trainees reason more crisply about a $250 trade than a $10,000
   // version of the same setup; this lets them shape the scenario.
   const [maxLossInput, setMaxLossInput] = useState<string>("");
+  // Optional market-sector focus (e.g., "biotech", "semis"). Empty
+  // string = no constraint, dealer picks freely. The chooser surfaces
+  // a curated list of sectors that genuinely have rich options-trading
+  // dynamics; "Other" round-trips a free-text label through the MCP.
+  const [sector, setSector] = useState<string>("");
   const [scenario, setScenario] = useState<Scenario | null>(null);
   const [answer, setAnswer] = useState<string>("");
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
@@ -739,6 +766,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         if (sess.mode) setMode(sess.mode);
         if (sess.difficulty) setDifficulty(sess.difficulty);
         if (typeof sess.maxLossUsd === "number") setMaxLossInput(String(sess.maxLossUsd));
+        if (typeof sess.sector === "string") setSector(sess.sector);
         if (Array.isArray(sess.tips)) setTips(sess.tips);
         if (sess.draftSavedAt) setDraftSavedAt(sess.draftSavedAt);
       }
@@ -758,11 +786,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       mode,
       difficulty,
       maxLossUsd: Number.isFinite(parsedMaxLoss) && parsedMaxLoss > 0 ? parsedMaxLoss : undefined,
+      sector: sector.trim() || undefined,
       evaluation: evaluation ?? undefined,
       tips,
       draftSavedAt: draftSavedAt ?? undefined,
     });
-  }, [scenario, entryId, answer, evaluation, mode, difficulty, maxLossInput, tips, draftSavedAt]);
+  }, [scenario, entryId, answer, evaluation, mode, difficulty, maxLossInput, sector, tips, draftSavedAt]);
 
   async function persist(nextStats: Stats): Promise<void> {
     // The Journal is server-authoritative via list_journal — only
@@ -782,7 +811,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     try {
       const parsedMaxLoss = parseInt(maxLossInput, 10);
       const maxLossArg = Number.isFinite(parsedMaxLoss) && parsedMaxLoss > 0 ? parsedMaxLoss : undefined;
-      const result = await dealScenario(mode, difficulty, maxLossArg);
+      const sectorArg = sector.trim() || undefined;
+      const result = await dealScenario(mode, difficulty, maxLossArg, undefined, sectorArg);
       if (result.error) throw new Error(result.error);
       const json = result.scenario;
       json.mode = mode;
@@ -1466,6 +1496,75 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   Optional. When set, The Firm sizes the opportunity&apos;s account and constraints so a well-chosen structure fits your envelope. The judge will score down trades whose worst case exceeds it.
                 </div>
 
+                <div style={{ fontSize: 10, color: "var(--rust)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>Sector Focus</div>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                  {SECTORS.map((s) => {
+                    const active = (sector || "") === s.id;
+                    return (
+                      <button
+                        key={s.id || "_any"}
+                        type="button"
+                        onClick={() => setSector(s.id)}
+                        title={s.id ? `Limit the dealer to ${s.label}` : "Let the dealer pick any sector"}
+                        style={{
+                          background: active ? "var(--amber-glow)" : "transparent",
+                          border: `1px solid ${active ? "var(--amber)" : "var(--panel-edge)"}`,
+                          borderRadius: 4,
+                          color: active ? "var(--amber-bright)" : "var(--ink-soft)",
+                          fontFamily: "'JetBrains Mono', monospace",
+                          fontSize: 11,
+                          padding: "4px 9px",
+                          cursor: "pointer",
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: 5,
+                        }}
+                      >
+                        <span aria-hidden="true" style={{ fontSize: 13 }}>{s.glyph}</span>
+                        <span>{s.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
+                  <label style={{ fontSize: 11, color: "var(--ink-faint)" }}>or type a custom sector:</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. luxury goods"
+                    value={SECTORS.some((s) => s.id === sector) ? "" : sector}
+                    onChange={(e) => setSector(e.target.value)}
+                    style={{
+                      background: "transparent",
+                      border: "1px solid var(--panel-edge)",
+                      borderRadius: 4,
+                      color: "var(--ivory-bright)",
+                      fontFamily: "'JetBrains Mono', monospace",
+                      fontSize: 12,
+                      padding: "4px 8px",
+                      width: 180,
+                    }}
+                  />
+                  {sector && !SECTORS.some((s) => s.id === sector) && (
+                    <button
+                      type="button"
+                      onClick={() => setSector("")}
+                      style={{
+                        background: "transparent",
+                        border: "none",
+                        color: "var(--ink-faint)",
+                        fontSize: 11,
+                        cursor: "pointer",
+                        textDecoration: "underline",
+                      }}
+                    >
+                      clear
+                    </button>
+                  )}
+                </div>
+                <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4, fontStyle: "italic" }}>
+                  Optional. The Firm picks the underlying from the chosen sector and tailors the catalyst, relevant facts, and red herrings to its dynamics.
+                </div>
+
                 <div className="actions">
                   {!guest && (
                     <button
@@ -1541,7 +1640,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
             {scenario && !loading && (
               <div className="panel">
-                <span className="panel-label">{scenario.asset?.ticker} · {MODES.find((m) => m.id === (scenario.mode || mode))?.label} · {difficulty}</span>
+                <span className="panel-label">
+                  {scenario.asset?.ticker} · {MODES.find((m) => m.id === (scenario.mode || mode))?.label} · {difficulty}
+                  {scenario.sector && <> · <span style={{ color: "var(--rust)" }}>{scenario.sector}</span></>}
+                </span>
 
                 <div className="scenario-grid">
                   {/* LEFT — the facts */}

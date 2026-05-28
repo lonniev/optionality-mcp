@@ -398,6 +398,7 @@ export async function dealScenario(
   difficulty: string,
   maxLossUsd?: number,
   replayEntryId?: string,
+  sector?: string,
 ): Promise<DealScenarioResult> {
   const args: Record<string, unknown> = { mode, difficulty };
   if (typeof maxLossUsd === "number" && maxLossUsd > 0) {
@@ -407,6 +408,10 @@ export async function dealScenario(
     // BE forces mode="historical", difficulty="mulligan" on this path;
     // we pass them anyway so the wheel's validators see consistent input.
     args.replay_entry_id = replayEntryId;
+  }
+  const sectorClean = (sector ?? "").trim();
+  if (sectorClean) {
+    args.sector = sectorClean;
   }
   return callTool<DealScenarioResult>("deal_scenario", args);
 }
