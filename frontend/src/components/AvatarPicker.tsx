@@ -1,19 +1,35 @@
-// Avatar chooser — DiceBear styles (deterministic per-npub) plus the
+// Avatar chooser — DiceBear styles (deterministic per-patron) plus the
 // legacy emoji-glyph palette as a secondary section.
 //
 // DiceBear (api.dicebear.com) serves free open-source SVG avatars by
-// style + seed. Using the patron's npub as the seed makes each
-// patron's avatar within a style stable across devices and sessions —
-// no upload, no storage on our side, no moderation surface. The
-// avatar VALUE stored in the patron profile is just the SVG URL.
+// style + seed. The seed is a SHA-256 hash of the patron's npub
+// rather than the raw npub — same deterministic property (each
+// patron gets a stable per-style avatar), but DiceBear's access
+// logs never see the patron's identity. One-way; not reversible
+// without a target list to test against.
 //
 // Existing emoji-glyph avatars from the prior picker keep working:
 // Avatar.tsx auto-detects URL vs glyph and renders accordingly. The
 // emoji grid remains here as a minimalist alternative.
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import Avatar, { AVATAR_CHOICES } from "./Avatar";
+
+/// SHA-256 of the npub, hex-encoded, truncated to 16 chars (64 bits
+/// of entropy — plenty for DiceBear seed uniqueness with no realistic
+/// collision risk among any one operator's patron base). The hash is
+/// computed in-browser via SubtleCrypto; the npub never crosses the
+/// wire to DiceBear.
+async function hashNpubForSeed(npub: string): Promise<string> {
+  if (!npub) return "anonymous";
+  const data = new TextEncoder().encode(npub);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  const hex = Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  return hex.slice(0, 16);
+}
 
 interface AvatarPickerProps {
   /// Currently-selected avatar value (DiceBear URL or emoji glyph).
@@ -44,16 +60,27 @@ function dicebearUrl(style: string, seed: string): string {
 }
 
 export default function AvatarPicker({ value, onChange, npub }: AvatarPickerProps) {
-  const seed = npub || "anonymous";
   const [tab, setTab] = useState<"style" | "emoji">("style");
+  // Hashed seed — derived from the patron's npub via SHA-256 so the
+  // raw npub doesn't appear in DiceBear's request logs. Same
+  // deterministic property: each patron gets a stable per-style
+  // avatar. Empty until the async hash resolves on mount.
+  const [seed, setSeed] = useState<string>("");
 
-  // Each DiceBear style produces one URL for THIS patron's npub.
+  useEffect(() => {
+    let alive = true;
+    void hashNpubForSeed(npub).then((h) => {
+      if (alive) setSeed(h);
+    });
+    return () => { alive = false; };
+  }, [npub]);
+
+  // Each DiceBear style produces one URL for THIS patron's hashed seed.
   // Selection is per-style — pick the style, the URL becomes the
-  // avatar value. The npub-seeded URL is identity-stable across sessions.
-  const styleOptions = DICEBEAR_STYLES.map((s) => ({
-    ...s,
-    url: dicebearUrl(s.id, seed),
-  }));
+  // avatar value. The seed-derived URL is identity-stable across sessions.
+  const styleOptions = seed
+    ? DICEBEAR_STYLES.map((s) => ({ ...s, url: dicebearUrl(s.id, seed) }))
+    : [];
 
   return (
     <div>
@@ -98,8 +125,11 @@ export default function AvatarPicker({ value, onChange, npub }: AvatarPickerProp
       {tab === "style" && (
         <>
           <div style={{ color: "var(--ink-faint)", fontSize: 11, marginBottom: 10, fontStyle: "italic" }}>
-            Each style is deterministically generated from your npub — pick a look you like; the avatar stays the same wherever you appear.
+            Each style is deterministically generated from a hash of your npub (the raw key never reaches DiceBear) — pick a look you like; the avatar stays the same wherever you appear.
           </div>
+          {styleOptions.length === 0 && (
+            <div className="loading" style={{ padding: "16px 0" }}>Generating styles</div>
+          )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))", gap: 10 }}>
             {styleOptions.map((opt) => {
               const selected = value === opt.url;
