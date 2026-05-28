@@ -1,86 +1,108 @@
-// Avatar chooser — DiceBear styles (deterministic per-patron) plus the
-// legacy emoji-glyph palette as a secondary section.
+// Avatar chooser — paginated catalog of SVG emoji avatars served from
+// the Iconify REST API, plus the legacy emoji-glyph palette and a
+// custom-URL fallback.
 //
-// DiceBear (api.dicebear.com) serves free open-source SVG avatars by
-// style + seed. The seed is a SHA-256 hash of the patron's npub
-// rather than the raw npub — same deterministic property (each
-// patron gets a stable per-style avatar), but DiceBear's access
-// logs never see the patron's identity. One-way; not reversible
-// without a target list to test against.
+// Iconify (api.iconify.design) is a free public REST endpoint that
+// indexes hundreds of icon collections including high-quality emoji
+// sets (Microsoft Fluent, Twemoji, Google Noto, OpenMoji). For each
+// chosen collection we fetch the name list once via /collection,
+// then paginate through it 24-at-a-time. The SVGs themselves are
+// fetched on-demand by the browser as each <img> tile mounts —
+// lazy-loaded, cached, never bundled in our FE.
 //
-// Existing emoji-glyph avatars from the prior picker keep working:
-// Avatar.tsx auto-detects URL vs glyph and renders accordingly. The
-// emoji grid remains here as a minimalist alternative.
+// The patron's profile stores only the ONE SVG URL they picked.
+// Nothing else from the catalog persists on our side.
+//
+// Avatar.tsx auto-detects URL-shaped values so existing emoji-glyph
+// avatars from the previous picker continue to render unchanged.
 
 import { useEffect, useState } from "react";
 
 import Avatar, { AVATAR_CHOICES } from "./Avatar";
 
-/// SHA-256 of the npub, hex-encoded, truncated to 16 chars (64 bits
-/// of entropy — plenty for DiceBear seed uniqueness with no realistic
-/// collision risk among any one operator's patron base). The hash is
-/// computed in-browser via SubtleCrypto; the npub never crosses the
-/// wire to DiceBear.
-async function hashNpubForSeed(npub: string): Promise<string> {
-  if (!npub) return "anonymous";
-  const data = new TextEncoder().encode(npub);
-  const digest = await crypto.subtle.digest("SHA-256", data);
-  const hex = Array.from(new Uint8Array(digest))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-  return hex.slice(0, 16);
-}
-
 interface AvatarPickerProps {
-  /// Currently-selected avatar value (DiceBear URL or emoji glyph).
+  /// Currently-selected avatar value (Iconify URL, emoji glyph, or custom URL).
   value: string;
   /// Called when the user picks any option.
   onChange: (next: string) => void;
-  /// The patron's npub — used as the deterministic seed for DiceBear
-  /// styles so the same patron gets a stable avatar per style.
-  npub: string;
+  /// The patron's npub. Unused now — kept for prop compatibility with
+  /// callers that pass it. Future privacy-aware modes might want it.
+  npub?: string;
 }
 
-/// Curated DiceBear styles. Each renders well at 32-80px and reads as
-/// a distinct aesthetic. Full catalog at dicebear.com/styles.
-const DICEBEAR_STYLES: ReadonlyArray<{ id: string; label: string; blurb: string }> = [
-  { id: "personas", label: "Personas", blurb: "Clean illustrated portraits" },
-  { id: "lorelei", label: "Lorelei", blurb: "Minimal faces, friendly" },
-  { id: "notionists", label: "Sketch", blurb: "Notion-style hand drawn" },
-  { id: "open-peeps", label: "Peeps", blurb: "Playful character art" },
-  { id: "bottts", label: "Bots", blurb: "Robot faces — AI flavor" },
-  { id: "pixel-art", label: "Pixel", blurb: "8-bit retro" },
-  { id: "shapes", label: "Shapes", blurb: "Abstract geometry" },
-  { id: "fun-emoji", label: "Fun", blurb: "Emoji-style faces" },
+interface IconifyCollection {
+  prefix: string;
+  label: string;
+  blurb: string;
+}
+
+/// Curated short list of emoji collections that work well as avatars.
+/// All are free, MIT/CC-licensed, and indexed by Iconify.
+const COLLECTIONS: ReadonlyArray<IconifyCollection> = [
+  { prefix: "fluent-emoji-flat", label: "Fluent", blurb: "Microsoft Fluent, flat style" },
+  { prefix: "twemoji", label: "Twemoji", blurb: "Twitter's emoji set" },
+  { prefix: "noto", label: "Noto", blurb: "Google's expressive emojis" },
+  { prefix: "openmoji", label: "OpenMoji", blurb: "Community-designed, CC-BY-SA" },
+  { prefix: "emojione-v1", label: "EmojiOne", blurb: "Classic web-emoji style" },
 ];
 
-function dicebearUrl(style: string, seed: string): string {
-  // SVG endpoint is free, no API key, no rate limit we hit in practice.
-  return `https://api.dicebear.com/9.x/${style}/svg?seed=${encodeURIComponent(seed)}`;
+const PAGE_SIZE = 24;
+
+function iconifySvgUrl(prefix: string, name: string): string {
+  return `https://api.iconify.design/${prefix}/${name}.svg`;
 }
 
-export default function AvatarPicker({ value, onChange, npub }: AvatarPickerProps) {
-  const [tab, setTab] = useState<"style" | "emoji">("style");
-  // Hashed seed — derived from the patron's npub via SHA-256 so the
-  // raw npub doesn't appear in DiceBear's request logs. Same
-  // deterministic property: each patron gets a stable per-style
-  // avatar. Empty until the async hash resolves on mount.
-  const [seed, setSeed] = useState<string>("");
+export default function AvatarPicker({ value, onChange }: AvatarPickerProps) {
+  const [tab, setTab] = useState<"catalog" | "emoji">("catalog");
+  const [collection, setCollection] = useState<string>(COLLECTIONS[0].prefix);
+  const [iconNames, setIconNames] = useState<string[]>([]);
+  const [page, setPage] = useState<number>(0);
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string>("");
 
+  // Fetch the full icon-name list for the selected collection. Cheap
+  // JSON (~50-200KB per collection). One fetch per collection-switch,
+  // browser caches subsequent visits.
   useEffect(() => {
     let alive = true;
-    void hashNpubForSeed(npub).then((h) => {
-      if (alive) setSeed(h);
-    });
-    return () => { alive = false; };
-  }, [npub]);
+    setLoading(true);
+    setError("");
+    setIconNames([]);
+    setPage(0);
 
-  // Each DiceBear style produces one URL for THIS patron's hashed seed.
-  // Selection is per-style — pick the style, the URL becomes the
-  // avatar value. The seed-derived URL is identity-stable across sessions.
-  const styleOptions = seed
-    ? DICEBEAR_STYLES.map((s) => ({ ...s, url: dicebearUrl(s.id, seed) }))
-    : [];
+    void fetch(`https://api.iconify.design/collection?prefix=${collection}`)
+      .then((r) => {
+        if (!r.ok) throw new Error(`Iconify returned ${r.status}`);
+        return r.json();
+      })
+      .then((data: { uncategorized?: string[]; categories?: Record<string, string[]> }) => {
+        if (!alive) return;
+        // Iconify returns icon names grouped under "categories" plus a
+        // possible "uncategorized" bucket. Flatten everything in display
+        // order so paging is stable.
+        const names: string[] = [];
+        if (data.categories) {
+          for (const cat of Object.keys(data.categories)) {
+            for (const name of data.categories[cat]) names.push(name);
+          }
+        }
+        if (data.uncategorized) {
+          for (const name of data.uncategorized) names.push(name);
+        }
+        setIconNames(names);
+        setLoading(false);
+      })
+      .catch((e) => {
+        if (!alive) return;
+        setError((e as Error).message);
+        setLoading(false);
+      });
+
+    return () => { alive = false; };
+  }, [collection]);
+
+  const totalPages = Math.max(1, Math.ceil(iconNames.length / PAGE_SIZE));
+  const visibleIcons = iconNames.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   return (
     <div>
@@ -88,89 +110,126 @@ export default function AvatarPicker({ value, onChange, npub }: AvatarPickerProp
       <div style={{ display: "flex", gap: 4, marginBottom: 12, borderBottom: "1px solid var(--panel-edge)" }}>
         <button
           type="button"
-          onClick={() => setTab("style")}
-          style={{
-            padding: "6px 14px",
-            background: "transparent",
-            border: "none",
-            borderBottom: tab === "style" ? "2px solid var(--amber)" : "2px solid transparent",
-            color: tab === "style" ? "var(--amber-bright)" : "var(--ink-soft)",
-            cursor: "pointer",
-            fontSize: 12,
-            letterSpacing: "0.15em",
-            textTransform: "uppercase",
-          }}
+          onClick={() => setTab("catalog")}
+          style={tabStyle(tab === "catalog")}
         >
-          Generated
+          Catalog
         </button>
         <button
           type="button"
           onClick={() => setTab("emoji")}
-          style={{
-            padding: "6px 14px",
-            background: "transparent",
-            border: "none",
-            borderBottom: tab === "emoji" ? "2px solid var(--amber)" : "2px solid transparent",
-            color: tab === "emoji" ? "var(--amber-bright)" : "var(--ink-soft)",
-            cursor: "pointer",
-            fontSize: 12,
-            letterSpacing: "0.15em",
-            textTransform: "uppercase",
-          }}
+          style={tabStyle(tab === "emoji")}
         >
-          Emoji
+          Glyphs
         </button>
       </div>
 
-      {tab === "style" && (
+      {tab === "catalog" && (
         <>
-          <div style={{ color: "var(--ink-faint)", fontSize: 11, marginBottom: 10, fontStyle: "italic" }}>
-            Each style is deterministically generated from a hash of your npub (the raw key never reaches DiceBear) — pick a look you like; the avatar stays the same wherever you appear.
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12, flexWrap: "wrap" }}>
+            <label style={{ fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase", color: "var(--ink-faint)" }}>
+              Style:
+            </label>
+            <select
+              value={collection}
+              onChange={(e) => setCollection(e.target.value)}
+              style={{
+                background: "var(--bg-soft)",
+                border: "1px solid var(--panel-edge)",
+                color: "var(--ink)",
+                padding: "4px 8px",
+                fontSize: 12,
+              }}
+            >
+              {COLLECTIONS.map((c) => (
+                <option key={c.prefix} value={c.prefix}>{c.label} — {c.blurb}</option>
+              ))}
+            </select>
+            {!loading && !error && iconNames.length > 0 && (
+              <span style={{ fontSize: 11, color: "var(--ink-faint)", marginLeft: "auto" }}>
+                {iconNames.length.toLocaleString()} icons · page {page + 1} of {totalPages}
+              </span>
+            )}
           </div>
-          {styleOptions.length === 0 && (
-            <div className="loading" style={{ padding: "16px 0" }}>Generating styles</div>
+
+          {loading && (
+            <div className="loading" style={{ display: "block", padding: "20px 0" }}>Loading catalog</div>
           )}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(96px, 1fr))", gap: 10 }}>
-            {styleOptions.map((opt) => {
-              const selected = value === opt.url;
-              return (
+
+          {error && (
+            <div className="error" style={{ marginBottom: 12 }}>
+              Couldn't reach Iconify: {error}
+            </div>
+          )}
+
+          {!loading && !error && (
+            <>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))", gap: 8 }}>
+                {visibleIcons.map((name) => {
+                  const url = iconifySvgUrl(collection, name);
+                  const selected = value === url;
+                  return (
+                    <button
+                      key={name}
+                      type="button"
+                      onClick={() => onChange(url)}
+                      title={name.replace(/-/g, " ")}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        width: "100%",
+                        aspectRatio: "1 / 1",
+                        padding: 6,
+                        background: selected ? "var(--amber-glow)" : "var(--bg-soft)",
+                        border: `1px solid ${selected ? "var(--amber)" : "var(--panel-edge)"}`,
+                        cursor: "pointer",
+                        transition: "border-color 120ms ease, background 120ms ease",
+                      }}
+                    >
+                      <img
+                        src={url}
+                        alt={name}
+                        loading="lazy"
+                        style={{ width: "100%", height: "100%", objectFit: "contain", display: "block" }}
+                      />
+                    </button>
+                  );
+                })}
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 10, marginTop: 14 }}>
                 <button
-                  key={opt.id}
                   type="button"
-                  onClick={() => onChange(opt.url)}
-                  title={opt.blurb}
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    alignItems: "center",
-                    gap: 6,
-                    padding: 10,
-                    background: selected ? "var(--amber-glow)" : "var(--bg-soft)",
-                    border: `1px solid ${selected ? "var(--amber)" : "var(--panel-edge)"}`,
-                    cursor: "pointer",
-                    transition: "border-color 120ms ease, background 120ms ease",
-                  }}
+                  onClick={() => setPage((p) => Math.max(0, p - 1))}
+                  disabled={page === 0}
+                  className="btn btn-ghost"
+                  style={{ padding: "6px 14px", fontSize: 11, opacity: page === 0 ? 0.4 : 1 }}
                 >
-                  <Avatar value={opt.url} size={56} />
-                  <span style={{
-                    fontSize: 10,
-                    letterSpacing: "0.15em",
-                    textTransform: "uppercase",
-                    color: selected ? "var(--amber-bright)" : "var(--ink-soft)",
-                  }}>
-                    {opt.label}
-                  </span>
+                  ← Previous
                 </button>
-              );
-            })}
-          </div>
+                <span style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: "var(--ink-soft)" }}>
+                  {page + 1} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                  disabled={page >= totalPages - 1}
+                  className="btn btn-ghost"
+                  style={{ padding: "6px 14px", fontSize: 11, opacity: page >= totalPages - 1 ? 0.4 : 1 }}
+                >
+                  Next →
+                </button>
+              </div>
+            </>
+          )}
         </>
       )}
 
       {tab === "emoji" && (
         <>
           <div style={{ color: "var(--ink-faint)", fontSize: 11, marginBottom: 10, fontStyle: "italic" }}>
-            Pick a single glyph — minimalist alternative to a generated avatar.
+            Pick a single glyph — minimalist alternative to the catalog.
           </div>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(48px, 1fr))", gap: 6 }}>
             {AVATAR_CHOICES.map((emoji) => {
@@ -220,6 +279,30 @@ export default function AvatarPicker({ value, onChange, npub }: AvatarPickerProp
           }}
         />
       </details>
+
+      {/* Live preview of the currently-selected avatar */}
+      {value && (
+        <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12 }}>
+          <Avatar value={value} size={56} />
+          <div style={{ fontSize: 11, color: "var(--ink-faint)" }}>
+            Currently selected. Tap Save below to apply.
+          </div>
+        </div>
+      )}
     </div>
   );
+}
+
+function tabStyle(active: boolean): React.CSSProperties {
+  return {
+    padding: "6px 14px",
+    background: "transparent",
+    border: "none",
+    borderBottom: active ? "2px solid var(--amber)" : "2px solid transparent",
+    color: active ? "var(--amber-bright)" : "var(--ink-soft)",
+    cursor: "pointer",
+    fontSize: 12,
+    letterSpacing: "0.15em",
+    textTransform: "uppercase",
+  };
 }
