@@ -109,6 +109,7 @@ import Welcome from "./Welcome";
 import JudgeAnimation from "./JudgeAnimation";
 import QuoteScroller from "./QuoteScroller";
 import RichText from "./RichText";
+import SkewGuide from "./SkewGuide";
 import { getGuestId, getPatronProfile, getStoredNpub } from "../lib/mcp";
 
 // ============================================================
@@ -1662,6 +1663,16 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         <span style={{ color: "var(--ink-faint)", textTransform: "uppercase", letterSpacing: "0.15em", fontSize: 10 }}>Skew · </span>
                         {scenario.asset.skew_note}
                       </div>
+                    )}
+
+                    {typeof scenario.asset?.spot === "number" && (
+                      <SkewGuide
+                        ticker={scenario.asset.ticker}
+                        name={scenario.asset.name}
+                        spot={scenario.asset.spot}
+                        iv30d={scenario.asset.iv_30d}
+                        skewNote={scenario.asset.skew_note}
+                      />
                     )}
 
                     <h3 className="serif">Catalyst</h3>

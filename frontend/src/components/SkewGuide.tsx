@@ -1,0 +1,533 @@
+// "Reading the Skew" — a baked-in, free FE training aid shown on the
+// scenario card right where Skew is presented. No MCP call, no LLM
+// regeneration: the prose and the interactive curve are static
+// pedagogy. The ONLY dynamic input is the scenario's own security and
+// its price info (spot + 30-day IV), so the chart and narrative are
+// immediately relevant to the challenge in front of the trainee.
+//
+// The IV-vs-strike curve is an illustrative model anchored to the
+// scenario's spot and ATM IV — not live chain data. Three shapes
+// (reverse smirk / smile / forward) let the trainee feel how the
+// curve's tilt changes which leg of a vertical spread is the rich one.
+
+import { useMemo, useState } from "react";
+
+interface SkewGuideProps {
+  ticker: string;
+  name: string;
+  spot: number;
+  iv30d: number; // ATM 30-day IV as a percent, e.g. 24
+  skewNote?: string;
+}
+
+type Shape = "reverse" | "smile" | "forward";
+
+const W = 640;
+const H = 360;
+const M = { l: 46, r: 18, t: 24, b: 42 };
+const PLOT_W = W - M.l - M.r;
+const PLOT_H = H - M.t - M.b;
+
+/// Pick a "nice" strike increment ≈ 0.6% of spot, snapped to a
+/// human-readable ladder. $415 → 2.5, a $40 name → 0.5, a $900 name → 5.
+function niceStep(spot: number): number {
+  const target = spot * 0.006;
+  for (const c of [0.25, 0.5, 1, 2.5, 5, 10, 25, 50]) {
+    if (c >= target) return c;
+  }
+  return 100;
+}
+
+function roundTo(v: number, step: number): number {
+  return Math.round(v / step) * step;
+}
+
+/// Guess the curve shape that best matches the dealer's skew_note so the
+/// guide opens on the regime the trainee is actually staring at.
+function inferShape(note: string | undefined): Shape {
+  const n = (note || "").toLowerCase();
+  if (/(forward skew|call.*(rich|bid|expensive)|upside (shock|spike)|calls .*(rich|bid))/.test(n)) {
+    return "forward";
+  }
+  if (/(smile|both wings|two-sided|event|binary|symmetric)/.test(n)) {
+    return "smile";
+  }
+  return "reverse";
+}
+
+export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewGuideProps) {
+  const [open, setOpen] = useState(false);
+  const [shape, setShape] = useState<Shape>(() => inferShape(skewNote));
+  const [widthMult, setWidthMult] = useState<1 | 2>(1);
+
+  const geom = useMemo(() => {
+    const baseIV = Math.min(0.9, Math.max(0.08, (iv30d || 24) / 100));
+    const step = niceStep(spot);
+    const Kmin = roundTo(spot * 0.91, step);
+    const Kmax = roundTo(spot * 1.09, step);
+    const IVmin = Math.max(0.02, baseIV - 0.1);
+    const IVmax = baseIV + 0.22;
+    const sliderMin = roundTo(spot * 0.935, step);
+    const sliderMax = roundTo(spot * 1.024, step);
+    const defaultShort = roundTo(spot * 0.988, step);
+    return { baseIV, step, Kmin, Kmax, IVmin, IVmax, sliderMin, sliderMax, defaultShort };
+  }, [spot, iv30d]);
+
+  const [shortStrike, setShortStrike] = useState<number>(() => geom.defaultShort);
+
+  const { baseIV, step, Kmin, Kmax, IVmin, IVmax, sliderMin, sliderMax } = geom;
+  const width = step * widthMult;
+  const longStrike = shortStrike - width;
+
+  const xK = (k: number) => M.l + ((k - Kmin) / (Kmax - Kmin)) * PLOT_W;
+  const yIV = (v: number) => M.t + ((IVmax - v) / (IVmax - IVmin)) * PLOT_H;
+  const clampIV = (v: number) => Math.max(IVmin, Math.min(IVmax, v));
+
+  function ivAt(k: number): number {
+    const m = (k - spot) / spot;
+    if (shape === "reverse") return baseIV + -0.85 * m + 1.6 * m * m * (m < 0 ? 1 : 0.25);
+    if (shape === "forward") return baseIV + 0.85 * m + 1.6 * m * m * (m > 0 ? 1 : 0.25);
+    return baseIV + 3.4 * m * m + -0.18 * m;
+  }
+
+  const fmtK = (k: number) => (step < 1 ? k.toFixed(1) : String(Math.round(k)));
+
+  // ── gridlines ──────────────────────────────────────────────────
+  const ivLines: number[] = [];
+  for (let v = Math.ceil(IVmin / 0.05) * 0.05; v <= IVmax + 1e-9; v += 0.05) ivLines.push(v);
+  const gridStep = step * 4;
+  const kLines: number[] = [];
+  for (let k = Math.ceil(Kmin / gridStep) * gridStep; k <= Kmax + 1e-9; k += gridStep) kLines.push(k);
+
+  // ── curve path ─────────────────────────────────────────────────
+  const curvePath = useMemo(() => {
+    const N = 120;
+    let d = "";
+    for (let i = 0; i <= N; i++) {
+      const k = Kmin + ((Kmax - Kmin) * i) / N;
+      const x = xK(k);
+      const y = yIV(clampIV(ivAt(k)));
+      d += `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)} `;
+    }
+    return d;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shape, Kmin, Kmax, IVmin, IVmax, baseIV, spot]);
+
+  // ── readouts ───────────────────────────────────────────────────
+  const sIV = ivAt(shortStrike);
+  const lIV = ivAt(longStrike);
+  const gap = (lIV - sIV) * 100;
+  const fear = (ivAt(spot * 0.94) - ivAt(spot * 1.06)) * 100;
+
+  const verdict = (() => {
+    if (shape === "reverse") {
+      return gap > 0.6
+        ? `Steep here: the put you buy (${fmtK(longStrike)}) is meaningfully richer in vol than the one you sell (${fmtK(shortStrike)}) — skew is eating into your credit, but the wing is paying for fear. Sell below the steepest part for real cushion.`
+        : `Up near spot the skew is gentle; both legs carry similar vol, so the credit is clean — but you're closer to the money, so cushion is thinner. The classic trade-off.`;
+    }
+    if (shape === "forward") {
+      return `The call wing is the rich one here. For a put spread on ${ticker} that's friendly — the puts you trade sit on the cheaper, flatter side. The danger this curve prices is an upside spike, not a collapse.`;
+    }
+    return `Both wings bid, ATM cheapest — the market is bracing for a two-sided gap in ${ticker}. This is event-risk shape. Selling a spread through the event means underwriting exactly the move the smile is warning about.`;
+  })();
+
+  const ivPct = Math.round((iv30d || 24));
+  const C = {
+    put: "var(--rust)",
+    call: "var(--sg-call)",
+    gold: "var(--amber)",
+    goldSoft: "var(--amber-bright)",
+  };
+
+  return (
+    <div className="skew-guide">
+      <button
+        type="button"
+        className="sg-disclosure"
+        onClick={() => setOpen((o) => !o)}
+        aria-expanded={open}
+      >
+        <span className="sg-disclosure-tag">Field Guide · Free</span>
+        <span className="sg-disclosure-title">
+          Reading the Skew on <b>{ticker}</b>
+        </span>
+        <span className="sg-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
+      </button>
+
+      {open && (
+        <div className="sg-body">
+          <p className="sg-lede">
+            Implied volatility is not one number — it's a <em>curve</em> across strikes, a map of
+            where the market is paying up for fear. For a premium seller it shows where the
+            insurance is richest. Below, the curve is anchored to <strong>{ticker}</strong>{name ? ` (${name})` : ""} at a
+            spot of <strong>${fmtK(spot)}</strong> and an ATM 30-day IV of <strong>{ivPct}%</strong>.
+          </p>
+
+          {/* interactive panel */}
+          <div className="sg-panel">
+            <div className="sg-toggles">
+              {([
+                ["reverse", 'Reverse skew · "smirk"'],
+                ["smile", "Volatility smile"],
+                ["forward", "Forward skew"],
+              ] as Array<[Shape, string]>).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  className={`sg-toggle ${shape === id ? "active" : ""}`}
+                  onClick={() => setShape(id)}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            <div className="sg-chartwrap">
+              <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Implied volatility skew curve for ${ticker}`}>
+                {/* grid */}
+                <g>
+                  {ivLines.map((v) => (
+                    <line key={`h${v}`} x1={M.l} y1={yIV(v)} x2={W - M.r} y2={yIV(v)} stroke="var(--sg-grid)" strokeWidth={1} />
+                  ))}
+                  {kLines.map((k) => (
+                    <line key={`v${k}`} x1={xK(k)} y1={M.t} x2={xK(k)} y2={H - M.b} stroke="var(--sg-grid)" strokeWidth={1} />
+                  ))}
+                </g>
+
+                {/* curve */}
+                <defs>
+                  <linearGradient id="sg-cg" x1="0" y1="0" x2="1" y2="0">
+                    <stop offset="0%" stopColor={C.put} />
+                    <stop offset="50%" stopColor={C.gold} />
+                    <stop offset="100%" stopColor={C.call} />
+                  </linearGradient>
+                </defs>
+                <path d={curvePath} fill="none" stroke="url(#sg-cg)" strokeWidth={2.6} strokeLinecap="round" />
+
+                {/* legs */}
+                {([
+                  [longStrike, lIV, C.call, "long"],
+                  [shortStrike, sIV, C.put, "short"],
+                ] as Array<[number, number, string, string]>).map(([k, v, color, label]) => {
+                  const x = xK(k);
+                  const y = yIV(clampIV(v));
+                  return (
+                    <g key={label}>
+                      <line x1={x} y1={y} x2={x} y2={H - M.b} stroke={color} strokeWidth={1} opacity={0.35} strokeDasharray="2 3" />
+                      <circle cx={x} cy={y} r={6} fill={color} stroke="var(--panel)" strokeWidth={2} />
+                      <text x={x} y={y - 12} textAnchor="middle" className="sg-axis" fill={color}>
+                        {label} {fmtK(k)}
+                      </text>
+                    </g>
+                  );
+                })}
+
+                {/* axes */}
+                <g>
+                  {ivLines.map((v) => (
+                    <text key={`ht${v}`} x={M.l - 8} y={yIV(v) + 3} textAnchor="end" className="sg-tick">
+                      {Math.round(v * 100)}%
+                    </text>
+                  ))}
+                  {kLines.map((k) => (
+                    <text key={`vt${k}`} x={xK(k)} y={H - M.b + 16} textAnchor="middle" className="sg-tick">
+                      {fmtK(k)}
+                    </text>
+                  ))}
+                  <line x1={xK(spot)} y1={M.t} x2={xK(spot)} y2={H - M.b} stroke="var(--ink-faint)" strokeWidth={1} strokeDasharray="3 4" opacity={0.8} />
+                  <text x={xK(spot)} y={M.t - 8} textAnchor="middle" className="sg-axis" fill="var(--ink-soft)">SPOT</text>
+                  <text x={M.l + PLOT_W / 2} y={H - 6} textAnchor="middle" className="sg-axis">STRIKE</text>
+                  <text x={14} y={M.t + PLOT_H / 2} textAnchor="middle" className="sg-axis" transform={`rotate(-90 14 ${M.t + PLOT_H / 2})`}>
+                    IMPLIED VOLATILITY
+                  </text>
+                </g>
+              </svg>
+            </div>
+
+            <div className="sg-legend">
+              <span><i className="sg-dot" style={{ background: C.gold }} />IV curve</span>
+              <span><i className="sg-dot" style={{ background: C.put }} />short put (sold)</span>
+              <span><i className="sg-dot" style={{ background: C.call }} />long put (bought)</span>
+              <span><i className="sg-dot" style={{ background: "var(--ink-faint)" }} />spot ≈ ${fmtK(spot)}</span>
+            </div>
+
+            <div className="sg-slider-row">
+              <label>
+                Short strike (the put you sell) — drag to walk it down the curve
+                <span className="sg-widthbtns">
+                  {([1, 2] as Array<1 | 2>).map((mult) => (
+                    <button
+                      key={mult}
+                      type="button"
+                      className={`sg-wbtn ${widthMult === mult ? "active" : ""}`}
+                      onClick={() => setWidthMult(mult)}
+                    >
+                      ${fmtK(step * mult)} wide
+                    </button>
+                  ))}
+                </span>
+              </label>
+              <input
+                type="range"
+                min={sliderMin}
+                max={sliderMax}
+                step={step}
+                value={shortStrike}
+                onChange={(e) => setShortStrike(parseFloat(e.target.value))}
+              />
+            </div>
+
+            <div className="sg-readout">
+              <div className="sg-stat"><div className="lab">Short put IV</div><div className="val put">{(sIV * 100).toFixed(1)}%</div></div>
+              <div className="sg-stat"><div className="lab">Long put IV</div><div className="val call">{(lIV * 100).toFixed(1)}%</div></div>
+              <div className="sg-stat"><div className="lab">Skew gap (leg-to-leg)</div><div className="val">{(gap >= 0 ? "+" : "") + gap.toFixed(1)} pts</div></div>
+              <div className="sg-stat"><div className="lab">25Δ skew (fear gauge)</div><div className="val">{(fear >= 0 ? "+" : "") + fear.toFixed(1)} pts</div></div>
+            </div>
+
+            <div className="sg-verdict">{verdict}</div>
+          </div>
+
+          {/* three shapes */}
+          <div className="sg-grid2">
+            <div className="sg-card put-c">
+              <div className="sg-cardtag">Equities &amp; indices — the default</div>
+              <h4 className="serif">Reverse skew (smirk)</h4>
+              <p>IV climbs as strikes fall. <span className="put-t">OTM puts are the most expensive options on the board.</span> The market is permanently bid for crash protection — hedging demand lifts downside IV. This is the world bull put spreads live in.</p>
+            </div>
+            <div className="sg-card">
+              <div className="sg-cardtag">FX, single names, pre-event</div>
+              <h4 className="serif">Volatility smile</h4>
+              <p>Both wings lift; ATM is the cheap valley. The market fears a <em>big move either way</em> with no strong lean — classic ahead of binary events (earnings, FOMC, a CPI print) where gap risk is two-sided.</p>
+            </div>
+            <div className="sg-card call-c">
+              <div className="sg-cardtag">Commodities — oil, gas, grains</div>
+              <h4 className="serif">Forward skew</h4>
+              <p>IV climbs as strikes <em>rise</em>. <span className="call-t">OTM calls are richest</span> because the feared shock is to the <em>upside</em> — a supply disruption that spikes price. Energy names live closer to this regime.</p>
+            </div>
+            <div className="sg-card">
+              <div className="sg-cardtag">The number to actually watch</div>
+              <h4 className="serif">25-delta skew</h4>
+              <p>Steepness = <strong>IV of the 25Δ put minus IV of the 25Δ call</strong>. A widening gap = fear bidding up the put wing (stress). A flattening gap = complacency. The cleanest read on "how scared is this name right now."</p>
+            </div>
+          </div>
+
+          {/* the selling lens */}
+          <h4 className="serif sg-h">Why it matters when you sell premium</h4>
+          <p className="sg-p">
+            You're not buying insurance — you're underwriting it. The skew is your actuarial
+            table: it tells you which part of the curve is overpaying and where your strikes sit
+            relative to that.
+          </p>
+
+          <div className="sg-rule">
+            <div className="sg-ruleh">The bull-put-spread wrinkle</div>
+            In a reverse-skew name, the put you <strong>buy</strong> (lower strike) sits on a{" "}
+            <em>higher</em> part of the curve than the one you <strong>sell</strong>. Your
+            protection is relatively pricey in vol terms, which trims the net credit versus a
+            flat-vol world. Watch the <strong>skew gap</strong> readout above shrink your edge as
+            you push the short strike deeper into the fear wing.
+          </div>
+
+          <p className="sg-p">
+            But that same steep skew is the <span className="sg-gold">"fear = opportunity"</span>{" "}
+            signal in numeric form: a put wing bid to the moon means elevated absolute premium and
+            a market paying handsomely to be protected — exactly the insurance a disciplined seller
+            wants to write, provided the strike sits below where you believe price will hold.
+          </p>
+
+          {/* checklist */}
+          <h4 className="serif sg-h">A practical reading checklist</h4>
+          <table className="sg-table">
+            <thead>
+              <tr><th>What you see</th><th>What it means</th><th>Seller's move</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Steep put skew</td><td>Crash fear richly priced</td><td>Rich put premium — sell below the steep zone, not into it</td></tr>
+              <tr><td>Flat skew</td><td>Complacency</td><td>Thin premium, little cushion priced — be choosier</td></tr>
+              <tr><td>Skew steepening fast</td><td>Stress building</td><td>IV expanding — the entry window is opening</td></tr>
+              <tr><td>Smile forming</td><td>Binary event ahead</td><td>Two-sided gap risk — don't be short through it</td></tr>
+              <tr><td>Forward skew (energy)</td><td>Upside shock feared</td><td>Calls rich; puts relatively cheap to sell</td></tr>
+            </tbody>
+          </table>
+
+          <div className="sg-foot">
+            Curve shown is an illustrative model anchored to {ticker}'s ${fmtK(spot)} spot and {ivPct}% ATM IV — not live chain data. Implied vol is the market's forward guess, not a forecast: read it as sentiment priced, then verify the actual bid/ask before committing a spread.
+          </div>
+        </div>
+      )}
+
+      <style>{`
+        .skew-guide {
+          --sg-grid: color-mix(in srgb, var(--ink-faint) 22%, transparent);
+          --sg-call: #5f97a8;
+          margin: 6px 0 16px;
+        }
+        :root[data-theme="light"] .skew-guide { --sg-call: #3f7a8c; }
+
+        .sg-disclosure {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          width: 100%;
+          text-align: left;
+          background: var(--bg-soft);
+          border: 1px solid var(--panel-edge);
+          border-left: 3px solid var(--amber);
+          color: var(--ink);
+          padding: 9px 12px;
+          cursor: pointer;
+          transition: border-color 140ms ease, background 140ms ease;
+        }
+        .sg-disclosure:hover { border-color: var(--amber); }
+        .sg-disclosure-tag {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 9px;
+          letter-spacing: 0.18em;
+          text-transform: uppercase;
+          color: var(--amber);
+          white-space: nowrap;
+        }
+        .sg-disclosure-title {
+          font-family: 'Fraunces', serif;
+          font-size: 14px;
+          color: var(--ink);
+        }
+        .sg-disclosure-title b { color: var(--amber-bright); font-weight: 600; }
+        .sg-chevron { margin-left: auto; color: var(--ink-faint); font-size: 12px; }
+
+        .sg-body {
+          border: 1px solid var(--panel-edge);
+          border-top: none;
+          padding: 16px 14px 18px;
+          background: var(--panel);
+        }
+        .sg-lede {
+          font-family: 'Fraunces', Georgia, serif;
+          font-style: italic;
+          font-size: 14px;
+          color: var(--ink-soft);
+          margin-bottom: 16px;
+          line-height: 1.55;
+        }
+        .sg-lede em { color: var(--amber-bright); font-style: italic; }
+        .sg-lede strong { color: var(--ink); font-weight: 500; }
+
+        .sg-panel {
+          background: var(--bg-soft);
+          border: 1px solid var(--panel-edge);
+          border-radius: 10px;
+          padding: 14px;
+          margin-bottom: 16px;
+        }
+        .sg-toggles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+        .sg-toggle {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 11px;
+          letter-spacing: 0.03em;
+          text-transform: uppercase;
+          background: var(--panel);
+          color: var(--ink-soft);
+          border: 1px solid var(--panel-edge);
+          border-radius: 7px;
+          padding: 6px 10px;
+          cursor: pointer;
+          transition: 160ms;
+        }
+        .sg-toggle:hover { color: var(--ink); border-color: var(--bronze); }
+        .sg-toggle.active { background: var(--amber); color: var(--bg); border-color: var(--amber); font-weight: 600; }
+
+        .sg-chartwrap { width: 100%; }
+        .sg-chartwrap svg { width: 100%; height: auto; display: block; overflow: visible; }
+        .sg-axis { font-family: 'JetBrains Mono', monospace; font-size: 10px; fill: var(--ink-faint); }
+        .sg-tick { font-family: 'JetBrains Mono', monospace; font-size: 9.5px; fill: var(--ink-faint); }
+
+        .sg-legend {
+          display: flex; gap: 16px; flex-wrap: wrap;
+          font-family: 'JetBrains Mono', monospace; font-size: 10px;
+          color: var(--ink-faint); margin-top: 10px;
+        }
+        .sg-legend span { display: inline-flex; align-items: center; gap: 5px; }
+        .sg-dot { width: 9px; height: 9px; border-radius: 50%; display: inline-block; }
+
+        .sg-slider-row { margin-top: 16px; }
+        .sg-slider-row label {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px;
+          letter-spacing: 0.08em; text-transform: uppercase;
+          color: var(--ink-faint); display: block; margin-bottom: 8px;
+        }
+        .sg-slider-row input[type=range] { width: 100%; accent-color: var(--amber); height: 4px; cursor: pointer; }
+        .sg-widthbtns { display: inline-flex; gap: 5px; margin-left: 8px; }
+        .sg-wbtn {
+          font-family: 'JetBrains Mono', monospace; font-size: 10px;
+          padding: 3px 8px; border-radius: 6px; border: 1px solid var(--panel-edge);
+          background: var(--panel); color: var(--ink-faint); cursor: pointer;
+        }
+        .sg-wbtn.active { background: var(--amber); color: var(--bg); border-color: var(--amber); }
+
+        .sg-readout {
+          display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+          gap: 8px; margin-top: 16px;
+        }
+        .sg-stat { background: var(--panel); border: 1px solid var(--panel-edge); border-radius: 8px; padding: 9px 10px; }
+        .sg-stat .lab {
+          font-family: 'JetBrains Mono', monospace; font-size: 9px;
+          letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 4px;
+        }
+        .sg-stat .val { font-family: 'JetBrains Mono', monospace; font-size: 17px; font-weight: 600; color: var(--amber-bright); }
+        .sg-stat .val.put { color: var(--rust); }
+        .sg-stat .val.call { color: var(--sg-call); }
+
+        .sg-verdict {
+          font-family: 'Fraunces', serif; font-style: italic;
+          border-left: 2px solid var(--amber); padding: 8px 0 8px 14px;
+          margin-top: 16px; color: var(--ink-soft); font-size: 14px; min-height: 2.6em;
+        }
+
+        .sg-grid2 { display: grid; grid-template-columns: 1fr; gap: 12px; margin: 14px 0; }
+        @media (min-width: 680px) { .sg-grid2 { grid-template-columns: 1fr 1fr; } }
+        .sg-card { background: var(--bg-soft); border: 1px solid var(--panel-edge); border-radius: 10px; padding: 12px 13px; }
+        .sg-card.put-c { border-top: 2px solid var(--rust); }
+        .sg-card.call-c { border-top: 2px solid var(--sg-call); }
+        .sg-card h4 { font-size: 15px; margin-bottom: 5px; color: var(--ink); }
+        .sg-card p { font-size: 12.5px; color: var(--ink-soft); line-height: 1.5; }
+        .sg-card p em { color: var(--ink); font-style: italic; }
+        .sg-cardtag {
+          font-family: 'JetBrains Mono', monospace; font-size: 9px;
+          letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); margin-bottom: 4px;
+        }
+        .put-t { color: var(--rust); font-weight: 500; }
+        .call-t { color: var(--sg-call); font-weight: 500; }
+
+        .sg-h { font-size: 16px; margin: 22px 0 8px; color: var(--ink); }
+        .sg-p { font-size: 13px; color: var(--ink-soft); margin-bottom: 10px; line-height: 1.55; }
+        .sg-gold { color: var(--amber-bright); }
+
+        .sg-rule {
+          background: linear-gradient(90deg, var(--amber-glow), transparent);
+          border: 1px solid var(--panel-edge); border-left: 3px solid var(--amber);
+          border-radius: 8px; padding: 12px 14px; margin: 12px 0; font-size: 13px; color: var(--ink-soft);
+        }
+        .sg-rule strong { color: var(--ink); font-weight: 500; }
+        .sg-rule em { font-style: italic; color: var(--ink); }
+        .sg-ruleh {
+          font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
+          letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); margin-bottom: 6px;
+        }
+
+        .sg-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12.5px; }
+        .sg-table th, .sg-table td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--panel-edge); }
+        .sg-table th {
+          font-family: 'JetBrains Mono', monospace; font-size: 9px;
+          letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-faint); font-weight: 500;
+        }
+        .sg-table td { color: var(--ink-soft); }
+        .sg-table td:first-child { font-family: 'JetBrains Mono', monospace; color: var(--amber-bright); font-size: 12px; }
+
+        .sg-foot {
+          margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--panel-edge);
+          font-size: 11.5px; color: var(--ink-faint); font-style: italic; line-height: 1.5;
+        }
+      `}</style>
+    </div>
+  );
+}
