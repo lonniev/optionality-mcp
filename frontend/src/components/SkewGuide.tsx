@@ -247,8 +247,6 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
                   const yP = yIV(clampIV(putIV25));
                   const xC = xK(callK25);
                   const yC = yIV(clampIV(callIV25));
-                  const midX = (xP + xC) / 2;
-                  const midY = (yP + yC) / 2;
                   const diamond = (cx: number, cy: number) =>
                     `M${cx} ${cy - 6} L${cx + 6} ${cy} L${cx} ${cy + 6} L${cx - 6} ${cy} Z`;
                   const sign = fear >= 0 ? "+" : "";
@@ -259,9 +257,11 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
                       <path d={diamond(xC, yC)} fill="var(--panel)" stroke={C.call} strokeWidth={2} />
                       <text x={xP} y={yP - 11} textAnchor="middle" className="sg-axis" fill={C.put}>25Δ put</text>
                       <text x={xC} y={yC + 20} textAnchor="middle" className="sg-axis" fill={C.call}>25Δ call</text>
-                      <g transform={`translate(${midX} ${midY})`}>
-                        <rect x={-37} y={-21} width={74} height={16} rx={8} fill="var(--panel)" stroke={C.gold} strokeWidth={1} opacity={0.96} />
-                        <text x={0} y={-10} textAnchor="middle" className="sg-tick" fill={C.goldSoft}>
+                      {/* Magnitude chip parked over the put wing (open
+                          space on the left), clear of the busy center. */}
+                      <g transform={`translate(${xP} ${yP - 34})`}>
+                        <rect x={-37} y={-13} width={74} height={16} rx={8} fill="var(--panel)" stroke={C.gold} strokeWidth={1} opacity={0.96} />
+                        <text x={0} y={-2} textAnchor="middle" className="sg-tick" fill={C.goldSoft}>
                           25Δ {sign}{fear.toFixed(1)} pts
                         </text>
                       </g>
