@@ -53,15 +53,15 @@ export default function JudgeAnimation() {
 
   return (
     <div className="judge-anim">
-      {/* Themed backdrop. Drop a CC0 boardroom / executive-meeting
-          photo at frontend/public/judge-bg.jpg to give the scoring
-          ceremony a setting. If the file is missing the <img>
-          gracefully shows nothing (alt text is empty, no broken icon)
-          and the CSS gradient below carries the look. */}
+      {/* Themed backdrop — Museum of the City of New York collection
+          image (NYSE / Wall Street institutional setting). Used as a
+          decorative wash only: heavily sepia-tinted, low opacity, and
+          radial-masked so the dimension rows read on top. */}
       <img
-        src="/judge-bg.jpg"
+        src="https://collections.mcny.org/Assets/V2/3GK40eaFg9xw9h9gUyVYB9tKQA6H2PBpNgq2WZKjs5sfE2TsOkIPQS2QWThBMP1MoyqEe9Dwz8xFs8NpOyiK2ZLeMh5E95X2ReV1YowSTzs-/Fa7vAwMATi2IFH8a/mu_xZKfYGhwTQG_X/M3Y4551.jpg"
         alt=""
         aria-hidden="true"
+        referrerPolicy="no-referrer"
         className="judge-anim-bg"
       />
 
