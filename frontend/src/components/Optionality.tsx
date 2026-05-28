@@ -1730,7 +1730,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             disabled={loading}
                             title="Submit your trade to the pitch panel for review"
                           >
-                            Pitch the Trade
+                            Present Pitch
                           </button>
                         </div>
                         {draftSavedAt && !savingDraft && (
