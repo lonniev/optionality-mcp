@@ -17,7 +17,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-import type { Evaluation, Scenario } from "../types";
+import type { Evaluation, Scenario, TipExchange } from "../types";
 import { clearSessionNsec, hasSessionNsec, sessionNsecNpub } from "./sessionNsec";
 import { signInlineProof } from "./inlineProof";
 
@@ -440,10 +440,18 @@ export interface AskTipResult {
 export async function askTip(
   entryId: string,
   question: string,
+  history: TipExchange[] = [],
 ): Promise<AskTipResult> {
+  // Send only the recent turns so follow-on questions have context;
+  // the wheel caps this hard regardless of what we send.
+  const recent = history.slice(-6).map((t) => ({
+    question: t.question,
+    answer: t.answer,
+  }));
   return callTool<AskTipResult>("ask_tip", {
     entry_id: entryId,
     question,
+    history: recent.length ? JSON.stringify(recent) : "",
   });
 }
 

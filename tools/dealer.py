@@ -175,8 +175,78 @@ async def deal_scenario(
     return {"entry_id": entry_id, "scenario": scenario}
 
 
-async def ask_tip(npub: str, entry_id: str, question: str) -> dict[str, Any]:
-    """Return a non-spoiler Socratic hint for the open journal entry."""
+# A clue question is a sentence or two. Anything much longer is either
+# noise or an attempt to smuggle a bulk prompt onto the operator's
+# Anthropic account behind the small clue fee — cap it before we ever
+# pay for input tokens. The TIP_SYSTEM prompt is the second line of
+# defense for off-topic (but short) questions.
+MAX_TIP_QUESTION_CHARS = 500
+
+# The clue desk carries conversation history so follow-on questions
+# ("do you mean XYZ?") have context. The FE supplies that transcript,
+# and tool input is adversarial, so we never trust its size: keep only
+# the most recent turns and clip each field. This keeps follow-ups
+# working without letting the history become a smuggling channel for a
+# bulk prompt on the operator's account.
+MAX_TIP_HISTORY_TURNS = 6
+MAX_TIP_HISTORY_FIELD_CHARS = 800
+
+
+def _coerce_history(history: Any) -> list[dict[str, str]]:
+    """Normalize client-supplied tip history into capped {question, answer} turns.
+
+    ``history`` arrives as a JSON-encoded array (the FE encodes it) or,
+    defensively, an already-decoded list. Anything malformed degrades to
+    "no history" rather than erroring — a missing transcript just means a
+    context-free clue, not a failed request.
+    """
+    if isinstance(history, str):
+        history = history.strip()
+        if not history:
+            return []
+        try:
+            import json
+
+            history = json.loads(history)
+        except (ValueError, TypeError):
+            return []
+    if not isinstance(history, list):
+        return []
+    turns: list[dict[str, str]] = []
+    for item in history[-MAX_TIP_HISTORY_TURNS:]:
+        if not isinstance(item, dict):
+            continue
+        q = str(item.get("question") or "").strip()[:MAX_TIP_HISTORY_FIELD_CHARS]
+        a = str(item.get("answer") or "").strip()[:MAX_TIP_HISTORY_FIELD_CHARS]
+        if q or a:
+            turns.append({"question": q, "answer": a})
+    return turns
+
+
+async def ask_tip(
+    npub: str,
+    entry_id: str,
+    question: str,
+    history: Any = None,
+) -> dict[str, Any]:
+    """Return a non-spoiler Socratic hint for the open journal entry.
+
+    Scope is the options scenario only: off-topic questions are turned
+    away cheaply so the clue desk can't be used as a general LLM on the
+    operator's account. ``history`` is the prior turns of this clue
+    conversation so follow-on questions have context.
+    """
+    q = (question or "").strip()
+    if not q:
+        return {"tip": "Ask a question about this scenario to get a clue."}
+    if len(q) > MAX_TIP_QUESTION_CHARS:
+        return {
+            "tip": (
+                "Whoa — that's a long message for a quick clue. I already have "
+                "our clue conversation here, so there's no need to paste it back. "
+                "Just ask your new question briefly and clearly."
+            )
+        }
     entry = await journal.get_entry(npub, entry_id)
     if not entry:
         return {"error": f"journal entry {entry_id} not found for this patron"}
@@ -191,10 +261,25 @@ async def ask_tip(npub: str, entry_id: str, question: str) -> dict[str, Any]:
         "iv_30d": (scenario.get("asset") or {}).get("iv_30d"),
         "spot": (scenario.get("asset") or {}).get("spot"),
     }
+    transcript = ""
+    turns = _coerce_history(history)
+    if turns:
+        lines: list[str] = []
+        for t in turns:
+            if t["question"]:
+                lines.append(f"Trainee: {t['question']}")
+            if t["answer"]:
+                lines.append(f"Clue desk: {t['answer']}")
+        transcript = (
+            "Earlier in THIS clue conversation (most recent last):\n"
+            + "\n".join(lines)
+            + "\n\n"
+        )
     prompt = (
         "The trainee has seen ONLY these scenario fields:\n"
         f"{visible}\n\n"
-        f"Their question: {question}\n\n"
+        f"{transcript}"
+        f"Their new question: {q}\n\n"
         "Offer ONE Socratic nudge. Under 80 words. No specific strikes, structures, or directional bias."
     )
     try:

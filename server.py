@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.20"
+__version__ = "0.1.21"
 
 logger = logging.getLogger(__name__)
 
@@ -367,12 +367,20 @@ async def deal_scenario(
 async def ask_tip(
     entry_id: str,
     question: str,
+    history: str = "",
     npub: NpubField = "",
     proof: str = "",
 ) -> dict[str, Any]:
-    """Get a non-spoiler Socratic hint for an open journal entry."""
+    """Get a non-spoiler Socratic hint for an open journal entry.
+
+    history is an optional JSON-encoded array of prior {question, answer}
+    turns from this clue conversation, so follow-on questions have
+    context. The wheel caps it hard, so oversupplying gains nothing.
+    """
     from tools.dealer import ask_tip as _impl
-    return await _impl(npub=npub, entry_id=entry_id, question=question)
+    return await _impl(
+        npub=npub, entry_id=entry_id, question=question, history=history
+    )
 
 
 @tool

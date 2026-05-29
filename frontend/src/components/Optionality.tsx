@@ -932,7 +932,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     setError("");
     setTipAsking(true);
     try {
-      const res = await askTip(entryId, q);
+      const res = await askTip(entryId, q, tips);
       if (res.error) throw new Error(res.error);
       const answerText = res.tip || "";
       setTips((prev) => [...prev, { ts: Date.now(), question: q, answer: answerText }]);
@@ -1758,7 +1758,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             Ask for a Clue
                           </div>
                           <div style={{ fontSize: 12, color: "var(--ink-faint)", marginBottom: 8, fontStyle: "italic" }}>
-                            Socratic, non-spoiler. e.g. <span style={{ color: "var(--ink-soft)" }}>"What do you mean by Call Skew?"</span>
+                            Ask what you like for a small fee. e.g. <span style={{ color: "var(--ink-soft)" }}>"What do you mean by Call Skew?"</span>
                           </div>
 
                           {tips.length > 0 && (
