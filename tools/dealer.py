@@ -280,11 +280,18 @@ async def ask_tip(
         f"{visible}\n\n"
         f"{transcript}"
         f"Their new question: {q}\n\n"
-        "Offer ONE Socratic nudge. Under 80 words. No specific strikes, structures, or directional bias."
+        "Answer per your classification rules (educational / tactical / out-of-scope). "
+        "No specific strikes, structures, or directional bias for THIS scenario."
     )
     try:
+        # Web search is available so a genuinely curious question can be
+        # answered against a current, authoritative source — and so the
+        # desk can recommend a real link it actually found. max_tokens is
+        # raised to leave room for the search round-trip plus a short
+        # answer; the prompt still keeps the clue itself brief.
         text = await call_claude(
-            prompt, prompts.TIP_SYSTEM, max_tokens=700,
+            prompt, prompts.TIP_SYSTEM, max_tokens=1500,
+            enable_web_search=True,
             npub=npub, tool="ask_tip",
         )
     except ClaudeError as e:

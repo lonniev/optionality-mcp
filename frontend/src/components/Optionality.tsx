@@ -694,6 +694,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Ask-a-Tip Q&A thread for the open scenario. Persisted with the
   // active session so a reload preserves the conversation context.
   const [tips, setTips] = useState<TipExchange[]>([]);
+  const [tipsCopied, setTipsCopied] = useState<boolean>(false);
   const [tipQuestion, setTipQuestion] = useState<string>("");
   const [tipAsking, setTipAsking] = useState<boolean>(false);
   /// Scroll container for the clue Q&A history. Capped at min(40vh, 360px)
@@ -943,6 +944,58 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     } finally {
       setTipAsking(false);
     }
+  }
+
+  // Copy the full scenario briefing + clue conversation to the clipboard
+  // so the trainee can continue in their OWN Claude.ai session. The desk
+  // can't push a thread into someone's account — this is the honest
+  // handoff. We serialize the scenario exactly as the trainee sees it on
+  // the card; the grader's answer key (relevant_facts / red_herrings /
+  // hidden_considerations) is the unrevealed solution and is left out.
+  function handleCopyTips(): void {
+    if (tips.length === 0) return;
+    const lines: string[] = ["Optionality — options trading scenario"];
+    if (scenario) {
+      const a = scenario.asset;
+      lines.push("");
+      lines.push("— The scenario (mine — I purchased this drill) —");
+      if (scenario.date_context) lines.push(`Date context: ${scenario.date_context}`);
+      if (a) {
+        const bits = [
+          a.ticker && a.name ? `${a.ticker} — ${a.name}` : a.ticker || a.name,
+          a.spot != null ? `spot ${a.spot}` : "",
+          a.iv_30d != null ? `IV(30d) ${a.iv_30d}` : "",
+          a.iv_rank != null ? `IV rank ${a.iv_rank}` : "",
+        ].filter(Boolean);
+        if (bits.length) lines.push(`Asset: ${bits.join(" · ")}`);
+        if (a.skew_note) lines.push(`Skew note: ${a.skew_note}`);
+      }
+      if (scenario.macro_backdrop) lines.push(`Macro backdrop: ${scenario.macro_backdrop}`);
+      if (scenario.catalyst) lines.push(`Catalyst: ${scenario.catalyst}`);
+      if (scenario.key_levels) lines.push(`Key levels: ${scenario.key_levels}`);
+      if (scenario.constraints) lines.push(`Constraints: ${scenario.constraints}`);
+      if (scenario.sector) lines.push(`Sector focus: ${scenario.sector}`);
+      if (scenario.max_loss_usd != null)
+        lines.push(`Max-loss budget: $${scenario.max_loss_usd.toLocaleString()}`);
+      if (Array.isArray(scenario.sources) && scenario.sources.length > 0)
+        lines.push(`Sources: ${scenario.sources.join("; ")}`);
+      if (scenario.the_question) lines.push(`The question: ${scenario.the_question}`);
+    }
+    lines.push("");
+    lines.push("— Clue conversation —");
+    for (const t of tips) {
+      lines.push(`Q: ${t.question}`);
+      lines.push(`A: ${t.answer}`);
+      lines.push("");
+    }
+    lines.push("(Paste this into your own Claude.ai session to keep exploring.)");
+    void navigator.clipboard
+      .writeText(lines.join("\n"))
+      .then(() => {
+        setTipsCopied(true);
+        window.setTimeout(() => setTipsCopied(false), 2000);
+      })
+      .catch(() => {});
   }
 
   const JOURNAL_PAGE_SIZE = 25;
@@ -1807,6 +1860,15 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             >
                               {tipAsking ? "Asking…" : "Ask for Clue"}
                             </button>
+                            {tips.length > 0 && (
+                              <button
+                                className="btn btn-ghost"
+                                onClick={handleCopyTips}
+                                title="Copy this clue conversation to your clipboard, to continue in your own Claude.ai session"
+                              >
+                                {tipsCopied ? "Copied ✓" : "Copy conversation"}
+                              </button>
+                            )}
                           </div>
                         </div>
                       </>
