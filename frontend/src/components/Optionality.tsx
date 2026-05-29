@@ -679,6 +679,18 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // the patron can see "Saved 2s ago" feedback.
   const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
   const [savingDraft, setSavingDraft] = useState<boolean>(false);
+  // Gates the "Discard" confirmation — the scenario fee is already
+  // spent on external LLM processing and can't be refunded, so we make
+  // the patron acknowledge that before throwing the scenario away.
+  const [confirmingDiscard, setConfirmingDiscard] = useState<boolean>(false);
+  useEffect(() => {
+    if (!confirmingDiscard) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setConfirmingDiscard(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmingDiscard]);
   // Ask-a-Tip Q&A thread for the open scenario. Persisted with the
   // active session so a reload preserves the conversation context.
   const [tips, setTips] = useState<TipExchange[]>([]);
@@ -1715,7 +1727,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           placeholder="e.g. Sell the 30-day 95/90 put spread for 1.20 credit, sized to risk 0.5% of NAV. The Fed's hawkish hold puts a floor under the dollar but the equity is bid on insider buying; collecting premium below the 200d feels asymmetric…"
                         />
                         <div className="actions">
-                          <button className="btn btn-ghost" onClick={nextRound}>Discard, next scenario</button>
+                          <button className="btn btn-ghost" onClick={() => setConfirmingDiscard(true)}>Discard</button>
                           <button
                             className="btn btn-ghost"
                             onClick={handleSaveDraft}
@@ -2543,6 +2555,60 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
           escrowed={escrowed}
           onClose={() => setDmTarget(null)}
         />
+      )}
+
+      {confirmingDiscard && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.65)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: 20,
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+          }}
+          onClick={() => setConfirmingDiscard(false)}
+        >
+          <div
+            style={{
+              background: "var(--panel)",
+              border: "1px solid var(--amber)",
+              boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
+              padding: "26px 28px",
+              width: "100%",
+              maxWidth: 460,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 22, color: "var(--amber-bright)", marginBottom: 14 }}>
+              Discard this scenario?
+            </div>
+            <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.6, marginBottom: 22 }}>
+              Discarding allows you to choose a new scenario. Unfortunately, because each
+              scenario involves monetized external LLM processing, your fee for the scenario you
+              have cannot be refunded. Are you sure you want to give up on this scenario and
+              choose another?
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button className="btn btn-ghost" onClick={() => setConfirmingDiscard(false)}>
+                Keep this scenario
+              </button>
+              <button
+                className="btn"
+                onClick={() => {
+                  setConfirmingDiscard(false);
+                  nextRound();
+                }}
+              >
+                Discard &amp; choose another
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
