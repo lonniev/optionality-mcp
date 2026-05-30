@@ -230,44 +230,53 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
         {prices && prices !== -1 ? (
           <>
             <p className="briefing-prose">
-              Each tool call costs Bitcoin Lightning sats — pulled from this operator's
-              live pricing model, not a marketing brochure. Right now:
+              Optionality™ uses fair usage-based pricing. Don't use it and
+              you pay nothing — there's no subscription, and no KYC. Pricing
+              tracks what each scenario actually costs to compose and grade:
+              simpler ones use fewer LLM tokens; more demanding ones — live
+              tape with web-search grounding, sovereign-level difficulty —
+              use more. Even the most complex scenario carries a fee of only
+              a few hundred sats.
+            </p>
+            <p className="briefing-prose">
+              The operator sets every multiplier directly, and you can
+              inspect each one yourself via the <b>Usage</b> tab once you
+              have a balance. Right now, pulled from the live pricing
+              model — not a marketing brochure:
             </p>
             <ul className="briefing-prose" style={{ paddingLeft: 22, lineHeight: 1.7, marginBottom: 12 }}>
               <li>
-                Cheapest opportunity — fiction × apprentice:{" "}
+                Simplest scenario (fiction × apprentice):{" "}
                 <b>{prices.cheap} sat{prices.cheap === 1 ? "" : "s"}</b>
               </li>
               <li>
-                Top of the curve — live tape × sovereign with full web-search grounding:{" "}
+                Most demanding scenario (live tape × sovereign with full
+                web-search grounding):{" "}
                 <b>{prices.expensive} sat{prices.expensive === 1 ? "" : "s"}</b>
               </li>
               <li>
-                Pitch review (the judge LLM call):{" "}
+                Pitch audit:{" "}
                 <b>{prices.pitch} sat{prices.pitch === 1 ? "" : "s"}</b>
               </li>
             </ul>
-            <p className="briefing-prose">
-              No subscription, no KYC, no platform skim — the operator sets every
-              multiplier directly and you can inspect them yourself via the{" "}
-              <b>Usage</b> tab once you have a balance.
-            </p>
             {startSats !== null && startCents !== null && (
               <p className="briefing-prose">
-                <b>To start playing: about {startCents}¢ in BTC.</b> That's roughly{" "}
-                {startSats.toLocaleString()} sats — enough for ~30 graded rounds at
-                mid-difficulty. Top Off buys sats via a Lightning invoice; Wallet
-                of Satoshi, Phoenix, Mutiny, or any Lightning wallet works.
+                A session of ~30 graded rounds at mid-difficulty runs
+                roughly {startSats.toLocaleString()} sats — about{" "}
+                {startCents}¢ in BTC. Top Off buys sats via a Lightning
+                invoice; Wallet of Satoshi, Phoenix, Mutiny, or any
+                Lightning wallet works.
               </p>
             )}
           </>
         ) : (
           <p className="briefing-prose">
-            Each tool call costs Bitcoin Lightning sats — pulled from this operator's
-            live pricing model. Difficulty and mode scale the toll; you can inspect
-            every multiplier on the <b>Usage</b> tab once you have a balance.
-            Top Off buys sats via a Lightning invoice — Wallet of Satoshi, Phoenix,
-            Mutiny, or any Lightning wallet works. {prices === -1 && (
+            Optionality™ uses fair usage-based pricing — don't use it and
+            you pay nothing. Difficulty and mode scale the toll; you can
+            inspect every multiplier on the <b>Usage</b> tab once you have
+            a balance. Top Off buys sats via a Lightning invoice — Wallet
+            of Satoshi, Phoenix, Mutiny, or any Lightning wallet works.{" "}
+            {prices === -1 && (
               <span style={{ color: "var(--ink-faint)", fontStyle: "italic" }}>
                 (Couldn't reach the pricing model just now to quote specific numbers.)
               </span>
