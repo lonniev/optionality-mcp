@@ -444,7 +444,7 @@ const styles = `
     margin: 12px 0 18px;
   }
   .data-row { display: flex; flex-wrap: wrap; gap: 24px; margin: 14px 0;}
-  .data-cell { font-size: 12px; text-align: center;}
+  .data-cell { font-size: 12px;}
   .data-cell label { display:block; font-size:10px; color: var(--ink-faint); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:2px;}
   .data-cell b { font-family: 'Fraunces',serif; font-size:18px; font-weight:500; color: var(--amber-bright);}
 
@@ -1759,7 +1759,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       onClick={() => openZoom("Macro Backdrop", scenario.macro_backdrop)}
                     >{scenario.macro_backdrop}</div>
 
-                    <div className="data-row">
+                    <div className="data-row" style={{ justifyContent: "center" }}>
                       <div className="data-cell"><label>Spot</label><b>${scenario.asset?.spot}</b></div>
                       <div className="data-cell"><label>IV 30d</label><b>{scenario.asset?.iv_30d}%</b></div>
                       <div className="data-cell"><label>IV Rank</label><b>{scenario.asset?.iv_rank}</b></div>
