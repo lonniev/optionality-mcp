@@ -1815,60 +1815,109 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           </div>
 
                           {tips.length > 0 && (
-                            <div
-                              ref={tipsScrollRef}
-                              style={{
-                                // Cap at ~40% of viewport height (or 360px,
-                                // whichever is smaller) so a long Q&A
-                                // history doesn't push the textarea and
-                                // Pitch button below the fold on tall
-                                // sessions. Below the cap, scroll
-                                // internally with newest clue at the
-                                // bottom (auto-scrolled into view).
-                                maxHeight: "min(40vh, 360px)",
-                                overflowY: "auto",
-                                marginBottom: 10,
-                                paddingRight: 4,
-                                scrollBehavior: "smooth",
-                              }}
-                            >
-                              {tips.map((t, i) => (
-                                <div key={i} style={{ marginBottom: 10, padding: "8px 10px", background: "var(--bg-soft)", borderLeft: "2px solid var(--bronze)" }}>
-                                  <div style={{ fontSize: 12, color: "var(--ink-soft)", fontStyle: "italic", marginBottom: 4 }}>
-                                    Q · {t.question}
+                            <>
+                              {/* Header bar above the scroll region: share
+                                  glyph (iOS outbox/share) copies the clue
+                                  conversation to the clipboard so the trainee
+                                  can continue it in their own Claude.ai
+                                  session. Icon-only by design — the title
+                                  carries the explanation on hover. */}
+                              <div
+                                style={{
+                                  display: "flex",
+                                  justifyContent: "flex-end",
+                                  alignItems: "center",
+                                  marginBottom: 4,
+                                }}
+                              >
+                                <button
+                                  type="button"
+                                  onClick={handleCopyTips}
+                                  title={tipsCopied
+                                    ? "Copied to clipboard"
+                                    : "Copy this clue conversation to your clipboard, to continue in your own Claude.ai session"}
+                                  aria-label="Copy conversation to clipboard"
+                                  style={{
+                                    background: "transparent",
+                                    border: "none",
+                                    padding: "2px 6px",
+                                    cursor: "pointer",
+                                    fontSize: 16,
+                                    lineHeight: 1,
+                                    color: tipsCopied ? "var(--jade)" : "var(--ink-soft)",
+                                  }}
+                                >
+                                  {tipsCopied ? "✓" : "📤"}
+                                </button>
+                              </div>
+                              <div
+                                ref={tipsScrollRef}
+                                style={{
+                                  // Cap at ~40% of viewport height (or 360px,
+                                  // whichever is smaller) so a long Q&A
+                                  // history doesn't push the textarea and
+                                  // Pitch button below the fold on tall
+                                  // sessions. Below the cap, scroll
+                                  // internally with newest clue at the
+                                  // bottom (auto-scrolled into view).
+                                  maxHeight: "min(40vh, 360px)",
+                                  overflowY: "auto",
+                                  marginBottom: 10,
+                                  paddingRight: 4,
+                                  scrollBehavior: "smooth",
+                                }}
+                              >
+                                {tips.map((t, i) => (
+                                  <div key={i} style={{ marginBottom: 10, padding: "8px 10px", background: "var(--bg-soft)", borderLeft: "2px solid var(--bronze)" }}>
+                                    <div style={{ fontSize: 12, color: "var(--ink-soft)", fontStyle: "italic", marginBottom: 4 }}>
+                                      Q · {t.question}
+                                    </div>
+                                    <RichText
+                                      text={t.answer}
+                                      style={{ fontSize: 13, color: "var(--ink)" }}
+                                    />
                                   </div>
-                                  <RichText
-                                    text={t.answer}
-                                    style={{ fontSize: 13, color: "var(--ink)" }}
-                                  />
-                                </div>
-                              ))}
-                            </div>
+                                ))}
+                              </div>
+                            </>
                           )}
 
-                          <textarea
-                            value={tipQuestion}
-                            onChange={(e) => setTipQuestion(e.target.value)}
-                            placeholder="Type your question…"
-                            style={{ minHeight: 60 }}
-                          />
-                          <div className="actions">
+                          {/* Question composer: textarea with an inset send
+                              button. Paper plane = send; flying money signals
+                              the toll. Icon-only — the title carries the
+                              explanation on hover. */}
+                          <div style={{ position: "relative" }}>
+                            <textarea
+                              value={tipQuestion}
+                              onChange={(e) => setTipQuestion(e.target.value)}
+                              placeholder="Type your question…"
+                              style={{ minHeight: 60, paddingRight: 56 }}
+                            />
                             <button
-                              className="btn btn-ghost"
+                              type="button"
                               onClick={handleAskTip}
                               disabled={tipAsking || !tipQuestion.trim()}
+                              title={tipAsking
+                                ? "Asking the clue desk…"
+                                : "Send this question — small clue fee applies"}
+                              aria-label="Send clue question"
+                              style={{
+                                position: "absolute",
+                                right: 8,
+                                bottom: 8,
+                                background: "transparent",
+                                border: "none",
+                                padding: "4px 6px",
+                                cursor: tipAsking || !tipQuestion.trim() ? "not-allowed" : "pointer",
+                                opacity: tipAsking || !tipQuestion.trim() ? 0.4 : 1,
+                                fontSize: 18,
+                                lineHeight: 1,
+                                letterSpacing: 0,
+                                whiteSpace: "nowrap",
+                              }}
                             >
-                              {tipAsking ? "Asking…" : "Ask for Clue"}
+                              {tipAsking ? "…" : "💸✈"}
                             </button>
-                            {tips.length > 0 && (
-                              <button
-                                className="btn btn-ghost"
-                                onClick={handleCopyTips}
-                                title="Copy this clue conversation to your clipboard, to continue in your own Claude.ai session"
-                              >
-                                {tipsCopied ? "Copied ✓" : "Copy conversation"}
-                              </button>
-                            )}
                           </div>
                         </div>
                       </>
