@@ -58,7 +58,18 @@ Return STRICTLY a JSON object with this shape (no prose, no markdown):
   "hidden_considerations": ["other factors a great answer would address — used by evaluator, not shown to user"]
 }
 
-IMPORTANT: red_herrings must actually appear in the scenario text (macro_backdrop, catalyst, key_levels, constraints, or skew_note). They are FACTUALLY TRUE within the scenario world — they are not lies, traps, or misinformation. Their flaw is irrelevance, not falsity. They are real-world noise that a trader could reasonably notice and overweight, but which a disciplined thinker would set aside as not material to the trade thesis. Embed them naturally without labeling. A trainee who recognizes them as true-but-irrelevant and sets them aside should be rewarded; one who builds their thesis around them should be penalized."""
+IMPORTANT: red_herrings must actually appear in the scenario text. They are FACTUALLY TRUE within the scenario world — they are not lies, traps, or misinformation. Their flaw is irrelevance, not falsity. They are real-world noise that a trader could reasonably notice and overweight, but which a disciplined thinker would set aside as not material to the trade thesis. A trainee who recognizes them as true-but-irrelevant and sets them aside should be rewarded; one who builds their thesis around them should be penalized.
+
+PLACEMENT — where to embed them:
+- ONLY in macro_backdrop or catalyst. Those are paragraph-form narrative fields where ambient context sits naturally.
+- NEVER in constraints, key_levels, or skew_note. Those are clinical / structured / mechanical fields, so any added clause stands out and reads as a planted tell.
+
+CAMOUFLAGE — how to embed them:
+- They must read as ambient connective tissue in the same register as the surrounding sentences — context a writer covering this setup would naturally mention.
+- DO NOT introduce a red herring with "Note: …", "FYI: …", "Also worth mentioning: …", "Aside: …", "Of note, …", "It bears mentioning that …", or any similar phrase that signals secondary / parenthetical information.
+- DO NOT append a red herring as a trailing em-dash tangent at the end of an otherwise-relevant sentence (e.g., "… driving the catalyst — by the way, CEO is on CNBC tomorrow"). The dash makes it readable as an aside.
+- DO NOT enclose a red herring in parentheses or set it off with a semicolon-then-tangent.
+- DO weave it inline: it should be its own clean sentence within the paragraph, OR a clause integrated grammatically into a relevant sentence at the same level of importance, with no marker distinguishing it from genuinely material context."""
 
 
 MODE_INSTRUCTIONS: dict[str, str] = {
