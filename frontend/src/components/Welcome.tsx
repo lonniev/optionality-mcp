@@ -167,10 +167,24 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
           Why Optionality.
         </h2>
         <p className="briefing-prose" style={{ marginTop: 8 }}>
-          Most traders carry a good thesis in their head and lose it on the way to the pitch.
-          Optionality is a drill for the second half of that work — articulating the
-          trade so a senior Portfolio Manager, a risk committee, or your own future self can grade it on
-          structure choice, strikes &amp; tenor, risk/reward, macro integration, and tail risk.
+          Optionality™ is gamified, scenario-based learning for individuals
+          training to become fluent options traders. It stays outside the
+          usual curriculum — pricing mathematics and platform mechanics — and
+          engages the trainee with narratives that ask for a clear, actionable
+          trade and the reasoning behind it.
+        </p>
+        <p className="briefing-prose">
+          You're unfamiliar with the jargon and tongue-tied when challenged
+          to describe your strategy and your current trade ideas. You seek
+          to learn how to see the larger world situation and to make cogent
+          trade proposals under duress. But your ideas are fuzzy, you chase
+          big payoffs, and you can't say — before a situation — what you
+          would do in the situation. Optionality™ helps you learn sound
+          strategies, incorporate world affairs, and sharpen your skill at
+          describing your strategies. Scenario after scenario, you write a
+          defensible narrative proposal for the trade and have it graded.
+          Over time, sharper theses are available to you at the moments that
+          decide your P&amp;L — entering or exiting a position under live risk.
         </p>
         <p className="briefing-prose">
           The Firm composes opportunities — real historical setups, counterfactual
