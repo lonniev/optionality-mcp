@@ -198,7 +198,7 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
       })()}
 
       <div className="panel">
-        <span className="panel-label">How it's played</span>
+        <span className="panel-label">Game Play</span>
         <h3 className="serif">A round</h3>
         <ol className="briefing-prose" style={{ paddingLeft: 18, lineHeight: 1.8 }}>
           <li>
