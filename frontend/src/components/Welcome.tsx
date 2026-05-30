@@ -181,19 +181,17 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
           big payoffs, and you can't say — before a situation — what you
           would do in the situation. Optionality™ helps you learn sound
           strategies, incorporate world affairs, and sharpen your skill at
-          describing your strategies. Scenario after scenario, you write a
-          defensible narrative proposal for the trade and have it graded.
-          Over time, sharper theses are available to you at the moments that
-          decide your P&amp;L — entering or exiting a position under live risk.
+          describing your strategies.
         </p>
         <p className="briefing-prose">
-          The Firm composes opportunities — real historical setups, counterfactual
-          regimes, or live tape with web search — and asks you the question every desk
-          asks: <i>What is your trade, and why?</i> You pitch it in plain English. A
-          second LLM, playing the role of senior Portfolio Manager, grades the pitch and returns the
-          structured legs, the alternative trade, and the deeper context worth
-          internalizing. Sometimes the best pitch is to <i>not</i> enter the trade —
-          a deliberate stand-aside scores higher than a forced answer.
+          Optionality™, in the role of your investment-house Firm, uses
+          modern AI services to present you with challenging simulated
+          world scenarios that offer you a chance to think — and then to
+          present your trade. The Firm's auditors objectively grade your
+          proposal on structure choice, strikes &amp; tenor, risk/reward,
+          macro integration, and tail risk — feedback meant to help you
+          improve your narrative proposals. Over time, you become able to
+          rapidly and effectively conceive, present, and execute wiser trades.
         </p>
           </div>
         );
