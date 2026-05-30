@@ -444,7 +444,7 @@ const styles = `
     margin: 12px 0 18px;
   }
   .data-row { display: flex; flex-wrap: wrap; gap: 24px; margin: 14px 0;}
-  .data-cell { font-size: 12px;}
+  .data-cell { font-size: 12px; text-align: center;}
   .data-cell label { display:block; font-size:10px; color: var(--ink-faint); letter-spacing:0.15em; text-transform:uppercase; margin-bottom:2px;}
   .data-cell b { font-family: 'Fraunces',serif; font-size:18px; font-weight:500; color: var(--amber-bright);}
 
