@@ -683,6 +683,42 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // spent on external LLM processing and can't be refunded, so we make
   // the patron acknowledge that before throwing the scenario away.
   const [confirmingDiscard, setConfirmingDiscard] = useState<boolean>(false);
+
+  // Tap-to-zoom: any text region on the scenario card can be opened in a
+  // nearly full-screen modal at a much larger font, so older eyes don't
+  // have to squint at the briefing fine print. The zoomed text remains
+  // copyable; closing returns to the card untouched.
+  const [zoomedText, setZoomedText] = useState<{ label: string; content: string } | null>(null);
+  const [zoomedCopied, setZoomedCopied] = useState<boolean>(false);
+  useEffect(() => {
+    if (!zoomedText) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setZoomedText(null); };
+    window.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [zoomedText]);
+  function openZoom(label: string, content: string | undefined | null): void {
+    const text = (content ?? "").toString().trim();
+    if (!text) return;
+    setZoomedCopied(false);
+    setZoomedText({ label, content: text });
+  }
+  function handleCopyZoomed(): void {
+    if (!zoomedText) return;
+    void navigator.clipboard
+      .writeText(`${zoomedText.label}\n\n${zoomedText.content}`)
+      .then(() => {
+        setZoomedCopied(true);
+        window.setTimeout(() => setZoomedCopied(false), 2000);
+      })
+      .catch(() => {});
+  }
+  const zoomableStyle: React.CSSProperties = { cursor: "zoom-in" };
+  const zoomableTitle = "Tap to read this in a larger font";
   useEffect(() => {
     if (!confirmingDiscard) return;
     const onKey = (e: KeyboardEvent) => {
@@ -1716,7 +1752,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   <div>
                     <div className="scenario-meta">{scenario.date_context}</div>
                     <h2 className="serif">{scenario.asset?.name}</h2>
-                    <div className="scenario-quote">{scenario.macro_backdrop}</div>
+                    <div
+                      className="scenario-quote"
+                      style={zoomableStyle}
+                      title={zoomableTitle}
+                      onClick={() => openZoom("Macro Backdrop", scenario.macro_backdrop)}
+                    >{scenario.macro_backdrop}</div>
 
                     <div className="data-row">
                       <div className="data-cell"><label>Spot</label><b>${scenario.asset?.spot}</b></div>
@@ -1724,7 +1765,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       <div className="data-cell"><label>IV Rank</label><b>{scenario.asset?.iv_rank}</b></div>
                     </div>
                     {scenario.asset?.skew_note && (
-                      <div style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 12 }}>
+                      <div
+                        style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 12, cursor: "zoom-in" }}
+                        title={zoomableTitle}
+                        onClick={() => openZoom("Skew Note", scenario.asset?.skew_note)}
+                      >
                         <span style={{ color: "var(--ink-faint)", textTransform: "uppercase", letterSpacing: "0.15em", fontSize: 10 }}>Skew · </span>
                         {scenario.asset.skew_note}
                       </div>
@@ -1741,13 +1786,25 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     )}
 
                     <h3 className="serif">Catalyst</h3>
-                    <div style={{ color: "var(--ink-soft)", fontSize: 13 }}>{scenario.catalyst}</div>
+                    <div
+                      style={{ color: "var(--ink-soft)", fontSize: 13, cursor: "zoom-in" }}
+                      title={zoomableTitle}
+                      onClick={() => openZoom("Catalyst", scenario.catalyst)}
+                    >{scenario.catalyst}</div>
 
                     <h3 className="serif">Key Levels</h3>
-                    <div style={{ color: "var(--ink-soft)", fontSize: 13 }}>{scenario.key_levels}</div>
+                    <div
+                      style={{ color: "var(--ink-soft)", fontSize: 13, cursor: "zoom-in" }}
+                      title={zoomableTitle}
+                      onClick={() => openZoom("Key Levels", scenario.key_levels)}
+                    >{scenario.key_levels}</div>
 
                     <h3 className="serif">Constraints</h3>
-                    <div style={{ color: "var(--ink-soft)", fontSize: 13 }}>{scenario.constraints}</div>
+                    <div
+                      style={{ color: "var(--ink-soft)", fontSize: 13, cursor: "zoom-in" }}
+                      title={zoomableTitle}
+                      onClick={() => openZoom("Constraints", scenario.constraints)}
+                    >{scenario.constraints}</div>
 
                     {Array.isArray(scenario.sources) && scenario.sources.length > 0 && (
                       <>
@@ -1769,7 +1826,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   {/* RIGHT — the question + answer (or empty if already judged
                       so the evaluation panel below takes over) */}
                   <div className="scenario-prompt">
-                    <div className="question">→ {scenario.the_question}</div>
+                    <div
+                      className="question"
+                      style={zoomableStyle}
+                      title={zoomableTitle}
+                      onClick={() => openZoom("The Question", scenario.the_question)}
+                    >→ {scenario.the_question}</div>
 
                     {!evaluation && (
                       <>
@@ -2717,6 +2779,109 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               >
                 Discard &amp; choose another
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {zoomedText && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.72)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: 16,
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+          }}
+          onClick={() => setZoomedText(null)}
+        >
+          <div
+            style={{
+              background: "var(--panel)",
+              border: "1px solid var(--amber)",
+              boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
+              width: "min(960px, 96vw)",
+              maxHeight: "92vh",
+              display: "flex",
+              flexDirection: "column",
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                padding: "14px 22px",
+                borderBottom: "1px solid var(--panel-edge)",
+                gap: 12,
+              }}
+            >
+              <div
+                style={{
+                  color: "var(--amber)",
+                  fontSize: 11,
+                  letterSpacing: "0.3em",
+                  textTransform: "uppercase",
+                }}
+              >
+                {zoomedText.label}
+              </div>
+              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
+                <button
+                  type="button"
+                  onClick={handleCopyZoomed}
+                  title={zoomedCopied ? "Copied to clipboard" : "Copy this text to your clipboard"}
+                  aria-label="Copy text to clipboard"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    padding: "4px 8px",
+                    cursor: "pointer",
+                    fontSize: 18,
+                    lineHeight: 1,
+                    color: zoomedCopied ? "var(--jade)" : "var(--ink-soft)",
+                  }}
+                >
+                  {zoomedCopied ? "✓" : "📋"}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setZoomedText(null)}
+                  title="Close (Esc)"
+                  aria-label="Close"
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    padding: "4px 10px",
+                    cursor: "pointer",
+                    fontSize: 22,
+                    lineHeight: 1,
+                    color: "var(--ink-soft)",
+                  }}
+                >
+                  ✕
+                </button>
+              </div>
+            </div>
+            <div
+              style={{
+                padding: "22px 28px",
+                overflowY: "auto",
+                fontSize: 22,
+                lineHeight: 1.65,
+                color: "var(--ink)",
+                fontFamily: "'Fraunces', Georgia, serif",
+                userSelect: "text",
+                WebkitUserSelect: "text",
+              }}
+            >
+              <RichText text={zoomedText.content} />
             </div>
           </div>
         </div>
