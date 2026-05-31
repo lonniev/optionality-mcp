@@ -132,7 +132,17 @@ export default function SkewGuide({ ticker, name, spot, iv30d, iv25dPut, iv25dCa
   const yIV = (v: number) => M.t + ((IVmax - v) / (IVmax - IVmin)) * PLOT_H;
   const clampIV = (v: number) => Math.max(IVmin, Math.min(IVmax, v));
 
-  const fmtK = (k: number) => (step < 1 ? k.toFixed(1) : String(Math.round(k)));
+  /// Minimum-precision strike/width formatter. Shows just enough
+  /// decimals to be honest: 0.25 stays "0.25" (not "0.3"), 0.50
+  /// renders as "0.5", whole integers stay "39". The original
+  /// `(step < 1 ? k.toFixed(1) : …)` silently rounded $0.25-wide
+  /// spreads to "$0.3" — a width that doesn't exist on real chains.
+  const fmtK = (k: number) => {
+    if (Math.abs(k - Math.round(k)) < 1e-6) return String(Math.round(k));
+    const oneDec = k.toFixed(1);
+    if (Math.abs(parseFloat(oneDec) - k) < 1e-6) return oneDec;
+    return k.toFixed(2);
+  };
 
   // ── gridlines ──────────────────────────────────────────────────
   const ivLines: number[] = [];
