@@ -1,7 +1,16 @@
 // Black-Scholes pricing and payoff curves for the Optionality drill.
 // Math preserved verbatim from the canonical artifact — do not redesign.
+//
+// Server-side: the live game's option chain comes from
+// tools/options_chain.py — one source of truth feeds both the chain
+// shown to the trainee and the chain the judge prompt sees, so they
+// can't drift onto different mental models.
+//
+// FE-side (this file): used for the risk-profile payoff curves and
+// (since v0.1.25) for computing the option chain shown on the static
+// Sample Assessment, which has no judge to keep symmetric with.
 
-import type { LegType, TradeLeg } from "../types";
+import type { LegType, OptionChainRow, TradeLeg } from "../types";
 
 export interface PayoffPoint {
   S: number;
@@ -58,6 +67,102 @@ export function payoffCurve(
     out.push({ S, pl });
   }
   return out;
+}
+
+/// Black-Scholes delta — calls in (0, 1), puts in (-1, 0).
+export function bsDelta(S: number, K: number, t: number, r: number, sigma: number, type: LegType): number {
+  if (t <= 0 || sigma <= 0) {
+    if (type === "call") return S > K ? 1 : 0;
+    return S < K ? -1 : 0;
+  }
+  const sqrtT = Math.sqrt(t);
+  const d1 = (Math.log(S / K) + (r + (sigma * sigma) / 2) * t) / (sigma * sqrtT);
+  return type === "call" ? normCdf(d1) : normCdf(d1) - 1;
+}
+
+/// Three-anchor piecewise-linear smile in log-moneyness. Mirrors the
+/// Python ``_iv_at_strike`` in tools/options_chain.py — same anchor
+/// logic, same clamps. ATM → atm_iv; -m25 → iv25dPut; +m25 → iv25dCall;
+/// where m25 ≈ atm_iv * sqrt(T) * 0.6745 is the log-moneyness magnitude
+/// at which a flat-IV BS chain has |delta| ≈ 0.25.
+export function ivAtStrike(
+  S: number,
+  K: number,
+  atmIv: number,
+  iv25dPut: number,
+  iv25dCall: number,
+  tYears: number,
+): number {
+  if (S <= 0 || K <= 0 || atmIv <= 0 || tYears <= 0) {
+    return atmIv > 0 ? atmIv : 0.01;
+  }
+  const m = Math.log(K / S);
+  const m25 = Math.max(atmIv * Math.sqrt(tYears) * 0.6745, 1e-6);
+  const slope = m >= 0
+    ? (iv25dCall - atmIv) / m25
+    : (atmIv - iv25dPut) / m25;
+  const iv = atmIv + slope * m;
+  return Math.max(Math.min(iv, atmIv * 3.0), atmIv * 0.30);
+}
+
+const DEFAULT_R = 0.045;
+
+/// Build a flat list of option-chain rows from scaffolds. Mirrors the
+/// Python ``build_option_chain`` so the FE-rendered sample chain reads
+/// the same shape as a live chain coming back from the server.
+export function buildOptionChain(args: {
+  spot: number;
+  atmIvPct: number;
+  iv25dPutPct?: number;
+  iv25dCallPct?: number;
+  todayDate: string;
+  expirations: string[];
+  strikeLadder: { min: number; max: number; step: number };
+  r?: number;
+}): OptionChainRow[] {
+  const r = args.r ?? DEFAULT_R;
+  const atmIv = args.atmIvPct / 100;
+  const iv25dp = (args.iv25dPutPct ?? args.atmIvPct) / 100;
+  const iv25dc = (args.iv25dCallPct ?? args.atmIvPct) / 100;
+
+  const today = new Date(args.todayDate + "T00:00:00Z");
+  const expiries: Array<{ iso: string; dte: number }> = [];
+  for (const e of args.expirations) {
+    const d = new Date(e + "T00:00:00Z");
+    if (Number.isNaN(d.getTime())) continue;
+    const dte = Math.round((d.getTime() - today.getTime()) / (24 * 60 * 60 * 1000));
+    if (dte > 0) expiries.push({ iso: e, dte });
+  }
+  expiries.sort((a, b) => a.dte - b.dte);
+
+  const strikes: number[] = [];
+  const { min, max, step } = args.strikeLadder;
+  let i = 0;
+  while (true) {
+    const k = min + i * step;
+    if (k > max + step * 0.5) break;
+    strikes.push(Math.round(k * 100) / 100);
+    i += 1;
+    if (i > 200) break;
+  }
+
+  const rows: OptionChainRow[] = [];
+  for (const { iso, dte } of expiries) {
+    const t = dte / 365;
+    for (const K of strikes) {
+      const iv = ivAtStrike(args.spot, K, atmIv, iv25dp, iv25dc, t);
+      rows.push({
+        expiration: iso,
+        dte,
+        strike: K,
+        call_mid: Math.round(bsPrice(args.spot, K, t, r, iv, "call") * 100) / 100,
+        call_delta: Math.round(bsDelta(args.spot, K, t, r, iv, "call") * 100) / 100,
+        put_mid: Math.round(bsPrice(args.spot, K, t, r, iv, "put") * 100) / 100,
+        put_delta: Math.round(bsDelta(args.spot, K, t, r, iv, "put") * 100) / 100,
+      });
+    }
+  }
+  return rows;
 }
 
 export function niceStep(rough: number): number {

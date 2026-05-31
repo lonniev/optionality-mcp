@@ -14,6 +14,7 @@
 // arrays let the RiskProfileChart actually render.
 
 import type { Evaluation, Scenario } from "../types";
+import { buildOptionChain } from "../lib/bs";
 
 export const SAMPLE_SCENARIO: Scenario = {
   scenario_id: "sample-2023-svb",
@@ -26,6 +27,10 @@ export const SAMPLE_SCENARIO: Scenario = {
     name: "SPDR S&P Regional Banking ETF",
     spot: 50.20,
     iv_30d: 62,
+    // RR = iv_25d_call - iv_25d_put = -14 vol points (puts bid by 14).
+    // Slight butterfly so the wings sit a touch above ATM on average.
+    iv_25d_put: 72,
+    iv_25d_call: 58,
     iv_rank: 94,
     skew_note: "Puts bid hard relative to calls; 25-delta risk reversal at -14. Front-week 45-strike puts went out at 3.40 mid.",
   },
@@ -52,7 +57,28 @@ export const SAMPLE_SCENARIO: Scenario = {
     "Pin risk on the round-strike short put if the Sunday backstop pins KRE near it",
   ],
   max_loss_usd: 10000,
+  // Scaffolds. The chain itself is computed once below.
+  today_date: "2023-03-10",
+  expirations: [
+    "2023-03-17",  // one weekly past the Sunday catalyst
+    "2023-04-21",  // front-month April
+    "2023-05-19",  // standard May monthly
+  ],
+  strike_ladder: { min: 38, max: 60, step: 2 },
 };
+
+// Compute the chain once at module load using the same smile + BS
+// machinery the live game uses. Frozen onto the exported scenario so
+// the sample is deterministic and matches its skew_note.
+SAMPLE_SCENARIO.option_chain = buildOptionChain({
+  spot: SAMPLE_SCENARIO.asset.spot,
+  atmIvPct: SAMPLE_SCENARIO.asset.iv_30d,
+  iv25dPutPct: SAMPLE_SCENARIO.asset.iv_25d_put,
+  iv25dCallPct: SAMPLE_SCENARIO.asset.iv_25d_call,
+  todayDate: SAMPLE_SCENARIO.today_date!,
+  expirations: SAMPLE_SCENARIO.expirations!,
+  strikeLadder: SAMPLE_SCENARIO.strike_ladder!,
+});
 
 export const SAMPLE_TRADE_PROPOSAL =
   "Sell the March-17 weekly 45 / 40 put spread on $KRE for an estimated $1.60 net credit. " +
