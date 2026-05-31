@@ -1,13 +1,11 @@
 // "Guide to Skew" — an educational aid reachable from a discreet
-// "Skew Guide" button next to the scenario's Skew note. The prose and
-// the interactive curve are static pedagogy; the only dynamic input is
-// the scenario's own security and price info (spot + 30-day IV), so the
-// chart and narrative speak to the challenge in front of the trainee.
-//
-// The IV-vs-strike curve is an illustrative model anchored to the
-// scenario's spot and ATM IV — not live chain data. Three shapes
-// (reverse smirk / smile / forward) let the trainee feel how the
-// curve's tilt changes which leg of a vertical spread is the rich one.
+// "Skew Guide" button next to the scenario's Skew note. The IV curve is
+// the *literal* smile this scenario prices, computed from the same
+// three-anchor piecewise-linear smile (ATM + 25Δ put + 25Δ call) that
+// the OptionChainGuide tables use server-side. Trainee and judge read
+// from the same curve — no synthesized regime shapes, no clamped
+// ATM IV. When a scenario predates the structured smile anchors, the
+// curve degrades to flat IV at iv30d and the lede says so plainly.
 
 import { useEffect, useMemo, useState } from "react";
 
@@ -16,10 +14,20 @@ interface SkewGuideProps {
   name: string;
   spot: number;
   iv30d: number; // ATM 30-day IV as a percent, e.g. 24
+  // Structured smile anchors from the scenario. Both in vol-percent
+  // (same units as iv30d). When both are present, the curve is a
+  // *literal* read of the scenario's smile — what the chain you're
+  // pitching against actually prices. When missing (old / pre-chain
+  // scenarios), the curve degrades to flat IV at iv30d and the lede
+  // says so plainly. We do NOT synthesize a shape — ambiguity here
+  // is deadly to understanding.
+  iv25dPut?: number;
+  iv25dCall?: number;
+  // Narrative color the dealer wrote about the regime — passed through
+  // but not used here (it shows on the scenario card directly).
+  // Accepting it keeps the call sites tidy.
   skewNote?: string;
 }
-
-type Shape = "reverse" | "smile" | "forward";
 
 const W = 640;
 const H = 360;
@@ -41,23 +49,14 @@ function roundTo(v: number, step: number): number {
   return Math.round(v / step) * step;
 }
 
-/// Guess the curve shape that best matches the dealer's skew_note so the
-/// guide opens on the regime the trainee is actually staring at.
-function inferShape(note: string | undefined): Shape {
-  const n = (note || "").toLowerCase();
-  if (/(forward skew|call.*(rich|bid|expensive)|upside (shock|spike)|calls .*(rich|bid))/.test(n)) {
-    return "forward";
-  }
-  if (/(smile|both wings|two-sided|event|binary|symmetric)/.test(n)) {
-    return "smile";
-  }
-  return "reverse";
-}
-
-export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewGuideProps) {
+export default function SkewGuide({ ticker, name, spot, iv30d, iv25dPut, iv25dCall }: SkewGuideProps) {
   const [open, setOpen] = useState(false);
-  const [shape, setShape] = useState<Shape>(() => inferShape(skewNote));
   const [widthMult, setWidthMult] = useState<1 | 2>(1);
+
+  // True if the scenario carries the structured smile anchors. When
+  // false the curve degrades to flat IV at iv30d and the lede tells
+  // the trainee that explicitly — no implied shape, no ambiguity.
+  const hasSmile = typeof iv25dPut === "number" && typeof iv25dCall === "number";
 
   // While the modal is open: Escape closes it and the page behind it
   // is scroll-locked so the backdrop doesn't drift under the overlay.
@@ -75,35 +74,63 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
     };
   }, [open]);
 
+  // The structured smile: three anchor points at log(K/S) ∈ {-m25, 0, +m25}
+  // with linear interpolation between them and linear extrapolation
+  // beyond, clamped so deep-wing strikes don't blow up. Mirrors the
+  // server-side _iv_at_strike (tools/options_chain.py) and the
+  // FE-side ivAtStrike used in SampleAssessment so the SkewGuide
+  // shows the literal curve the OptionChainGuide tables price from.
+  const smile = useMemo(() => {
+    const atm = Math.max(0.01, (iv30d || 24) / 100);
+    const put = hasSmile ? Math.max(0.01, (iv25dPut as number) / 100) : atm;
+    const call = hasSmile ? Math.max(0.01, (iv25dCall as number) / 100) : atm;
+    // 30-day tenor — iv_30d is the ATM anchor so this is the smile
+    // SkewGuide is meant to render.
+    const T = 30 / 365;
+    const m25 = Math.max(atm * Math.sqrt(T) * 0.6745, 1e-6);
+    return { atm, put, call, m25 };
+  }, [iv30d, iv25dPut, iv25dCall, hasSmile]);
+
+  function ivAt(k: number): number {
+    const m = Math.log(k / spot);
+    const slope = m >= 0
+      ? (smile.call - smile.atm) / smile.m25
+      : (smile.atm - smile.put) / smile.m25;
+    const iv = smile.atm + slope * m;
+    return Math.max(Math.min(iv, smile.atm * 3.0), smile.atm * 0.30);
+  }
+
   const geom = useMemo(() => {
-    const baseIV = Math.min(0.9, Math.max(0.08, (iv30d || 24) / 100));
     const step = niceStep(spot);
     const Kmin = roundTo(spot * 0.91, step);
     const Kmax = roundTo(spot * 1.09, step);
-    const IVmin = Math.max(0.02, baseIV - 0.1);
-    const IVmax = baseIV + 0.22;
+    // Adapt y-axis to the actual wing extremes so high-IV scenarios
+    // (e.g. 100%+ ATM during a vol shock) fit in frame and a thin-IV
+    // name doesn't waste half the chart on empty space.
+    const wingPut = ivAt(Kmin);
+    const wingCall = ivAt(Kmax);
+    const lo = Math.min(smile.atm, smile.put, smile.call, wingPut, wingCall);
+    const hi = Math.max(smile.atm, smile.put, smile.call, wingPut, wingCall);
+    const pad = Math.max(0.04, (hi - lo) * 0.18);
+    const IVmin = Math.max(0.0, lo - pad);
+    const IVmax = hi + pad;
     const sliderMin = roundTo(spot * 0.935, step);
     const sliderMax = roundTo(spot * 1.024, step);
     const defaultShort = roundTo(spot * 0.988, step);
-    return { baseIV, step, Kmin, Kmax, IVmin, IVmax, sliderMin, sliderMax, defaultShort };
-  }, [spot, iv30d]);
+    return { step, Kmin, Kmax, IVmin, IVmax, sliderMin, sliderMax, defaultShort };
+    // ivAt closes over smile; smile is in deps via the destructure.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spot, smile]);
 
   const [shortStrike, setShortStrike] = useState<number>(() => geom.defaultShort);
 
-  const { baseIV, step, Kmin, Kmax, IVmin, IVmax, sliderMin, sliderMax } = geom;
+  const { step, Kmin, Kmax, IVmin, IVmax, sliderMin, sliderMax } = geom;
   const width = step * widthMult;
   const longStrike = shortStrike - width;
 
   const xK = (k: number) => M.l + ((k - Kmin) / (Kmax - Kmin)) * PLOT_W;
   const yIV = (v: number) => M.t + ((IVmax - v) / (IVmax - IVmin)) * PLOT_H;
   const clampIV = (v: number) => Math.max(IVmin, Math.min(IVmax, v));
-
-  function ivAt(k: number): number {
-    const m = (k - spot) / spot;
-    if (shape === "reverse") return baseIV + -0.85 * m + 1.6 * m * m * (m < 0 ? 1 : 0.25);
-    if (shape === "forward") return baseIV + 0.85 * m + 1.6 * m * m * (m > 0 ? 1 : 0.25);
-    return baseIV + 3.4 * m * m + -0.18 * m;
-  }
 
   const fmtK = (k: number) => (step < 1 ? k.toFixed(1) : String(Math.round(k)));
 
@@ -125,8 +152,9 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
       d += `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${y.toFixed(1)} `;
     }
     return d;
+    // ivAt closes over `smile`; smile drives the curve shape.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shape, Kmin, Kmax, IVmin, IVmax, baseIV, spot]);
+  }, [smile, Kmin, Kmax, IVmin, IVmax, spot]);
 
   // ── readouts ───────────────────────────────────────────────────
   const sIV = ivAt(shortStrike);
@@ -143,19 +171,29 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
   const callIV25 = ivAt(callK25);
   const fear = (putIV25 - callIV25) * 100;
 
+  const ivPct = Math.round(iv30d || 24);
+
+  // Verdict reads the *actual* curve rather than a synthesized shape.
+  // fear is the 25Δ put minus 25Δ call IV (in vol points): positive
+  // = put-bid (the standard equity "smirk"), negative = call-bid
+  // (commodity-style forward skew), near zero = symmetric (smile or
+  // flat). The verdict text is anchored to the trainee's two legs
+  // (long/short strike IVs they're staring at).
   const verdict = (() => {
-    if (shape === "reverse") {
+    if (!hasSmile) {
+      return `This scenario didn't supply 25Δ smile anchors, so the curve here is flat IV at ${ivPct}% ATM — purely the level, not the shape. Read the scenario's skew_note for the regime story.`;
+    }
+    if (fear >= 4) {
       return gap > 0.6
-        ? `Steep here: the put you buy (${fmtK(longStrike)}) is meaningfully richer in vol than the one you sell (${fmtK(shortStrike)}) — skew is eating into your credit, but the wing is paying for fear. Sell below the steepest part for real cushion.`
-        : `Up near spot the skew is gentle; both legs carry similar vol, so the credit is clean — but you're closer to the money, so cushion is thinner. The classic trade-off.`;
+        ? `Reverse smirk (put-bid). The put you buy (${fmtK(longStrike)}) is meaningfully richer in vol than the one you sell (${fmtK(shortStrike)}) — skew eats into your credit, but the wing pays for fear. Sell below the steepest part for real cushion.`
+        : `Reverse smirk (put-bid). Up near spot the skew is gentle; both legs carry similar vol, so the credit is clean — but you're closer to the money, so cushion is thinner. The classic trade-off.`;
     }
-    if (shape === "forward") {
-      return `The call wing is the rich one here. For a put spread on ${ticker} that's friendly — the puts you trade sit on the cheaper, flatter side. The danger this curve prices is an upside spike, not a collapse.`;
+    if (fear <= -2) {
+      return `Forward skew — the call wing is the rich one here. For a put spread on ${ticker} that's friendly: the puts you trade sit on the cheaper, flatter side. The danger this curve prices is an upside spike, not a collapse.`;
     }
-    return `Both wings bid, ATM cheapest — the market is bracing for a two-sided gap in ${ticker}. This is event-risk shape. Selling a spread through the event means underwriting exactly the move the smile is warning about.`;
+    return `Roughly symmetric: both wings carry similar IV. ATM not a deep valley nor heavily biased — read for spot or event positioning rather than counting on skew to pay for a wing.`;
   })();
 
-  const ivPct = Math.round((iv30d || 24));
   const C = {
     put: "var(--rust)",
     call: "var(--sg-call)",
@@ -193,29 +231,27 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
           <p className="sg-lede">
             Implied volatility is not one number — it's a <em>curve</em> across strikes, a map of
             where the market is paying up for fear. For a premium seller it shows where the
-            insurance is richest. Below, the curve is anchored to <strong>{ticker}</strong>{name ? ` (${name})` : ""} at a
-            spot of <strong>${fmtK(spot)}</strong> and an ATM 30-day IV of <strong>{ivPct}%</strong>.
+            insurance is richest.{" "}
+            {hasSmile ? (
+              <>
+                The curve below is the <em>literal</em> smile this scenario prices — anchored to{" "}
+                <strong>{ticker}</strong>{name ? ` (${name})` : ""} at spot{" "}
+                <strong>${fmtK(spot)}</strong>, ATM 30-day IV <strong>{ivPct}%</strong>, 25Δ-put IV{" "}
+                <strong>{Math.round(iv25dPut as number)}%</strong>, and 25Δ-call IV{" "}
+                <strong>{Math.round(iv25dCall as number)}%</strong>. It is the same smile the option
+                chain prices each strike from.
+              </>
+            ) : (
+              <>
+                This scenario was dealt before the structured smile anchors were captured, so the
+                curve below shows flat IV at <strong>{ivPct}%</strong> across all strikes —{" "}
+                <em>level only, no shape</em>. Read the scenario's skew_note for the regime story.
+              </>
+            )}
           </p>
 
           {/* interactive panel */}
           <div className="sg-panel">
-            <div className="sg-toggles">
-              {([
-                ["reverse", 'Reverse skew · "smirk"'],
-                ["smile", "Volatility smile"],
-                ["forward", "Forward skew"],
-              ] as Array<[Shape, string]>).map(([id, label]) => (
-                <button
-                  key={id}
-                  type="button"
-                  className={`sg-toggle ${shape === id ? "active" : ""}`}
-                  onClick={() => setShape(id)}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-
             <div className="sg-chartwrap">
               <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Implied volatility skew curve for ${ticker}`}>
                 {/* grid */}
@@ -417,7 +453,21 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
           </table>
 
           <div className="sg-foot">
-            Curve shown is an illustrative model anchored to {ticker}'s ${fmtK(spot)} spot and {ivPct}% ATM IV — not live chain data. Implied vol is the market's forward guess, not a forecast: read it as sentiment priced, then verify the actual bid/ask before committing a spread.
+            {hasSmile ? (
+              <>
+                Curve is the literal three-anchor smile this scenario prices: ATM IV{" "}
+                {ivPct}%, 25Δ-put IV {Math.round(iv25dPut as number)}%, 25Δ-call IV{" "}
+                {Math.round(iv25dCall as number)}%, anchored at {ticker} spot ${fmtK(spot)}. The
+                option chain tables price each strike from this same smile. Implied vol is the
+                market's forward guess, not a forecast — read it as sentiment priced.
+              </>
+            ) : (
+              <>
+                This scenario predates the structured smile anchors, so the curve is flat IV at{" "}
+                {ivPct}% across all strikes (level, not shape). Read the scenario's skew_note for
+                the regime story until a fresh scenario is dealt.
+              </>
+            )}
           </div>
             </div>
           </div>
@@ -521,23 +571,6 @@ export default function SkewGuide({ ticker, name, spot, iv30d, skewNote }: SkewG
           padding: 14px;
           margin-bottom: 16px;
         }
-        .sg-toggles { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
-        .sg-toggle {
-          font-family: 'JetBrains Mono', monospace;
-          font-size: 11px;
-          letter-spacing: 0.03em;
-          text-transform: uppercase;
-          background: var(--panel);
-          color: var(--ink-soft);
-          border: 1px solid var(--panel-edge);
-          border-radius: 7px;
-          padding: 6px 10px;
-          cursor: pointer;
-          transition: 160ms;
-        }
-        .sg-toggle:hover { color: var(--ink); border-color: var(--bronze); }
-        .sg-toggle.active { background: var(--amber); color: var(--bg); border-color: var(--amber); font-weight: 600; }
-
         .sg-chartwrap { width: 100%; }
         .sg-chartwrap svg { width: 100%; height: auto; display: block; overflow: visible; }
         .sg-axis { font-family: 'JetBrains Mono', monospace; font-size: 10px; fill: var(--ink-faint); }
