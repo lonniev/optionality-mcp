@@ -195,6 +195,48 @@ async def delete_entry(npub: str, entry_id: str) -> bool:
     return (result.get("rowCount") or 0) > 0
 
 
+async def recent_tickers(
+    npub: str,
+    sector: str | None = None,
+    limit: int = 12,
+) -> list[str]:
+    """Distinct tickers from this patron's most recent journal entries.
+
+    Ordered newest-first by each ticker's most recent appearance. When
+    ``sector`` is provided, restrict to entries whose scenario JSON
+    has a matching ``sector`` field (case-insensitive).
+
+    The dealer uses this to tell the LLM "don't pick these tickers
+    again" — without that exclusion list the model reflexively returns
+    to a handful of training-data favorites (ICPT for biotech,
+    NVDA for semis, MSTR for crypto-equity).
+    """
+    lim = max(1, min(50, limit))
+    sec = (sector or "").strip().lower() or None
+    if sec:
+        rows = await fetch(
+            "SELECT ticker, MAX(created_at) AS last_seen "
+            "FROM journal_entries "
+            "WHERE npub = $1 AND ticker IS NOT NULL "
+            "AND LOWER(scenario->>'sector') = $2 "
+            "GROUP BY ticker "
+            "ORDER BY last_seen DESC "
+            "LIMIT $3",
+            npub, sec, lim,
+        )
+    else:
+        rows = await fetch(
+            "SELECT ticker, MAX(created_at) AS last_seen "
+            "FROM journal_entries "
+            "WHERE npub = $1 AND ticker IS NOT NULL "
+            "GROUP BY ticker "
+            "ORDER BY last_seen DESC "
+            "LIMIT $2",
+            npub, lim,
+        )
+    return [str(r.get("ticker")) for r in rows if r.get("ticker")]
+
+
 async def increment_tips_count(npub: str, entry_id: str) -> int:
     """Bump tips_count for an open entry, return the new count.
 

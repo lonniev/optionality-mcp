@@ -1,4 +1,5 @@
 import FactsLedger from "./FactsLedger";
+import OptionChainGuide from "./OptionChainGuide";
 import RichText from "./RichText";
 import RiskProfileChart from "./RiskProfileChart";
 import SkewGuide from "./SkewGuide";
@@ -7,7 +8,6 @@ import {
   SAMPLE_SCENARIO,
   SAMPLE_TRADE_PROPOSAL,
 } from "../data/sampleAssessment";
-import type { OptionChainRow } from "../types";
 
 const DIMENSION_LABELS: Record<string, string> = {
   strategy_selection: "Strategy",
@@ -79,67 +79,9 @@ export default function SampleAssessment() {
         )}
 
         {Array.isArray(scenario.option_chain) && scenario.option_chain.length > 0 && (
-          <>
-            <h3 className="serif">Option Chain</h3>
-            {(() => {
-              const byExpiry = new Map<string, { dte: number; rows: OptionChainRow[] }>();
-              for (const r of scenario.option_chain) {
-                let entry = byExpiry.get(r.expiration);
-                if (!entry) {
-                  entry = { dte: r.dte, rows: [] };
-                  byExpiry.set(r.expiration, entry);
-                }
-                entry.rows.push(r);
-              }
-              const groups = Array.from(byExpiry.entries()).sort((a, b) => a[1].dte - b[1].dte);
-              return (
-                <>
-                  {groups.map(([exp, { dte, rows }]) => (
-                    <div key={exp} style={{ marginBottom: 12, fontSize: 11 }}>
-                      <div style={{
-                        fontSize: 10,
-                        color: "var(--ink-faint)",
-                        letterSpacing: "0.15em",
-                        textTransform: "uppercase",
-                        marginBottom: 4,
-                      }}>
-                        {exp} · {dte} DTE
-                      </div>
-                      <table style={{
-                        width: "100%",
-                        borderCollapse: "collapse",
-                        fontFamily: "JetBrains Mono, monospace",
-                      }}>
-                        <thead>
-                          <tr style={{ color: "var(--ink-faint)" }}>
-                            <th style={{ textAlign: "right", padding: "2px 6px", fontWeight: 400 }}>Strike</th>
-                            <th style={{ textAlign: "right", padding: "2px 6px", fontWeight: 400 }}>Call Mid</th>
-                            <th style={{ textAlign: "right", padding: "2px 6px", fontWeight: 400 }}>ΔC</th>
-                            <th style={{ textAlign: "right", padding: "2px 6px", fontWeight: 400 }}>Put Mid</th>
-                            <th style={{ textAlign: "right", padding: "2px 6px", fontWeight: 400 }}>ΔP</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.map((r) => (
-                            <tr key={r.strike} style={{ borderTop: "1px solid var(--panel-edge)" }}>
-                              <td style={{ textAlign: "right", padding: "3px 6px", color: "var(--amber)" }}>{r.strike}</td>
-                              <td style={{ textAlign: "right", padding: "3px 6px", color: "var(--ink)" }}>{r.call_mid.toFixed(2)}</td>
-                              <td style={{ textAlign: "right", padding: "3px 6px", color: "var(--ink-soft)" }}>{r.call_delta.toFixed(2)}</td>
-                              <td style={{ textAlign: "right", padding: "3px 6px", color: "var(--ink)" }}>{r.put_mid.toFixed(2)}</td>
-                              <td style={{ textAlign: "right", padding: "3px 6px", color: "var(--ink-soft)" }}>{r.put_delta.toFixed(2)}</td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  ))}
-                  <div style={{ fontSize: 10, color: "var(--ink-faint)", fontStyle: "italic", marginTop: 4, marginBottom: 12 }}>
-                    Mid prices computed from a Black-Scholes smile anchored by ATM, 25Δ-put, and 25Δ-call volatilities.
-                  </div>
-                </>
-              );
-            })()}
-          </>
+          <div style={{ marginTop: 6, marginBottom: 12 }}>
+            <OptionChainGuide spot={scenario.asset.spot} chain={scenario.option_chain} />
+          </div>
         )}
 
         <h3 className="serif">Constraints</h3>

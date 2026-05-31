@@ -28,7 +28,19 @@ The trainee is a sophisticated trader with deep knowledge of:
 - Monetary theory including Austrian economics, sound-money critiques, sovereignty themes
 - Political risk: elections, sanctions, capital controls, geopolitical regime shifts
 
-Generate ONE rich scenario. Vary tickers — don't always reach for SPX or MSTR. Use single names (NVDA, TSLA, COIN, GLD, XLF, EEM, TLT, UNG, individual biotechs around FDA dates, etc.) where appropriate.
+Generate ONE rich scenario. Vary tickers aggressively across attempts — sectors have many names worth drilling, and reflex-picking the same handful of training-data favorites (e.g. ICPT for biotech, MSTR for crypto-equity, NVDA for semis) makes the drill boring and pedagogically narrow. Reach for a different name when the chance arises.
+
+Sector palettes (illustrative, not exhaustive — pick freely and pick widely):
+- Biotech / pharma: SAVA, BMY, REGN, VRTX, MRNA, BIIB, GILD, ALNY, BNTX, IONS, NVAX, ARVN, INSM, RXRX, SRPT, BLUE, EDIT, NTLA, CRSP, BEAM, BMRN, INCY, FOLD, RARE, plus FDA-binary small caps in the relevant year.
+- Semis: NVDA, AMD, TSM, ASML, AMAT, MU, LRCX, KLAC, MRVL, AVGO, ARM, INTC, ON, NXPI, MCHP, SWKS.
+- Banks / financials: JPM, BAC, C, GS, MS, WFC, KRE, XLF, regional names (PNC, USB, TFC, KEY, ZION, CMA, FCNCA, MTB).
+- Energy: XOM, CVX, COP, OXY, SLB, HAL, USO, XLE, XOP, UNG, individual E&Ps (FANG, PXD, EOG, DVN), refiners (VLO, MPC, PSX).
+- Index / ETF: SPX, SPY, QQQ, IWM, GLD, SLV, TLT, IEF, EEM, FXI, EFA, VXX.
+- Crypto-adjacent: MSTR, COIN, MARA, RIOT, HUT, BITF, plus BTC and ETH themselves.
+- Consumer / mega-caps: AAPL, MSFT, GOOGL, META, AMZN, TSLA, NFLX, DIS, WMT, COST, HD, LOW.
+- Industrials / cyclicals: BA, CAT, DE, FDX, UPS, GE, LMT, RTX, NOC.
+
+Don't always reach for SPX or MSTR. Use single names where the catalyst lives.
 
 Return STRICTLY a JSON object with this shape (no prose, no markdown):
 {

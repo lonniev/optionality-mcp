@@ -133,8 +133,28 @@ async def deal_scenario(
             f"no live options-trading dynamic worth drilling on for this "
             f"persona / mode, you may pick a closely-adjacent sector and "
             f"explain the substitution in the briefing — but only as a last "
-            f"resort. Vary the SPECIFIC ticker from prior attempts within "
-            f"the same sector."
+            f"resort."
+        )
+
+    # Exclude tickers the trainee has seen recently so the LLM stops
+    # reflex-picking its training-data favorites (ICPT for biotech,
+    # MSTR for crypto-equity, etc.) and the trainee gets actual variety.
+    # Sector-scoped when a sector is set; unscoped otherwise.
+    recent = await journal.recent_tickers(
+        npub=npub,
+        sector=sector_clean or None,
+        limit=12,
+    )
+    avoid_clause = ""
+    if recent:
+        avoid_clause = (
+            f"\n\nAVOID THESE TICKERS — the trainee has recently been dealt "
+            f"these in the {'same sector' if sector_clean else 'app'}: "
+            f"{', '.join(recent)}. Pick a DIFFERENT name from the sector / "
+            f"asset class. The above list is not exhaustive — there are many "
+            f"liquid, options-tradeable names worth drilling in every sector, "
+            f"and the goal is broad coverage over the trainee's career, not "
+            f"the same two or three favorites."
         )
     prompt = (
         f"{mode_instr}\n\n"
@@ -143,6 +163,7 @@ async def deal_scenario(
         f"Return JSON only."
         f"{risk_clause}"
         f"{sector_clause}"
+        f"{avoid_clause}"
     )
     enable_web_search = mode == "live"
     max_tokens = 4000 if enable_web_search else 2500
