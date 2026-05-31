@@ -32,7 +32,7 @@ export const SAMPLE_SCENARIO: Scenario = {
     iv_25d_put: 72,
     iv_25d_call: 58,
     iv_rank: 94,
-    skew_note: "Puts bid hard relative to calls; 25-delta risk reversal at -14. Front-week 45-strike puts went out at 3.40 mid.",
+    skew_note: "Puts bid hard relative to calls; 25-delta risk reversal at -14. Read it in the chain — the put wing prices far richer than the symmetric call wing at the same DTE.",
   },
   catalyst:
     "Sunday-evening Treasury / FDIC / Fed press conference expected to address whether uninsured $SIVB depositors are made whole. A backstop announcement caps the contagion thesis; silence amplifies it. Either way, a gap on Monday's open is the market's base case.",

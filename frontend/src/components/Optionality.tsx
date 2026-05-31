@@ -107,8 +107,8 @@ import Avatar, { shortNpub } from "./Avatar";
 import ProfileTab from "./Profile";
 import DMComposeModal from "./DMComposeModal";
 import Welcome from "./Welcome";
+import DealAnimation from "./DealAnimation";
 import JudgeAnimation from "./JudgeAnimation";
-import QuoteScroller from "./QuoteScroller";
 import RichText from "./RichText";
 import SkewGuide from "./SkewGuide";
 import { getGuestId, getPatronProfile, getStoredNpub } from "../lib/mcp";
@@ -1770,19 +1770,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
             {loading &&
               (loadingMsg === "Judging your Pitch" ? (
-                // Full-viewport immersive scene — see JudgeAnimation; it
-                // renders its own fixed overlay, so it is deliberately not
-                // wrapped in an opaque .panel here.
+                // Full-viewport immersive scene — see JudgeAnimation;
+                // its fixed overlay paints the full page.
                 <JudgeAnimation />
               ) : (
-                <div className="panel" style={{ textAlign: "center" }}>
-                  <QuoteScroller heading={loadingMsg} />
-                  {mode === "live" && (
-                    <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 8, fontStyle: "italic" }}>
-                      Live mode searches the web — expect 15–30s.
-                    </div>
-                  )}
-                </div>
+                // Deal / mulligan scene — full-viewport overlay using
+                // the login backdrop so the trainee waits inside the
+                // institutional setting the Firm is pretending to be.
+                <DealAnimation loadingMsg={loadingMsg} mode={mode} />
               ))}
 
             {scenario && !loading && (
