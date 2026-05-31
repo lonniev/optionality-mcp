@@ -41,9 +41,14 @@ Return STRICTLY a JSON object with this shape (no prose, no markdown):
     "name": "Full Name",
     "spot": 123.45,
     "iv_30d": 38,
+    "iv_25d_put": 44,
+    "iv_25d_call": 36,
     "iv_rank": 72,
     "skew_note": "e.g. 'Puts bid relative to calls; 25d RR at -8'"
   },
+  "today_date": "ISO date — see mode rules below",
+  "expirations": ["ISO date", "ISO date", "ISO date"],
+  "strike_ladder": { "min": 110, "max": 140, "step": 5 },
   "catalyst": "What's happening or imminent. Specific.",
   "key_levels": "Concrete S/R and expected move",
   "constraints": "Account size, risk budget, time horizon. Be specific.",
@@ -57,6 +62,29 @@ Return STRICTLY a JSON object with this shape (no prose, no markdown):
   ],
   "hidden_considerations": ["other factors a great answer would address — used by evaluator, not shown to user"]
 }
+
+OPTION CHAIN — the trainee MUST be able to choose strikes and DTE from real numbers, not guess. The server computes a concrete option chain from these scaffolds and renders it on the scenario card. Trainee and judge see exactly the same chain. DO NOT emit an option_chain field yourself — the server builds it.
+
+  - "iv_30d" (asset.iv_30d): ATM 30-day implied volatility in vol-percent. The base volatility anchor.
+  - "iv_25d_put" (asset.iv_25d_put): IV in vol-percent at the 25-delta-put strike. Should be ≥ iv_30d if puts are bid (the standard equity smile); equal to iv_30d if no skew; less than iv_30d if calls are bid (rare — energy / commodity reverse skew).
+  - "iv_25d_call" (asset.iv_25d_call): IV in vol-percent at the 25-delta-call strike. Mirror of the above.
+  - The skew_note prose MUST be consistent with these three numbers. If iv_25d_put = 44 and iv_25d_call = 36, the note must reflect a put-bid regime; do not write "calls bid" against put-bid numbers.
+
+  - "today_date": ISO date string (YYYY-MM-DD), the notional "now" of the scenario. Per mode:
+      • HISTORICAL — a real date consistent with the regime in date_context. e.g. "2023-03-15" for an SVB-week scenario.
+      • FICTION — an ISO date matching the date_context framing. e.g. "2026-09-12" for a "Hypothetical: Q3 2026" scenario.
+      • LIVE — today's actual date (the date you found via web search).
+  - "expirations": exactly THREE ISO dates strictly after today_date. Recommended pattern:
+      • One short-dated (5–15 DTE) — picks up the immediate catalyst window.
+      • One near-month (25–45 DTE) — front-month vol exposure.
+      • One back-month (60–120 DTE) — calendar / longer-tenor structure.
+    Adjust to fit the catalyst. If the catalyst falls in 4 days, the near expiry must bracket it (e.g. 7 DTE).
+  - "strike_ladder": { "min", "max", "step" } covering roughly spot ± 10–15% at a strike-step plausible for the underlying:
+      • $0.50 or $1 for low-priced equities (spot < $20).
+      • $2.50 or $5 for typical equities (spot $20–$200).
+      • $5 or $10 for higher-priced names (spot > $200).
+      • $25 or $50 for SPX-style index points.
+    The ladder MUST surround spot (min < spot < max).
 
 IMPORTANT: red_herrings must actually appear in the scenario text. They are FACTUALLY TRUE within the scenario world — they are not lies, traps, or misinformation. Their flaw is irrelevance, not falsity. They are real-world noise that a trader could reasonably notice and overweight, but which a disciplined thinker would set aside as not material to the trade thesis. A trainee who recognizes them as true-but-irrelevant and sets them aside should be rewarded; one who builds their thesis around them should be penalized.
 
@@ -147,10 +175,15 @@ Return STRICTLY a JSON object (no prose, no markdown fences):
 }
 
 For trade_legs and alt_trade_legs:
-- Parse the trainee's free-text trade into structured legs. If they were ambiguous about premiums, ESTIMATE from the scenario's spot price and iv_30d (Black-Scholes mental model). premium is always a positive per-share number; the side field (long/short) determines whether it was paid or received.
+- Parse the trainee's free-text trade into structured legs. The scenario's ``option_chain`` (if present) gives concrete mid prices and deltas the trainee saw on the card; PREFER chain values when interpreting their premiums and deltas. If the trainee picked a strike/DTE not in the chain (off-grid), use the nearest chain row and note any premium adjustment in your feedback. If ``option_chain`` is absent, fall back to the Black-Scholes mental model from spot + iv_30d.
+- premium is always a positive per-share number; the side field (long/short) determines whether it was paid or received.
 - For naked stock or bond positions, omit trade_legs (return empty array).
 - Single-leg trades are fine: trade_legs can have just one entry.
 - qty defaults to 1 contract if unspecified.
+
+For alt_trade_legs specifically (the alternative you would have taken):
+- When ``scenario.option_chain`` is present, you MUST pick strikes that appear in the chain and ``expiry_days`` matching one of the chain's ``dte`` values. The ``premium`` on each leg MUST equal the chain's mid for that (expiry, strike, type) — call_mid for calls, put_mid for puts. No fabricated strikes, no premiums the trainee couldn't have read off the card. This guarantees the alt_trade lives on the same chain the trainee saw.
+- If you genuinely cannot express your preferred alt_trade with the strikes in the chain, prefer the closest on-chain approximation and note in alternative_trade text what you would have done with a richer chain.
 - The alt_trade_legs must structurally represent the alternative_trade you described.
 
 For facts_integrated / facts_missed / red_herrings_caught / red_herrings_followed:

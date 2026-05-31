@@ -13,6 +13,7 @@ import type {
   Mode,
   ModeDef,
   ModelUsage,
+  OptionChainRow,
   PersistedState,
   Scenario,
   Stats,
@@ -982,6 +983,45 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
   }
 
+  // Render one expiration's chain rows into a fenced monospaced text
+  // block so it can travel through both the zoom modal (rendered as
+  // <pre><code> by RichText) and the clipboard copy.
+  function formatChainExpirationText(
+    expiration: string,
+    dte: number,
+    rows: OptionChainRow[],
+  ): string {
+    const header = `Expiry ${expiration} · ${dte} DTE`;
+    const cols = "Strike   Call Mid   ΔC      Put Mid    ΔP";
+    const lines = rows.map((r) =>
+      [
+        r.strike.toFixed(2).padStart(7),
+        r.call_mid.toFixed(2).padStart(10),
+        r.call_delta.toFixed(2).padStart(7),
+        r.put_mid.toFixed(2).padStart(11),
+        r.put_delta.toFixed(2).padStart(7),
+      ].join("  "),
+    );
+    return `${header}\n\`\`\`\n${cols}\n${lines.join("\n")}\n\`\`\``;
+  }
+
+  function formatChainAllText(chain: OptionChainRow[]): string {
+    const byExpiry = new Map<string, { dte: number; rows: OptionChainRow[] }>();
+    for (const r of chain) {
+      const key = r.expiration;
+      let entry = byExpiry.get(key);
+      if (!entry) {
+        entry = { dte: r.dte, rows: [] };
+        byExpiry.set(key, entry);
+      }
+      entry.rows.push(r);
+    }
+    return Array.from(byExpiry.entries())
+      .sort((a, b) => a[1].dte - b[1].dte)
+      .map(([exp, { dte, rows }]) => formatChainExpirationText(exp, dte, rows))
+      .join("\n\n");
+  }
+
   // Copy the full scenario briefing + clue conversation to the clipboard
   // so the trainee can continue in their OWN Claude.ai session. The desk
   // can't push a thread into someone's account — this is the honest
@@ -1015,6 +1055,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         lines.push(`Max-loss budget: $${scenario.max_loss_usd.toLocaleString()}`);
       if (Array.isArray(scenario.sources) && scenario.sources.length > 0)
         lines.push(`Sources: ${scenario.sources.join("; ")}`);
+      if (Array.isArray(scenario.option_chain) && scenario.option_chain.length > 0) {
+        lines.push("");
+        lines.push("Option chain (mid prices and deltas — what was on the card):");
+        lines.push(formatChainAllText(scenario.option_chain));
+      }
       if (scenario.the_question) lines.push(`The question: ${scenario.the_question}`);
     }
     lines.push("");
@@ -1783,6 +1828,83 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         iv30d={scenario.asset.iv_30d}
                         skewNote={scenario.asset.skew_note}
                       />
+                    )}
+
+                    {Array.isArray(scenario.option_chain) && scenario.option_chain.length > 0 && (
+                      <>
+                        <h3 className="serif">Option Chain</h3>
+                        {(() => {
+                          const byExpiry = new Map<string, { dte: number; rows: OptionChainRow[] }>();
+                          for (const r of scenario.option_chain) {
+                            let entry = byExpiry.get(r.expiration);
+                            if (!entry) {
+                              entry = { dte: r.dte, rows: [] };
+                              byExpiry.set(r.expiration, entry);
+                            }
+                            entry.rows.push(r);
+                          }
+                          const groups = Array.from(byExpiry.entries())
+                            .sort((a, b) => a[1].dte - b[1].dte);
+                          return (
+                            <>
+                              {groups.map(([exp, { dte, rows }]) => (
+                                <div
+                                  key={exp}
+                                  style={{
+                                    marginBottom: 12,
+                                    fontSize: 11,
+                                    cursor: "zoom-in",
+                                  }}
+                                  title={zoomableTitle}
+                                  onClick={() => openZoom(
+                                    `Option Chain · ${exp} (${dte} DTE)`,
+                                    formatChainExpirationText(exp, dte, rows),
+                                  )}
+                                >
+                                  <div style={{
+                                    fontSize: 10,
+                                    color: "var(--ink-faint)",
+                                    letterSpacing: "0.15em",
+                                    textTransform: "uppercase",
+                                    marginBottom: 4,
+                                  }}>
+                                    {exp} · {dte} DTE
+                                  </div>
+                                  <table style={{
+                                    width: "100%",
+                                    borderCollapse: "collapse",
+                                    fontFamily: "JetBrains Mono, monospace",
+                                  }}>
+                                    <thead>
+                                      <tr style={{ color: "var(--ink-faint)" }}>
+                                        <th style={{ textAlign: "right", padding: "2px 6px", fontWeight: 400 }}>Strike</th>
+                                        <th style={{ textAlign: "right", padding: "2px 6px", fontWeight: 400 }}>Call Mid</th>
+                                        <th style={{ textAlign: "right", padding: "2px 6px", fontWeight: 400 }}>ΔC</th>
+                                        <th style={{ textAlign: "right", padding: "2px 6px", fontWeight: 400 }}>Put Mid</th>
+                                        <th style={{ textAlign: "right", padding: "2px 6px", fontWeight: 400 }}>ΔP</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {rows.map((r) => (
+                                        <tr key={r.strike} style={{ borderTop: "1px solid var(--panel-edge)" }}>
+                                          <td style={{ textAlign: "right", padding: "3px 6px", color: "var(--amber)" }}>{r.strike}</td>
+                                          <td style={{ textAlign: "right", padding: "3px 6px", color: "var(--ink)" }}>{r.call_mid.toFixed(2)}</td>
+                                          <td style={{ textAlign: "right", padding: "3px 6px", color: "var(--ink-soft)" }}>{r.call_delta.toFixed(2)}</td>
+                                          <td style={{ textAlign: "right", padding: "3px 6px", color: "var(--ink)" }}>{r.put_mid.toFixed(2)}</td>
+                                          <td style={{ textAlign: "right", padding: "3px 6px", color: "var(--ink-soft)" }}>{r.put_delta.toFixed(2)}</td>
+                                        </tr>
+                                      ))}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              ))}
+                              <div style={{ fontSize: 10, color: "var(--ink-faint)", fontStyle: "italic", marginTop: 4, marginBottom: 12 }}>
+                                Mid prices computed from a Black-Scholes smile anchored by ATM, 25Δ-put, and 25Δ-call volatilities.
+                              </div>
+                            </>
+                          );
+                        })()}
+                      </>
                     )}
 
                     <h3 className="serif">Catalyst</h3>

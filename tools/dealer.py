@@ -13,6 +13,7 @@ from typing import Any
 import prompts
 from claude import call_claude, extract_json, ClaudeError
 from db import journal, patrons
+from tools.options_chain import build_option_chain
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,13 @@ async def deal_scenario(
         if max_loss_usd is not None:
             scenario["max_loss_usd"] = max_loss_usd
         scenario["replay_of"] = replay_entry_id
+
+        # Rebuild the option chain from the original scaffolds so a
+        # pre-chain replay still surfaces a chain. (Re-computation is
+        # deterministic — same scaffolds produce the same numbers.)
+        chain = build_option_chain(scenario)
+        if chain is not None:
+            scenario["option_chain"] = chain
 
         await patrons.upsert_patron(npub)
         entry_id = await journal.open_entry(
@@ -165,6 +173,13 @@ async def deal_scenario(
     # scenario card and the judge can verify the LLM stayed on-topic.
     if sector_clean:
         scenario["sector"] = sector_clean
+
+    # Build the option chain from the dealer's scaffolds + the three
+    # smile points. Trainee and judge both see this same chain — one
+    # source of truth, no mental-model drift.
+    chain = build_option_chain(scenario)
+    if chain is not None:
+        scenario["option_chain"] = chain
 
     entry_id = await journal.open_entry(
         npub=npub,
