@@ -1882,12 +1882,41 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
                     {!evaluation && (
                       <>
-                        <textarea
-                          ref={answerRef}
-                          value={answer}
-                          onChange={(e) => setAnswer(e.target.value)}
-                          placeholder="e.g. Sell the 30-day 95/90 put spread for 1.20 credit, sized to risk 0.5% of NAV. The Fed's hawkish hold puts a floor under the dollar but the equity is bid on insider buying; collecting premium below the 200d feels asymmetric…"
-                        />
+                        {/* Pitch composer: textarea with an inset Present
+                            button at bottom-right (same affordance as the
+                            clue panel's send icon). Discard and Save Draft
+                            stay below as ancillary actions. */}
+                        <div style={{ position: "relative" }}>
+                          <textarea
+                            ref={answerRef}
+                            value={answer}
+                            onChange={(e) => setAnswer(e.target.value)}
+                            placeholder="e.g. Sell the 30-day 95/90 put spread for 1.20 credit, sized to risk 0.5% of NAV. The Fed's hawkish hold puts a floor under the dollar but the equity is bid on insider buying; collecting premium below the 200d feels asymmetric…"
+                            style={{ paddingRight: 56 }}
+                          />
+                          <button
+                            type="button"
+                            onClick={submitTrade}
+                            disabled={loading || !answer.trim()}
+                            title="Present your trade — submit to the senior PM for review and a graded pitch audit"
+                            aria-label="Present pitch"
+                            style={{
+                              position: "absolute",
+                              right: 8,
+                              bottom: 8,
+                              background: "transparent",
+                              border: "none",
+                              padding: "4px 6px",
+                              cursor: loading || !answer.trim() ? "not-allowed" : "pointer",
+                              opacity: loading || !answer.trim() ? 0.4 : 1,
+                              fontSize: 22,
+                              lineHeight: 1,
+                              whiteSpace: "nowrap",
+                            }}
+                          >
+                            {loading ? "…" : "🙋🏼"}
+                          </button>
+                        </div>
                         <div className="actions">
                           <button
                             className="btn btn-ghost"
@@ -1907,16 +1936,6 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             style={{ fontSize: 18, lineHeight: 1 }}
                           >
                             {savingDraft ? "…" : "💾"}
-                          </button>
-                          <button
-                            className="btn"
-                            onClick={submitTrade}
-                            disabled={loading}
-                            title="Present your trade — submit to the senior PM for review and a graded pitch audit"
-                            aria-label="Present pitch"
-                            style={{ fontSize: 18, lineHeight: 1 }}
-                          >
-                            🙋🏼
                           </button>
                         </div>
                         {draftSavedAt && !savingDraft && (
