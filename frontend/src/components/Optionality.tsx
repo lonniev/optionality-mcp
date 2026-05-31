@@ -1916,7 +1916,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             aria-label="Present pitch"
                             style={{ fontSize: 18, lineHeight: 1 }}
                           >
-                            🙋🏼‍♂️
+                            🙋🏼
                           </button>
                         </div>
                         {draftSavedAt && !savingDraft && (
