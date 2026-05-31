@@ -28,6 +28,7 @@ import {
   getApiUsageStats,
   getJournal,
   getLeaderboard,
+  getMyRank,
   getSharedEntries,
   isGuestMode,
   judgeTrade,
@@ -805,6 +806,32 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         // Fresh slot for this npub — clear any in-memory carry-over
         // (e.g. when bouncing between identities without a full reload).
         setStats({ played: 0, avg: 0, best: 0, streak: 0 });
+      }
+
+      // localStorage is just a cache for instant render — the server's
+      // materialized leaderboard_stats row is the source of truth, so
+      // a different browser sees the same career stats. Hydrate from
+      // the wheel and overwrite both in-memory state and the cache.
+      const me = getStoredNpub();
+      if (me && me !== "_guest") {
+        try {
+          const rank = await getMyRank("avg");
+          const ss = rank.stats;
+          if (ss) {
+            const next: Stats = {
+              played: Number(ss.total_played ?? 0),
+              avg: Math.round(Number(ss.avg_score ?? 0)),
+              best: Number(ss.best_score ?? 0),
+              streak: Number(ss.current_streak ?? 0),
+            };
+            setStats(next);
+            await saveState(me, { stats: next });
+          }
+        } catch {
+          // Network / proof / cold-start hiccup — leave the localStorage
+          // cache showing. The next mount or post-judge persist() will
+          // refresh it.
+        }
       }
       // Hydrate active session — the patron paid for this scenario; a
       // page reload must put them back on the same board with their

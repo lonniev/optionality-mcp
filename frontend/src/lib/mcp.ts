@@ -493,6 +493,28 @@ export async function getLeaderboard(
   });
 }
 
+/// Shape returned by the wheel's get_my_rank — the patron's own row
+/// from the materialized leaderboard_stats. ``stats`` is null until
+/// they have at least one evaluated entry.
+export interface MyRankResult {
+  npub?: string;
+  rank?: number | null;
+  stats?: {
+    total_played?: number;
+    avg_score?: number;
+    best_score?: number;
+    current_streak?: number;
+    longest_streak?: number;
+    weighted_avg?: number;
+    last_played_at?: string;
+  } | null;
+  error?: string;
+}
+
+export async function getMyRank(sortBy: LeaderboardSort = "avg"): Promise<MyRankResult> {
+  return callTool<MyRankResult>("get_my_rank", { sort_by: sortBy });
+}
+
 /// Paginated list of the signed-in patron's journal entries, newest
 /// first. ``before`` is the cursor — the ISO ``created_at`` of the last
 /// row from the previous page. Omit on first fetch.
