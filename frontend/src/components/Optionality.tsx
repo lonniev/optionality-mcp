@@ -1791,7 +1791,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <div className="scenario-grid">
                   {/* LEFT — the facts */}
                   <div>
-                    <div className="scenario-meta">{scenario.date_context}</div>
+                    <div className="scenario-meta">
+                      <span aria-hidden="true" style={{ marginRight: 6 }}>📅</span>
+                      {scenario.date_context}
+                    </div>
                     <h2 className="serif">{scenario.asset?.name}</h2>
                     <div
                       className="scenario-quote"
@@ -1873,6 +1876,49 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   {/* RIGHT — the question + answer (or empty if already judged
                       so the evaluation panel below takes over) */}
                   <div className="scenario-prompt">
+                    {!evaluation && (
+                      <div style={{
+                        display: "flex",
+                        justifyContent: "flex-end",
+                        gap: 4,
+                        marginBottom: 4,
+                      }}>
+                        <button
+                          type="button"
+                          onClick={handleSaveDraft}
+                          disabled={savingDraft || !answer.trim()}
+                          title="Persist this draft to your Journal entry so it survives a page reload — keep working without losing your pitch"
+                          aria-label="Save draft"
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            padding: "2px 6px",
+                            cursor: savingDraft || !answer.trim() ? "not-allowed" : "pointer",
+                            opacity: savingDraft || !answer.trim() ? 0.4 : 1,
+                            fontSize: 16,
+                            lineHeight: 1,
+                          }}
+                        >
+                          {savingDraft ? "…" : "💾"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingDiscard(true)}
+                          title="Discard this scenario and pick a new one — the scenario fee is non-refundable, so you'll be asked to confirm"
+                          aria-label="Discard scenario"
+                          style={{
+                            background: "transparent",
+                            border: "none",
+                            padding: "2px 6px",
+                            cursor: "pointer",
+                            fontSize: 16,
+                            lineHeight: 1,
+                          }}
+                        >
+                          🗑
+                        </button>
+                      </div>
+                    )}
                     <div
                       className="question"
                       style={zoomableStyle}
@@ -1915,27 +1961,6 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             }}
                           >
                             {loading ? "…" : "🙋🏼"}
-                          </button>
-                        </div>
-                        <div className="actions">
-                          <button
-                            className="btn btn-ghost"
-                            onClick={() => setConfirmingDiscard(true)}
-                            title="Discard this scenario and pick a new one — the scenario fee is non-refundable, so you'll be asked to confirm"
-                            aria-label="Discard scenario"
-                            style={{ fontSize: 18, lineHeight: 1 }}
-                          >
-                            🗑
-                          </button>
-                          <button
-                            className="btn btn-ghost"
-                            onClick={handleSaveDraft}
-                            disabled={savingDraft || !answer.trim()}
-                            title="Persist this draft to your Journal entry so it survives a page reload — keep working without losing your pitch"
-                            aria-label="Save draft"
-                            style={{ fontSize: 18, lineHeight: 1 }}
-                          >
-                            {savingDraft ? "…" : "💾"}
                           </button>
                         </div>
                         {draftSavedAt && !savingDraft && (
