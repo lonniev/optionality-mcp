@@ -108,6 +108,7 @@ export default function OptionChainGuide({
   function applyAction(side: "buy" | "sell" | "remove") {
     if (!menuAnchor) return;
     const { kind, row } = menuAnchor;
+    const existing = findLeg(row, kind);
     const others = legs.filter(
       (l) => !(l.expiration === row.expiration && l.strike === row.strike && l.type === kind),
     );
@@ -124,11 +125,25 @@ export default function OptionChainGuide({
           type: kind,
           side,
           premium,
-          qty: 1,
+          // Preserve qty when flipping a side via the menu so BUY 3 →
+          // SELL 3 doesn't drop back to 1 contract. Fresh legs default
+          // to 1; trainee uses the stepper in the footer to adjust.
+          qty: existing?.qty ?? 1,
         },
       ]);
     }
     setMenuAnchor(null);
+  }
+
+  function setLegQty(target: ProposedLeg, nextQty: number): void {
+    if (nextQty < 1) return;
+    setLegs(
+      legs.map((l) =>
+        l.expiration === target.expiration && l.strike === target.strike && l.type === target.type
+          ? { ...l, qty: nextQty }
+          : l,
+      ),
+    );
   }
 
   // Net premium: per share × qty × 100 (contract multiplier). Sell = +,
@@ -224,7 +239,7 @@ export default function OptionChainGuide({
                               <span className="ocg-mid-val">{r.call_mid.toFixed(2)}</span>
                               {callLeg && (
                                 <span className={`ocg-leg-chip chip-${callLeg.side}`}>
-                                  {callLeg.side === "buy" ? "+1" : "−1"}
+                                  {callLeg.side === "buy" ? `+${callLeg.qty}` : `−${callLeg.qty}`}
                                 </span>
                               )}
                             </td>
@@ -238,7 +253,7 @@ export default function OptionChainGuide({
                               <span className="ocg-mid-val">{r.put_mid.toFixed(2)}</span>
                               {putLeg && (
                                 <span className={`ocg-leg-chip chip-${putLeg.side}`}>
-                                  {putLeg.side === "buy" ? "+1" : "−1"}
+                                  {putLeg.side === "buy" ? `+${putLeg.qty}` : `−${putLeg.qty}`}
                                 </span>
                               )}
                             </td>
@@ -276,10 +291,46 @@ export default function OptionChainGuide({
                       {legs
                         .slice()
                         .sort((a, b) => a.dte - b.dte || a.strike - b.strike)
-                        .map((l, i) => (
-                          <li key={i} className={`ocg-leg leg-${l.side}`}>
+                        .map((l) => (
+                          <li
+                            key={`${l.expiration}_${l.strike}_${l.type}`}
+                            className={`ocg-leg leg-${l.side}`}
+                          >
                             <span className="ocg-leg-side">
-                              {l.side === "buy" ? "BUY" : "SELL"} {l.qty}
+                              {l.side === "buy" ? "BUY" : "SELL"}
+                            </span>
+                            <span className="ocg-leg-qty">
+                              <button
+                                type="button"
+                                className="ocg-qty-btn"
+                                onClick={() => setLegQty(l, l.qty - 1)}
+                                disabled={l.qty <= 1}
+                                aria-label="Decrease contracts"
+                                title={l.qty <= 1 ? "Use Remove to take this leg off" : "One fewer contract"}
+                              >
+                                −
+                              </button>
+                              <input
+                                type="number"
+                                className="ocg-qty-val"
+                                value={l.qty}
+                                min={1}
+                                step={1}
+                                onChange={(e) => {
+                                  const n = parseInt(e.target.value, 10);
+                                  if (Number.isFinite(n) && n >= 1) setLegQty(l, n);
+                                }}
+                                aria-label="Contract quantity"
+                              />
+                              <button
+                                type="button"
+                                className="ocg-qty-btn"
+                                onClick={() => setLegQty(l, l.qty + 1)}
+                                aria-label="Increase contracts"
+                                title="One more contract"
+                              >
+                                +
+                              </button>
                             </span>
                             <span className="ocg-leg-spec">
                               ${l.strike}{l.type === "call" ? "C" : "P"} · {l.dte} DTE
@@ -597,9 +648,10 @@ export default function OptionChainGuide({
         }
         .ocg-leg {
           display: grid;
-          grid-template-columns: 90px 1fr auto;
-          gap: 12px;
-          padding: 6px 8px;
+          grid-template-columns: 56px auto 1fr auto;
+          align-items: center;
+          gap: 10px;
+          padding: 5px 8px;
           font-family: 'JetBrains Mono', monospace;
           font-size: 12px;
           border-left: 3px solid var(--panel-edge);
@@ -613,6 +665,57 @@ export default function OptionChainGuide({
         .ocg-leg.leg-sell .ocg-leg-side { color: var(--rust); }
         .ocg-leg-spec { color: var(--ink); }
         .ocg-leg-prem { color: var(--ink-soft); text-align: right; }
+
+        .ocg-leg-qty {
+          display: inline-flex;
+          align-items: center;
+          gap: 2px;
+          background: var(--bg-soft);
+          border: 1px solid var(--panel-edge);
+          border-radius: 4px;
+          padding: 1px;
+        }
+        .ocg-qty-btn {
+          background: transparent;
+          border: none;
+          color: var(--ink-soft);
+          font-family: inherit;
+          font-size: 14px;
+          line-height: 1;
+          width: 22px;
+          height: 22px;
+          cursor: pointer;
+          border-radius: 3px;
+          transition: background 100ms, color 100ms;
+        }
+        .ocg-qty-btn:hover { background: var(--bg); color: var(--amber-bright); }
+        .ocg-qty-btn:disabled {
+          opacity: 0.3;
+          cursor: not-allowed;
+        }
+        .ocg-qty-val {
+          width: 36px;
+          background: transparent;
+          border: none;
+          color: var(--ink);
+          font-family: inherit;
+          font-size: 12px;
+          text-align: center;
+          padding: 2px 0;
+          /* Hide the native spinner — we provide our own +/- buttons. */
+          -moz-appearance: textfield;
+          appearance: textfield;
+        }
+        .ocg-qty-val::-webkit-outer-spin-button,
+        .ocg-qty-val::-webkit-inner-spin-button {
+          -webkit-appearance: none;
+          margin: 0;
+        }
+        .ocg-qty-val:focus {
+          outline: 1px solid var(--amber);
+          outline-offset: -1px;
+          border-radius: 2px;
+        }
 
         .ocg-net {
           display: flex;
