@@ -155,6 +155,7 @@ export function buildOptionChain(args: {
         expiration: iso,
         dte,
         strike: K,
+        iv: Math.round(iv * 1000) / 10,
         call_mid: Math.round(bsPrice(args.spot, K, t, r, iv, "call") * 100) / 100,
         call_delta: Math.round(bsDelta(args.spot, K, t, r, iv, "call") * 100) / 100,
         put_mid: Math.round(bsPrice(args.spot, K, t, r, iv, "put") * 100) / 100,

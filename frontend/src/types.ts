@@ -40,6 +40,12 @@ export interface OptionChainRow {
   expiration: string;
   dte: number;
   strike: number;
+  /// The smile IV at this strike, in vol-percent (e.g. 62.7 means
+  /// 62.7%). One IV per strike — the call and put at the same strike
+  /// share this IV because the smile is one curve, not two. Optional
+  /// for backward compatibility with pre-iv chain rows in journal
+  /// entries dealt before this column existed.
+  iv?: number;
   call_mid: number;
   call_delta: number;
   put_mid: number;

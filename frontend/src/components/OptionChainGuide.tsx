@@ -88,8 +88,11 @@ export default function OptionChainGuide({ spot, chain }: OptionChainGuideProps)
               <p className="ocg-lede">
                 Mid prices and deltas across the available expirations, computed
                 from a Black-Scholes smile anchored by ATM, 25Δ-put, and
-                25Δ-call volatilities. The row closest to spot
-                (<strong>${spot.toFixed(2)}</strong>) is highlighted as ATM.
+                25Δ-call volatilities. The IV column reads the smile at each
+                strike — that's the same IV used to price both the call and
+                the put at that strike (the smile is one curve, not two).
+                The row closest to spot (<strong>${spot.toFixed(2)}</strong>) is
+                highlighted as ATM.
               </p>
 
               {groups.map(({ exp, dte, rows, atmStrike }) => (
@@ -102,13 +105,14 @@ export default function OptionChainGuide({ spot, chain }: OptionChainGuideProps)
                     <thead>
                       <tr>
                         <th colSpan={2} className="ocg-side ocg-calls">Calls</th>
-                        <th className="ocg-strike-head">Strike</th>
+                        <th colSpan={2} className="ocg-strike-head">Strike · IV</th>
                         <th colSpan={2} className="ocg-side ocg-puts">Puts</th>
                       </tr>
                       <tr className="ocg-subhead">
                         <th>ΔC</th>
                         <th>Mid</th>
-                        <th></th>
+                        <th>Strike</th>
+                        <th>IV</th>
                         <th>Mid</th>
                         <th>ΔP</th>
                       </tr>
@@ -121,6 +125,7 @@ export default function OptionChainGuide({ spot, chain }: OptionChainGuideProps)
                             <td className="ocg-delta">{r.call_delta.toFixed(2)}</td>
                             <td className="ocg-mid">{r.call_mid.toFixed(2)}</td>
                             <td className="ocg-strike">{r.strike}</td>
+                            <td className="ocg-iv">{r.iv != null ? `${r.iv.toFixed(1)}%` : "—"}</td>
                             <td className="ocg-mid">{r.put_mid.toFixed(2)}</td>
                             <td className="ocg-delta">{r.put_delta.toFixed(2)}</td>
                           </tr>
@@ -257,21 +262,28 @@ export default function OptionChainGuide({ spot, chain }: OptionChainGuideProps)
           padding: 5px 8px;
           border-top: 1px solid var(--panel-edge);
         }
-        .ocg-delta { text-align: right; color: var(--ink-soft); width: 14%; }
-        .ocg-mid { text-align: right; color: var(--ink); width: 22%; }
+        .ocg-delta { text-align: right; color: var(--ink-soft); width: 12%; }
+        .ocg-mid { text-align: right; color: var(--ink); width: 19%; }
         .ocg-strike {
           text-align: center;
           color: var(--amber);
           font-weight: 500;
-          width: 28%;
+          width: 14%;
           border-left: 1px solid var(--panel-edge);
+        }
+        .ocg-iv {
+          text-align: center;
+          color: var(--amber);
+          font-weight: 500;
+          width: 14%;
           border-right: 1px solid var(--panel-edge);
         }
 
         .ocg-row-atm {
           background: color-mix(in srgb, var(--amber) 10%, transparent);
         }
-        .ocg-row-atm .ocg-strike {
+        .ocg-row-atm .ocg-strike,
+        .ocg-row-atm .ocg-iv {
           color: var(--amber-bright);
           font-weight: 600;
         }

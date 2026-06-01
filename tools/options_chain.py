@@ -198,6 +198,7 @@ def build_option_chain(scenario: dict[str, Any]) -> list[dict[str, Any]] | None:
                 "expiration": exp_iso,
                 "dte": dte,
                 "strike": K,
+                "iv": round(iv * 100, 1),
                 "call_mid": round(call, 2),
                 "call_delta": round(cdelta, 2),
                 "put_mid": round(put, 2),
