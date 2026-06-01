@@ -15,6 +15,7 @@ import type {
   ModelUsage,
   OptionChainRow,
   PersistedState,
+  ProposedLeg,
   Scenario,
   Stats,
   TabId,
@@ -734,6 +735,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // active session so a reload preserves the conversation context.
   const [tips, setTips] = useState<TipExchange[]>([]);
   const [tipsCopied, setTipsCopied] = useState<boolean>(false);
+  // Trainee-built option-chain legs. Persisted in active session so
+  // closing the chain modal or reloading the page doesn't blow away
+  // the structure they were exploring. Reset on nextRound().
+  const [proposedLegs, setProposedLegs] = useState<ProposedLeg[]>([]);
   const [tipQuestion, setTipQuestion] = useState<string>("");
   const [tipAsking, setTipAsking] = useState<boolean>(false);
   /// Scroll container for the clue Q&A history. Capped at min(40vh, 360px)
@@ -847,6 +852,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         if (typeof sess.maxLossUsd === "number") setMaxLossInput(String(sess.maxLossUsd));
         if (typeof sess.sector === "string") setSector(sess.sector);
         if (Array.isArray(sess.tips)) setTips(sess.tips);
+        if (Array.isArray(sess.proposedLegs)) setProposedLegs(sess.proposedLegs);
         if (sess.draftSavedAt) setDraftSavedAt(sess.draftSavedAt);
       }
     })();
@@ -868,9 +874,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       sector: sector.trim() || undefined,
       evaluation: evaluation ?? undefined,
       tips,
+      proposedLegs: proposedLegs.length > 0 ? proposedLegs : undefined,
       draftSavedAt: draftSavedAt ?? undefined,
     });
-  }, [scenario, entryId, answer, evaluation, mode, difficulty, maxLossInput, sector, tips, draftSavedAt]);
+  }, [scenario, entryId, answer, evaluation, mode, difficulty, maxLossInput, sector, tips, proposedLegs, draftSavedAt]);
 
   async function persist(nextStats: Stats): Promise<void> {
     // The Journal is server-authoritative via list_journal — only
@@ -968,6 +975,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     setError("");
     setTips([]);
     setTipQuestion("");
+    setProposedLegs([]);
     setDraftSavedAt(null);
     // User explicitly moved past this card — drop the paid-for session
     // so the next reload lands on the setup screen, not on this stale
@@ -1860,7 +1868,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
                     {typeof scenario.asset?.spot === "number" && Array.isArray(scenario.option_chain) && scenario.option_chain.length > 0 && (
                       <div style={{ marginTop: 6, marginBottom: 12 }}>
-                        <OptionChainGuide spot={scenario.asset.spot} chain={scenario.option_chain} />
+                        <OptionChainGuide
+                          spot={scenario.asset.spot}
+                          chain={scenario.option_chain}
+                          legs={proposedLegs}
+                          onLegsChange={setProposedLegs}
+                        />
                       </div>
                     )}
 

@@ -52,6 +52,21 @@ export interface OptionChainRow {
   put_delta: number;
 }
 
+/// A leg the trainee built by tapping a mid in the chain table.
+/// premium is the mid at the time of the click (per-share, not per
+/// contract); side is buy = long premium, sell = short premium. qty
+/// defaults to 1 contract (100 shares). Trainee uses these to feel
+/// out a trade structure before writing it into the pitch composer.
+export interface ProposedLeg {
+  expiration: string;
+  dte: number;
+  strike: number;
+  type: "call" | "put";
+  side: "buy" | "sell";
+  premium: number;
+  qty: number;
+}
+
 export interface Scenario {
   scenario_id?: string;
   mode: Mode;
@@ -218,6 +233,10 @@ export interface ActiveSession {
   sector?: string;
   evaluation?: Evaluation;
   tips?: TipExchange[];
+  /// Legs the trainee built by tapping mids in the option chain modal.
+  /// Persisted so closing the modal — or reloading the page — doesn't
+  /// blow away the structure they were exploring.
+  proposedLegs?: ProposedLeg[];
   draftSavedAt?: number;
 }
 
