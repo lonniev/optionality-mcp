@@ -870,3 +870,71 @@ export async function requestNpubProof(patronNpub: string): Promise<NpubProofRes
 export async function receiveNpubProof(patronNpub: string): Promise<NpubProofResult> {
   return callTool<NpubProofResult>("receive_npub_proof", { patron_npub: patronNpub });
 }
+
+// ─── Coupons (wheel 0.41.0+) ────────────────────────────────────────────
+
+export interface PatronCoupon {
+  coupon_id: string;
+  name: string;
+  discount_percent: number;
+  valid_from: string;
+  valid_until: string;
+  uses_per_patron: number | null;
+  use_count: number;
+  uses_remaining: number | null;
+  total_uses: number | null;
+  total_remaining: number | null;
+  /// "active" / "window_closed" / "patron_limit" / "total_limit" / "window_not_started"
+  status: string;
+}
+
+export interface ListMyCouponsResult {
+  success: boolean;
+  count: number;
+  coupons: PatronCoupon[];
+  error?: string;
+}
+
+export interface RedeemCouponResult {
+  success: boolean;
+  coupon_id?: string;
+  name?: string;
+  discount_percent?: number;
+  valid_until?: string;
+  uses_remaining?: number | null;
+  uses_per_patron?: number | null;
+  error?: string;
+}
+
+export interface ForgetCouponResult {
+  success: boolean;
+  coupon_id?: string;
+  error?: string;
+}
+
+/**
+ * Claim a coupon by its name (operator-distributed code).  On success
+ * the wheel records a per-patron redemption row and the discount is
+ * automatically applied on subsequent paid tool calls until the
+ * uses-per-patron cap or the window expires.  Idempotent.
+ */
+export async function redeemCoupon(code: string): Promise<RedeemCouponResult> {
+  return callTool<RedeemCouponResult>("redeem_coupon", { code });
+}
+
+/**
+ * List the coupons this patron has redeemed on this MCP.  Returns
+ * both active and exhausted rows with a per-row status.
+ */
+export async function listMyCoupons(): Promise<ListMyCouponsResult> {
+  return callTool<ListMyCouponsResult>("list_my_coupons", {});
+}
+
+/**
+ * Remove a coupon from this patron's redemption list.  Pure cosmetic —
+ * the coupon itself still exists at the operator, and the patron can
+ * re-redeem the same code later while the window allows.
+ */
+export async function forgetCoupon(couponId: string): Promise<ForgetCouponResult> {
+  return callTool<ForgetCouponResult>("forget_coupon", { coupon_id: couponId });
+}

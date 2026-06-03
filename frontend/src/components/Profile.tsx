@@ -13,10 +13,14 @@ import { useEffect, useState } from "react";
 import {
   WITHDRAW_ACKNOWLEDGMENT,
   escrowNsec,
+  forgetCoupon,
   getPatronProfile,
+  listMyCoupons,
+  redeemCoupon,
   serviceStatus,
   setProfile,
   withdrawNsec,
+  type PatronCoupon,
   type ServiceStatus,
 } from "../lib/mcp";
 import { useTheme, type Theme } from "../lib/theme";
@@ -329,6 +333,8 @@ export default function ProfileTab({ npub }: { npub: string }) {
         }}
       />
 
+      <MyCouponsPanel />
+
       <BuildAndLicensePanel />
     </>
   );
@@ -608,6 +614,214 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// My Coupons — patron-side redemption surface.
+//
+// Operators distribute discount codes off-network (Twitter, email, DM).
+// The patron redeems the name once here; the wheel auto-applies the
+// discount on subsequent paid tool calls until the per-patron cap or
+// the window expires. Empty state explains where codes come from.
+
+function MyCouponsPanel() {
+  const [coupons, setCoupons] = useState<PatronCoupon[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [code, setCode] = useState<string>("");
+  const [redeeming, setRedeeming] = useState<boolean>(false);
+  const [redeemMsg, setRedeemMsg] = useState<{ tone: "ok" | "err"; text: string } | null>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const r = await listMyCoupons();
+      setCoupons(r.coupons ?? []);
+    } catch (e) {
+      setLoadError((e as Error).message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { void refresh(); }, []);
+
+  const onRedeem = async () => {
+    const trimmed = code.trim();
+    if (!trimmed) return;
+    setRedeeming(true);
+    setRedeemMsg(null);
+    try {
+      const r = await redeemCoupon(trimmed);
+      if (r.success) {
+        setRedeemMsg({
+          tone: "ok",
+          text: `${r.name}: ${r.discount_percent}% off${
+            r.uses_remaining != null ? ` — ${r.uses_remaining} use${r.uses_remaining === 1 ? "" : "s"} left` : ""
+          }.`,
+        });
+        setCode("");
+        void refresh();
+      } else {
+        setRedeemMsg({ tone: "err", text: r.error ?? "Couldn't redeem that code." });
+      }
+    } catch (e) {
+      setRedeemMsg({ tone: "err", text: (e as Error).message });
+    } finally {
+      setRedeeming(false);
+    }
+  };
+
+  const onForget = async (couponId: string) => {
+    if (!confirm("Remove this coupon from your list? You can re-redeem the code later while the window allows.")) return;
+    try {
+      await forgetCoupon(couponId);
+      setCoupons((cs) => cs.filter((c) => c.coupon_id !== couponId));
+    } catch (e) {
+      setRedeemMsg({ tone: "err", text: (e as Error).message });
+    }
+  };
+
+  return (
+    <div className="panel" style={{ marginTop: 20 }}>
+      <span className="panel-label">My Coupons</span>
+      <h2 className="serif">Codes that ride along.</h2>
+      <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 18, lineHeight: 1.6 }}>
+        Redeem an operator code once. The discount applies automatically on subsequent paid tool calls
+        until the per-patron cap or the calendar window expires.
+      </p>
+
+      <FieldLabel>Redeem a code</FieldLabel>
+      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+        <input
+          type="text"
+          value={code}
+          onChange={(e) => setCode(e.target.value.toUpperCase())}
+          placeholder="FRESHMAN, EARLYBIRD…"
+          style={{ ...INPUT_STYLE, marginBottom: 0, flex: 1, textTransform: "uppercase" }}
+          autoCapitalize="characters"
+          autoCorrect="off"
+          spellCheck={false}
+          onKeyDown={(e) => { if (e.key === "Enter") void onRedeem(); }}
+          disabled={redeeming}
+        />
+        <button
+          className="btn"
+          onClick={() => void onRedeem()}
+          disabled={redeeming || !code.trim()}
+          title="Claim this code"
+          style={{ minWidth: 110 }}
+        >
+          {redeeming ? "Redeeming…" : "🎟 Redeem"}
+        </button>
+      </div>
+
+      {redeemMsg && (
+        <div
+          style={{
+            fontSize: 12,
+            padding: "8px 12px",
+            marginBottom: 14,
+            borderLeft: `3px solid ${redeemMsg.tone === "ok" ? "var(--jade)" : "var(--rust)"}`,
+            background: redeemMsg.tone === "ok" ? "rgba(81,142,93,0.08)" : "rgba(192,87,69,0.08)",
+            color: redeemMsg.tone === "ok" ? "var(--jade)" : "var(--rust)",
+          }}
+        >
+          {redeemMsg.text}
+        </div>
+      )}
+
+      <FieldLabel>Active</FieldLabel>
+      {loading ? (
+        <div style={{ color: "var(--ink-faint)", fontSize: 12, padding: "8px 0" }}>Loading…</div>
+      ) : loadError ? (
+        <div className="error">{loadError}</div>
+      ) : coupons.length === 0 ? (
+        <div style={{ color: "var(--ink-faint)", fontSize: 12, padding: "12px 0", lineHeight: 1.6 }}>
+          No coupons redeemed yet. Operators distribute codes via Twitter, email, the welcome page, or DM —
+          paste the code above to claim its discount.
+        </div>
+      ) : (
+        <div>
+          {coupons.map((c) => (
+            <CouponRow key={c.coupon_id} coupon={c} onForget={() => void onForget(c.coupon_id)} />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CouponRow({ coupon, onForget }: { coupon: PatronCoupon; onForget: () => void }) {
+  const isActive = coupon.status === "active";
+  const statusLabel = (() => {
+    switch (coupon.status) {
+      case "active": return "Active";
+      case "window_closed": return "Expired";
+      case "window_not_started": return "Not yet active";
+      case "patron_limit": return "All uses claimed";
+      case "total_limit": return "Fully claimed";
+      default: return coupon.status;
+    }
+  })();
+  const statusColor = isActive ? "var(--jade)" : "var(--ink-faint)";
+
+  const usesText = coupon.uses_per_patron == null
+    ? "∞ uses"
+    : `${coupon.uses_remaining ?? 0} of ${coupon.uses_per_patron} use${coupon.uses_per_patron === 1 ? "" : "s"} left`;
+
+  const validUntilDate = new Date(coupon.valid_until);
+  const daysUntilExpiry = Math.max(0, Math.ceil((validUntilDate.getTime() - Date.now()) / 86_400_000));
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "center",
+        gap: 12,
+        padding: "10px 0",
+        borderBottom: "1px solid var(--panel-edge)",
+      }}
+    >
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span style={{
+            fontFamily: "JetBrains Mono, monospace",
+            fontSize: 13,
+            color: "var(--ivory-bright)",
+            letterSpacing: "0.04em",
+          }}>
+            {coupon.name}
+          </span>
+          <span style={{ color: "var(--amber-bright)", fontSize: 13, fontWeight: 600 }}>
+            {coupon.discount_percent}% off
+          </span>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 2 }}>
+          <span style={{ color: statusColor }}>{statusLabel}</span>
+          {" · "}
+          {usesText}
+          {isActive && (
+            <>
+              {" · "}
+              {daysUntilExpiry === 0
+                ? "expires today"
+                : `expires in ${daysUntilExpiry} day${daysUntilExpiry === 1 ? "" : "s"}`}
+            </>
+          )}
+        </div>
+      </div>
+      <button
+        className="btn btn-ghost"
+        onClick={onForget}
+        title="Remove from your list. You can re-redeem later while the window allows."
+        style={{ padding: "4px 10px", fontSize: 12 }}
+      >
+        🗑
+      </button>
     </div>
   );
 }
