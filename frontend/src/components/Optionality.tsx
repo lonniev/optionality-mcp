@@ -2183,8 +2183,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <div className="deeper"><RichText text={evaluation.deeper_context || ""} /></div>
 
                 <div className="actions" style={{ marginTop: 22 }}>
-                  <button className="btn btn-ghost" onClick={nextRound}>Back to setup</button>
-                  <button className="btn" onClick={() => { nextRound(); void generateScenario(); }}>Next Trade Scenario</button>
+                  <button
+                    className="btn"
+                    onClick={nextRound}
+                    title="Return to the scenario picker. Your inputs (mode, persona, sector, max-loss budget) are kept; the next scenario is only generated — and charged — when you click Be Challenged."
+                  >
+                    Pick another scenario
+                  </button>
                 </div>
               </div>
             )}
