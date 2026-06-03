@@ -2186,9 +2186,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   <button
                     className="btn"
                     onClick={nextRound}
-                    title="Return to the scenario picker. Your inputs (mode, persona, sector, max-loss budget) are kept; the next scenario is only generated — and charged — when you click Be Challenged."
+                    title="Back to the scenario picker"
                   >
-                    Pick another scenario
+                    🔁 Replay
                   </button>
                 </div>
               </div>
