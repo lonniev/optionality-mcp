@@ -82,7 +82,13 @@ export default function SampleAssessment() {
 
         {Array.isArray(scenario.option_chain) && scenario.option_chain.length > 0 && (
           <div style={{ marginTop: 6, marginBottom: 12 }}>
-            <OptionChainGuide spot={scenario.asset.spot} chain={scenario.option_chain} />
+            <OptionChainGuide
+              spot={scenario.asset.spot}
+              chain={scenario.option_chain}
+              ticker={scenario.asset.ticker || ""}
+              ivPct={scenario.asset.iv_30d}
+              scenario={scenario}
+            />
           </div>
         )}
 

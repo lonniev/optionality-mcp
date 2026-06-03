@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { OptionChainRow, ProposedLeg } from "../types";
+import type { OptionChainRow, ProposedLeg, Scenario } from "../types";
+import PayoffPanel from "./PayoffPanel";
 
 interface OptionChainGuideProps {
   spot: number;
@@ -10,6 +11,17 @@ interface OptionChainGuideProps {
   /// internal legs state (good for the static Sample Assessment).
   legs?: ProposedLeg[];
   onLegsChange?: (next: ProposedLeg[]) => void;
+  /// Underlying ticker — used by the embedded Payoff Panel's order
+  /// ticket (BTO/STO header). Pass an empty string to suppress.
+  ticker?: string;
+  /// ATM 30-day implied volatility as a vol-percent (e.g. 62 for 62%).
+  /// Drives the Payoff Panel's multi-expiry BSM valuation. Defaults
+  /// to 30% if omitted so the panel still renders for legacy callers.
+  ivPct?: number;
+  /// Risk-free rate (decimal). Defaults to 4.5%.
+  r?: number;
+  /// Scenario context — used by the preset builder to anchor expirations.
+  scenario?: Scenario | null;
 }
 
 type MenuKind = "call" | "put";
@@ -33,6 +45,10 @@ export default function OptionChainGuide({
   chain,
   legs: controlledLegs,
   onLegsChange,
+  ticker = "",
+  ivPct = 30,
+  r = 0.045,
+  scenario = null,
 }: OptionChainGuideProps) {
   const [open, setOpen] = useState<boolean>(false);
   const [internalLegs, setInternalLegs] = useState<ProposedLeg[]>([]);
@@ -350,6 +366,27 @@ export default function OptionChainGuide({
                     </div>
                   </>
                 )}
+              </div>
+
+              {/* Payoff lab — structure name, P/L curve, broker
+                  ticket, optional presets. Renders inside the modal
+                  but outside the footer's empty/non-empty branches so
+                  the presets row stays available even before the
+                  trainee taps any mids. The chart is the same Recharts
+                  component the post-judge RiskProfileChart uses, so
+                  the trainee feels the structure they're building
+                  before the judge ever sees it. */}
+              <div className="ocg-payoff-mount">
+                <PayoffPanel
+                  ticker={ticker}
+                  spot={spot}
+                  iv={ivPct / 100}
+                  r={r}
+                  legs={legs}
+                  chain={chain}
+                  scenario={scenario}
+                  onLoadPreset={setLegs}
+                />
               </div>
             </div>
           </div>

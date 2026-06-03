@@ -1873,6 +1873,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           chain={scenario.option_chain}
                           legs={proposedLegs}
                           onLegsChange={setProposedLegs}
+                          ticker={scenario.asset.ticker || ""}
+                          ivPct={scenario.asset.iv_30d}
+                          scenario={scenario}
                         />
                       </div>
                     )}
