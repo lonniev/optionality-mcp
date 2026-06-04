@@ -385,6 +385,73 @@ async function callTool<T = unknown>(
   return payload as T;
 }
 
+// ─── Claim-check polling ────────────────────────────────────────────────────
+//
+// The slow LLM tools (deal_scenario, ask_tip, judge_trade) return a claim
+// check instead of the end item — generation runs concurrently on the
+// server and outlives any single MCP call. Each has a free companion
+// tool that redeems the claim. We poll the companion until the work is
+// done; every poll is a fast call, so the per-call MCP timeout never
+// comes into play.
+
+interface ClaimCheckStart {
+  success?: boolean;
+  claim_check?: string;
+  poll_after_seconds?: number;
+  error?: string;
+}
+
+interface ClaimFetch<T> {
+  status?: string; // running | done | error | expired
+  result?: T;
+  error?: string;
+  next_steps?: string;
+  poll_after_seconds?: number;
+}
+
+const CLAIM_MAX_WAIT_MS = 600_000;
+
+async function startAndPoll<T>(
+  startTool: string,
+  fetchTool: string,
+  args: Record<string, unknown>,
+): Promise<T> {
+  const start = await callTool<ClaimCheckStart>(startTool, args);
+  const claim = start.claim_check;
+  if (!claim) {
+    throw new Error(
+      start.error ?? `optionality_${startTool}: no claim check returned`,
+    );
+  }
+  const deadline = Date.now() + CLAIM_MAX_WAIT_MS;
+  let waitSeconds = start.poll_after_seconds ?? 3;
+  for (;;) {
+    await new Promise((r) => setTimeout(r, waitSeconds * 1000));
+    const fetched = await callTool<ClaimFetch<T>>(fetchTool, {
+      claim_check: claim,
+    });
+    if (fetched.status === "done" && fetched.result !== undefined) {
+      return fetched.result;
+    }
+    if (fetched.status === "error") {
+      throw new Error(
+        fetched.error ?? "The request failed; the fee was refunded.",
+      );
+    }
+    if (fetched.status === "expired") {
+      throw new Error(
+        fetched.next_steps ?? "The claim check expired — please retry.",
+      );
+    }
+    if (Date.now() > deadline) {
+      throw new Error(
+        `optionality_${startTool}: timed out waiting for the result.`,
+      );
+    }
+    waitSeconds = fetched.poll_after_seconds ?? 3;
+  }
+}
+
 // ─── Domain calls ──────────────────────────────────────────────────────────
 
 export interface DealScenarioResult {
@@ -413,7 +480,11 @@ export async function dealScenario(
   if (sectorClean) {
     args.sector = sectorClean;
   }
-  return callTool<DealScenarioResult>("deal_scenario", args);
+  return startAndPoll<DealScenarioResult>(
+    "deal_scenario",
+    "fetch_scenario",
+    args,
+  );
 }
 
 export interface JudgeTradeResult {
@@ -426,7 +497,7 @@ export async function judgeTrade(
   entryId: string,
   tradeProposal: string,
 ): Promise<JudgeTradeResult> {
-  return callTool<JudgeTradeResult>("judge_trade", {
+  return startAndPoll<JudgeTradeResult>("judge_trade", "fetch_judgement", {
     entry_id: entryId,
     trade_proposal: tradeProposal,
   });
@@ -448,7 +519,7 @@ export async function askTip(
     question: t.question,
     answer: t.answer,
   }));
-  return callTool<AskTipResult>("ask_tip", {
+  return startAndPoll<AskTipResult>("ask_tip", "fetch_tip", {
     entry_id: entryId,
     question,
     history: recent.length ? JSON.stringify(recent) : "",

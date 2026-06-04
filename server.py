@@ -24,7 +24,7 @@ from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 
-__version__ = "0.1.27"
+__version__ = "0.1.28"
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +64,9 @@ mcp = FastMCP(
 DEAL_SCENARIO_UUID         = "3aaf11e4-1594-570d-9a6f-f45dab0ecf0f"
 ASK_TIP_UUID               = "b25f82c6-a414-52bd-b829-90fbbc340afa"
 JUDGE_TRADE_UUID           = "2d4f4988-8199-5753-9ed2-17f458b0d17a"
+FETCH_SCENARIO_UUID        = "3977ac56-6e16-5916-bf36-267a6529dc87"
+FETCH_TIP_UUID             = "f7b8cb59-fc29-53d4-ae64-9c902f9f3415"
+FETCH_JUDGEMENT_UUID       = "cf4dedc4-90b3-5dcb-b097-b0c9148d84bf"
 SAVE_DRAFT_UUID            = "54060513-452a-5846-a68b-3aa5c973a0f5"
 LIST_JOURNAL_UUID          = "df86ea6b-4361-59db-a2ac-c30d1bf81abb"
 GET_JOURNAL_UUID           = "c28c0078-f58e-55da-ae61-15ff0f9e8641"
@@ -127,6 +130,28 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         capability="judge_trade",
         category="heavy",
         intent="Evaluate the trainee's trade across five dimensions and parse trade legs",
+    ),
+    # ---- Claim-check companions. The three LLM tools above return a
+    # claim check instead of the end item (the LLM round-trip outlives
+    # client timeouts); these free companions redeem the claim. Fee was
+    # already assessed on the start call — collecting the output is free.
+    ToolIdentity(
+        tool_id=FETCH_SCENARIO_UUID,
+        capability="fetch_scenario",
+        category="free",
+        intent="Redeem a deal_scenario claim check for the generated scenario",
+    ),
+    ToolIdentity(
+        tool_id=FETCH_TIP_UUID,
+        capability="fetch_tip",
+        category="free",
+        intent="Redeem an ask_tip claim check for the Socratic hint",
+    ),
+    ToolIdentity(
+        tool_id=FETCH_JUDGEMENT_UUID,
+        capability="fetch_judgement",
+        category="free",
+        intent="Redeem a judge_trade claim check for the evaluation",
     ),
     # ---- Journal CRUD (Neon)
     # Flat 1 sat — covers a single Neon round-trip; transparent fee for
@@ -350,16 +375,45 @@ async def deal_scenario(
             that sector and tailors catalysts / relevant_facts / red_herrings
             to its dynamics. Empty string = no constraint, Firm picks freely.
             Ignored on replays (the original scenario's ticker is reused).
+
+    Returns a **claim check**, not the scenario — generation outlives MCP
+    client timeouts, so it runs concurrently. Redeem the ``claim_check``
+    with ``optionality_fetch_scenario``, polling until ``status`` is
+    ``done``. Results expire after a short while; start a new request if
+    your claim expires.
     """
-    from tools.dealer import deal_scenario as _impl
-    return await _impl(
-        npub=npub,
-        mode=mode,
-        difficulty=difficulty,
-        max_loss_usd=max_loss_usd,
-        replay_entry_id=replay_entry_id,
-        sector=sector,
+    return await runtime.start_async_job(
+        "deal_scenario",
+        npub,
+        {
+            "npub": npub,
+            "mode": mode,
+            "difficulty": difficulty,
+            "max_loss_usd": max_loss_usd,
+            "replay_entry_id": replay_entry_id,
+            "sector": sector,
+        },
+        tool_id=DEAL_SCENARIO_UUID,
+        max_runtime_seconds=300,
+        result_ttl_seconds=900,
     )
+
+
+@tool
+@runtime.paid_tool(capability_uuid("fetch_scenario"))
+async def fetch_scenario(
+    claim_check: str,
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Redeem a deal_scenario claim check.
+
+    Free. While ``status`` is ``running``, wait ``poll_after_seconds`` and
+    call again. When ``done``, ``result`` holds the deal_scenario response
+    (``entry_id`` + ``scenario``). ``expired`` means the claim is unknown
+    or its result aged out — start a new deal_scenario request.
+    """
+    return await runtime.fetch_async_job(claim_check, npub)
 
 
 @tool
@@ -376,11 +430,40 @@ async def ask_tip(
     history is an optional JSON-encoded array of prior {question, answer}
     turns from this clue conversation, so follow-on questions have
     context. The wheel caps it hard, so oversupplying gains nothing.
+
+    Returns a **claim check**, not the hint. Redeem the ``claim_check``
+    with ``optionality_fetch_tip``, polling until ``status`` is ``done``.
     """
-    from tools.dealer import ask_tip as _impl
-    return await _impl(
-        npub=npub, entry_id=entry_id, question=question, history=history
+    return await runtime.start_async_job(
+        "ask_tip",
+        npub,
+        {
+            "npub": npub,
+            "entry_id": entry_id,
+            "question": question,
+            "history": history,
+        },
+        tool_id=ASK_TIP_UUID,
+        max_runtime_seconds=180,
+        result_ttl_seconds=900,
     )
+
+
+@tool
+@runtime.paid_tool(capability_uuid("fetch_tip"))
+async def fetch_tip(
+    claim_check: str,
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Redeem an ask_tip claim check.
+
+    Free. While ``status`` is ``running``, wait ``poll_after_seconds`` and
+    call again. When ``done``, ``result`` holds the ask_tip response
+    (``tip``). ``expired`` means the claim is unknown or its result aged
+    out — ask again.
+    """
+    return await runtime.fetch_async_job(claim_check, npub)
 
 
 @tool
@@ -391,9 +474,41 @@ async def judge_trade(
     npub: NpubField = "",
     proof: str = "",
 ) -> dict[str, Any]:
-    """Evaluate the trainee's trade. Persists evaluation, parses legs, recomputes leaderboard."""
-    from tools.judge import judge_trade as _impl
-    return await _impl(npub=npub, entry_id=entry_id, trade_proposal=trade_proposal)
+    """Evaluate the trainee's trade. Persists evaluation, parses legs, recomputes leaderboard.
+
+    Returns a **claim check**, not the evaluation. Redeem the
+    ``claim_check`` with ``optionality_fetch_judgement``, polling until
+    ``status`` is ``done``.
+    """
+    return await runtime.start_async_job(
+        "judge_trade",
+        npub,
+        {
+            "npub": npub,
+            "entry_id": entry_id,
+            "trade_proposal": trade_proposal,
+        },
+        tool_id=JUDGE_TRADE_UUID,
+        max_runtime_seconds=360,
+        result_ttl_seconds=900,
+    )
+
+
+@tool
+@runtime.paid_tool(capability_uuid("fetch_judgement"))
+async def fetch_judgement(
+    claim_check: str,
+    npub: NpubField = "",
+    proof: str = "",
+) -> dict[str, Any]:
+    """Redeem a judge_trade claim check.
+
+    Free. While ``status`` is ``running``, wait ``poll_after_seconds`` and
+    call again. When ``done``, ``result`` holds the judge_trade response
+    (``entry_id`` + ``evaluation``). ``expired`` means the claim is
+    unknown or its result aged out — submit the trade again.
+    """
+    return await runtime.fetch_async_job(claim_check, npub)
 
 
 @tool
@@ -679,6 +794,21 @@ async def get_api_usage_stats(
     """
     from db.usage import get_usage_stats
     return await get_usage_stats(npub=npub)
+
+
+# ---------------------------------------------------------------------------
+# Claim-check job runners — the slow LLM work behind deal_scenario,
+# ask_tip, and judge_trade. Registration by name (not closure) is what
+# lets a fresh container resume a job orphaned by a serverless recycle.
+# ---------------------------------------------------------------------------
+
+from tools.dealer import ask_tip as _ask_tip_runner  # noqa: E402
+from tools.dealer import deal_scenario as _deal_scenario_runner  # noqa: E402
+from tools.judge import judge_trade as _judge_trade_runner  # noqa: E402
+
+runtime.register_job_runner("deal_scenario", _deal_scenario_runner)
+runtime.register_job_runner("ask_tip", _ask_tip_runner)
+runtime.register_job_runner("judge_trade", _judge_trade_runner)
 
 
 def main() -> None:
