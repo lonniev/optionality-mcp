@@ -1,0 +1,63 @@
+# Optionality
+
+> An AI-judged options trading practice drill. The Firm deals an options
+> trading scenario; the trainee writes a free-text trade pitch; an AI judge
+> scores it across five dimensions, parses the trade legs, and shows how well
+> the pitch separated signal from noise. Identity is a Nostr keypair (npub);
+> usage is metered in Bitcoin Lightning satoshis — no account, no email, no
+> subscription, no KYC.
+
+Optionality is a single-page web app backed by an MCP (Model Context
+Protocol) server. Humans use the web UI; AI agents can call the same MCP
+tools directly. This is a training simulator — nothing here is investment
+advice and no real orders are placed.
+
+## What is on this site
+
+- **The Pit** — deal a scenario. Three historicity modes (historical,
+  fiction, live — live grounds the scenario in today's market via web
+  search) crossed with four difficulty personas (apprentice, journeyman,
+  adept, sovereign). Optional sector hint and max-loss budget.
+- **Pitch editor** — write a free-text trade proposal against the dealt
+  scenario. A Socratic clue desk answers questions without spoiling.
+- **Assessment** — the judge evaluates structure, strikes & tenor,
+  risk/reward, macro context, and tail awareness; parses the pitch into
+  structured legs; and emits a Facts Ledger. Every scenario embeds red
+  herrings — facts that are true but immaterial; citing them as trade
+  drivers costs points, dismissing them earns points.
+- **Journal** — every play persists; any evaluated entry can be replayed as
+  a mulligan.
+- **Leaderboard** — global peer rankings by weighted average, best score,
+  streak, and plays.
+- **Profile & Usage** — display name, avatar, Nostr relays, peer DMs, and a
+  transparency view of Claude API token spend per model.
+
+## Payments and identity
+
+- Sign in with a Nostr npub; prove ownership via a Nostr DM challenge
+  (`request_npub_proof` / `receive_npub_proof`).
+- Pre-fund a satoshi balance with a Bitcoin Lightning invoice
+  (`purchase_credits`); tool calls debit it. `check_price` previews any
+  tool's cost before committing.
+- Monetization is the Tollbooth DPYC protocol (https://tollbooth-dpyc.com):
+  operator-controlled dynamic per-tool pricing at the MCP layer.
+
+## For AI agents
+
+- MCP endpoint: https://optionality-mcp.fastmcp.app/mcp (streamable HTTP)
+- Start with `optionality_service_status` (free, no arguments) to check
+  liveness, then `optionality_check_price` to preview costs.
+- The slow LLM tools (`deal_scenario`, `ask_tip`, `judge_trade`) return a
+  claim check rather than the end item; redeem it with the free companion
+  tools (`fetch_scenario`, `fetch_tip`, `fetch_judgement`), polling until
+  `status` is `done`.
+- Reads like `get_leaderboard`, `list_journal`, and `get_shared_entries`
+  are inexpensive or free.
+
+## Links
+
+- Web app: https://optionality-mcp.pages.dev
+- MCP endpoint: https://optionality-mcp.fastmcp.app/mcp
+- Source: https://github.com/lonniev/optionality-mcp
+- Tollbooth DPYC (monetization SDK and network): https://tollbooth-dpyc.com
+- DPYC Oracle (free community concierge): https://dpyc-oracle.fastmcp.app/mcp
