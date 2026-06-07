@@ -937,9 +937,19 @@ export async function requestNpubProof(patronNpub: string): Promise<NpubProofRes
  * Per memory `feedback_human_in_loop_courier`: this is a destructive drain;
  * the caller MUST wait until the user has actually replied before invoking
  * this. Do not poll or speculatively retry.
+ *
+ * `poison` is the `proof_token` returned by requestNpubProof — the wheel's
+ * deterministic retrieve contract requires it to resolve the pinned
+ * rendezvous relay for this exact challenge.
  */
-export async function receiveNpubProof(patronNpub: string): Promise<NpubProofResult> {
-  return callTool<NpubProofResult>("receive_npub_proof", { patron_npub: patronNpub });
+export async function receiveNpubProof(
+  patronNpub: string,
+  poison: string,
+): Promise<NpubProofResult> {
+  return callTool<NpubProofResult>("receive_npub_proof", {
+    patron_npub: patronNpub,
+    poison,
+  });
 }
 
 // ─── Coupons (wheel 0.41.0+) ────────────────────────────────────────────

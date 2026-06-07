@@ -400,7 +400,7 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
     setError("");
     setStage("checking");
     try {
-      const result = await receiveNpubProof(trimmed);
+      const result = await receiveNpubProof(trimmed, pendingProof);
       if (result.error) {
         setError(result.error);
         setStage("awaiting-reply");
