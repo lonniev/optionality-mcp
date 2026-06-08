@@ -2520,7 +2520,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
                         Balance
                       </div>
-                      <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500, display: "flex", alignItems: "center", gap: 10 }}>
+                      <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
                         {balance.toLocaleString()}
                         <button
                           className="icon-btn"
@@ -2529,7 +2529,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           aria-label="Top off sats"
                           style={{ background: "transparent", border: "none", color: "var(--amber)", cursor: "pointer", padding: 2, display: "inline-flex" }}
                         >
-                          <MaterialIcon path={MI_CART} size={18} />
+                          <MaterialIcon path={MI_CART} size={30} />
                         </button>
                       </div>
                       <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
