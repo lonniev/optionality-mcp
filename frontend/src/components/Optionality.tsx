@@ -1737,7 +1737,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 padding: 4,
               }}
             >
-              <MaterialIcon path={MI_LOGOUT} />
+              <MaterialIcon path={MI_LOGOUT} size={26} />
             </button>
           )}
         </div>
@@ -2477,7 +2477,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               aria-label="Refresh the ledger"
               style={{ position: "absolute", top: 16, right: 16, background: "transparent", border: "none", color: "var(--ink-faint)", cursor: "pointer", padding: 4, display: "inline-flex" }}
             >
-              <MaterialIcon path={MI_REFRESH} size={20} />
+              <MaterialIcon path={MI_REFRESH} size={28} />
             </button>
             <span className="panel-label">DPYC Ledger</span>
             <h2 className="serif">Sats balance & MCP tool usage</h2>
@@ -2644,7 +2644,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 aria-label="Refresh API usage"
                 style={{ position: "absolute", top: 16, right: 16, background: "transparent", border: "none", color: "var(--ink-faint)", cursor: "pointer", padding: 4, display: "inline-flex" }}
               >
-                <MaterialIcon path={MI_REFRESH} size={20} />
+                <MaterialIcon path={MI_REFRESH} size={28} />
               </button>
               <span className="panel-label">Usage</span>
               <h2 className="serif">Claude API usage & estimated cost</h2>
