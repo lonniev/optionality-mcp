@@ -46,7 +46,12 @@ import { useHashTab } from "../lib/hashTab";
 
 /// Grid column template for the Journal table: caret · Symbol · Historicity
 /// · Difficulty · Created · Updated · Grade · Score · Status · Actions.
-const JOURNAL_COLS = "26px 64px 96px 100px 124px 124px 52px 58px 92px 52px";
+/// Fixed widths for the narrow cells; flexible minmax(floor, fr) for the
+/// text cells so the table fills its (80%-wide, centered) frame and reflows
+/// responsively, falling back to horizontal scroll below the floor widths.
+const JOURNAL_COLS =
+  "26px minmax(56px,0.8fr) minmax(88px,1fr) minmax(92px,1fr) " +
+  "minmax(116px,1.3fr) minmax(116px,1.3fr) 50px 56px minmax(84px,1fr) 50px";
 
 /// Sortable column headers. `key` matches the wheel's `sort_col` whitelist
 /// (list_journal); the caret and actions columns aren't sortable.
@@ -2981,7 +2986,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
             {journalEntries.length > 0 && (
               <div style={{ overflowX: "auto" }}>
-                <div style={{ minWidth: 760 }}>
+                <div style={{ width: "80%", minWidth: 760, margin: "0 auto" }}>
                   <div
                     className="history-row"
                     style={{ gridTemplateColumns: JOURNAL_COLS, color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase" }}
