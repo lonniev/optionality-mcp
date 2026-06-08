@@ -92,6 +92,21 @@ function fmtGroupLabel(groupBy: string, key: string): string {
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
+// Material Design icon paths (Apache 2.0), 24×24 viewBox — one glyph per
+// concept, rendered with currentColor so each inherits its button's color.
+const MI_LOGOUT = "M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z";
+const MI_DELETE = "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z";
+const MI_REFRESH = "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z";
+const MI_CART = "M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z";
+
+function MaterialIcon({ path, size = 18 }: { path: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" style={{ display: "block" }}>
+      <path d={path} />
+    </svg>
+  );
+}
+
 /// Map MCP-namespaced tool names (the wheel's debit ledger key) to
 /// friendlier labels for the Usage panel. Keys are the
 /// "<slug>_<capability>" strings the wheel writes to today_usage.
@@ -559,6 +574,11 @@ const styles = `
   .loading { display: inline-block; padding: 12px 18px; color: var(--amber); font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; }
   .loading::after { content: ""; animation: dots 1.4s infinite; }
   @keyframes dots { 0%,20%{content:"";} 40%{content:" .";} 60%{content:" . .";} 80%,100%{content:" . . .";} }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+  .icon-btn { transition: color 0.15s; }
+  .icon-btn:hover:not(:disabled) { color: var(--amber-bright); }
+  .icon-btn:disabled { cursor: default; }
+  .icon-btn.spin:disabled svg { animation: spin 0.8s linear infinite; }
 
   .error { color: var(--crimson); background: rgba(164,69,58,0.08); border-left: 2px solid var(--crimson); padding: 10px 14px; font-size: 12px; }
 
@@ -1717,11 +1737,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 padding: 4,
               }}
             >
-              {/* Material Design "logout" icon (Apache 2.0) — door frame
-                  with an arrow exiting; inherits the button color. */}
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                <path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z" />
-              </svg>
+              <MaterialIcon path={MI_LOGOUT} />
             </button>
           )}
         </div>
@@ -2452,7 +2468,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         {tab === "sample" && <SampleAssessment />}
 
         {tab === "usage" && (
-          <div className="panel">
+          <div className="panel" style={{ position: "relative" }}>
+            <button
+              className="icon-btn spin"
+              onClick={() => { void loadLedger(); }}
+              disabled={ledgerLoading}
+              title="Refresh the ledger"
+              aria-label="Refresh the ledger"
+              style={{ position: "absolute", top: 16, right: 16, background: "transparent", border: "none", color: "var(--ink-faint)", cursor: "pointer", padding: 4, display: "inline-flex" }}
+            >
+              <MaterialIcon path={MI_REFRESH} size={20} />
+            </button>
             <span className="panel-label">DPYC Ledger</span>
             <h2 className="serif">Sats balance & MCP tool usage</h2>
             <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
@@ -2460,25 +2486,6 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               credit tranches funding it. Tolls are deducted at call time; the operator's
               accounting flushes to Neon after each settle.
             </p>
-
-            <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-              <button
-                className="btn btn-ghost"
-                onClick={() => { void loadLedger(); }}
-                disabled={ledgerLoading}
-                style={{ padding: "8px 14px", fontSize: 10 }}
-              >
-                {ledgerLoading ? "Loading…" : "Refresh"}
-              </button>
-              <button
-                className="btn"
-                onClick={() => setTopOffOpen(true)}
-                style={{ padding: "8px 14px", fontSize: 10 }}
-                title="Buy sats from the operator via Bitcoin Lightning"
-              >
-                Top Off
-              </button>
-            </div>
 
             {ledgerLoading && ledger === null && (
               <div className="loading" style={{ display: "block", padding: "20px 0" }}>Pulling the ledger</div>
@@ -2513,8 +2520,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
                         Balance
                       </div>
-                      <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500 }}>
+                      <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500, display: "flex", alignItems: "center", gap: 10 }}>
                         {balance.toLocaleString()}
+                        <button
+                          className="icon-btn"
+                          onClick={() => setTopOffOpen(true)}
+                          title="Top off — buy sats from the operator via Bitcoin Lightning"
+                          aria-label="Top off sats"
+                          style={{ background: "transparent", border: "none", color: "var(--amber)", cursor: "pointer", padding: 2, display: "inline-flex" }}
+                        >
+                          <MaterialIcon path={MI_CART} size={18} />
+                        </button>
                       </div>
                       <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
                         sats · {ledger.active_tranches ?? 0} tranche{(ledger.active_tranches ?? 0) === 1 ? "" : "s"}
@@ -2619,7 +2635,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
           const estimatedSats = Math.round((estimatedCostUsd / btcPriceUsd) * 100_000_000);
 
           return (
-            <div className="panel">
+            <div className="panel" style={{ position: "relative" }}>
+              <button
+                className="icon-btn spin"
+                onClick={() => { void loadApiUsage(); }}
+                disabled={apiUsageLoading}
+                title="Refresh API usage"
+                aria-label="Refresh API usage"
+                style={{ position: "absolute", top: 16, right: 16, background: "transparent", border: "none", color: "var(--ink-faint)", cursor: "pointer", padding: 4, display: "inline-flex" }}
+              >
+                <MaterialIcon path={MI_REFRESH} size={20} />
+              </button>
               <span className="panel-label">Usage</span>
               <h2 className="serif">Claude API usage & estimated cost</h2>
               <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
@@ -2631,17 +2657,6 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               <p style={{ color: "var(--ink-faint)", fontSize: 10, marginTop: -10, marginBottom: 16 }}>
                 Rates via OpenRouter pass-through, fetched {PRICING_FETCHED_AT.slice(0, 10)}.
               </p>
-
-              <div style={{ display: "flex", gap: 8, marginBottom: 14 }}>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => { void loadApiUsage(); }}
-                  disabled={apiUsageLoading}
-                  style={{ padding: "8px 14px", fontSize: 10 }}
-                >
-                  {apiUsageLoading ? "Loading…" : "Refresh"}
-                </button>
-              </div>
 
               {apiUsageLoading && apiUsage === null && (
                 <div className="loading" style={{ display: "block", padding: "20px 0" }}>Tallying the receipts</div>
@@ -3061,9 +3076,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             <button
                               onClick={(e) => { e.stopPropagation(); setDeletingEntry(row); }}
                               title="Delete this session — permanent"
-                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "2px 4px", lineHeight: 1, opacity: 0.7 }}
+                              aria-label="Delete session"
+                              style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", color: "var(--ink-faint)", display: "inline-flex", opacity: 0.7 }}
                             >
-                              🗑
+                              <MaterialIcon path={MI_DELETE} size={16} />
                             </button>
                           </div>
                         </div>
