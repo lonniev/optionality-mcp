@@ -2731,9 +2731,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         {tab === "journal" && (
           <div className="panel">
             <span className="panel-label">Journal</span>
-            <h2 className="serif">Past sessions</h2>
-            <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
-              Server-stored, npub-scoped. Click any row to reread the scenario and pitch review.
+            <h2 className="serif">Your study room</h2>
+            <p style={{ color: "var(--ink-soft)", fontSize: 14, marginTop: 6, marginBottom: 16 }}>
+              Welcome to your study room{patronDisplayName ? `, ${patronDisplayName}` : ""}. Here you can
+              review your prior proposals, reread your assessments, and pick up and resume any pitches
+              that you started but had to set aside.
             </p>
 
             {journalLoading && journalEntries.length === 0 && (
@@ -2868,15 +2870,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             <button
                               className="btn"
                               onClick={() => { resumeOpenEntry(detail); }}
-                              title="Load this open scenario back into The Pit to keep working on your pitch — no new deal, no charge"
+                              title={detail.trade_proposal
+                                ? "You have a saved draft — resume in The Pit to finish and pitch it. No new deal, no charge."
+                                : "Resume this open scenario in The Pit to pitch a trade and get a review. No new deal, no charge."}
                             >
-                              Resume in The Pit
+                              🙋 Resume
                             </button>
-                            <span style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic" }}>
-                              {detail.trade_proposal
-                                ? "Open — you have a saved draft; resume to finish and pitch it."
-                                : "Open — resume to pitch a trade and get a review."}
-                            </span>
                           </div>
                         )}
                         {!detail.evaluation && detail.status !== "evaluated" && detail.status !== "open" && (
