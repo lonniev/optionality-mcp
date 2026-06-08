@@ -1204,6 +1204,37 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
   }
 
+  /// Resume an OPEN journal entry in The Pit. Unlike replay, this does
+  /// not deal a new scenario (no toll) — it loads the entry's existing
+  /// scenario and any saved draft back into the active session so the
+  /// trainee can keep pitching against the same setup and the same
+  /// entry_id. The detail is already loaded (the resume affordance only
+  /// renders inside an expanded entry), so this is synchronous.
+  function resumeOpenEntry(detail: JournalDetail): void {
+    if (!detail.scenario) {
+      setError("This entry has no scenario to resume.");
+      return;
+    }
+    setError("");
+    setEvaluation(null);
+    const scn = { ...detail.scenario, mode: detail.mode } as Scenario;
+    setScenario(scn);
+    setEntryId(detail.id);
+    setAnswer(detail.trade_proposal || "");
+    setTips([]);
+    setTipQuestion("");
+    setProposedLegs([]);
+    // Reflect a previously-saved draft if one exists, else clear the chip.
+    setDraftSavedAt(
+      detail.trade_proposal ? new Date(detail.updated_at).getTime() : null,
+    );
+    // Align the chooser so a later "Discard, next scenario" returns here.
+    setMode(detail.mode);
+    setDifficulty(detail.difficulty as Difficulty);
+    setTab("play");
+    setTimeout(() => answerRef.current?.focus(), 100);
+  }
+
   /// On row expand — fetch the full entry detail (scenario,
   /// evaluation, parsed trade legs). No-op if already cached.
   async function loadJournalDetail(entryId: string): Promise<void> {
@@ -2832,11 +2863,25 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             )}
                           </div>
                         )}
-                        {!detail.evaluation && detail.status !== "evaluated" && (
+                        {detail.status === "open" && (
+                          <div className="actions" style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                            <button
+                              className="btn"
+                              onClick={() => { resumeOpenEntry(detail); }}
+                              title="Load this open scenario back into The Pit to keep working on your pitch — no new deal, no charge"
+                            >
+                              Resume in The Pit
+                            </button>
+                            <span style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic" }}>
+                              {detail.trade_proposal
+                                ? "Open — you have a saved draft; resume to finish and pitch it."
+                                : "Open — resume to pitch a trade and get a review."}
+                            </span>
+                          </div>
+                        )}
+                        {!detail.evaluation && detail.status !== "evaluated" && detail.status !== "open" && (
                           <div style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic" }}>
-                            {detail.status === "open"
-                              ? "This entry is still open — deal a scenario in The Pit and pitch a trade to get a review."
-                              : `Entry status: ${detail.status}. No pitch review available.`}
+                            {`Entry status: ${detail.status}. No pitch review available.`}
                           </div>
                         )}
                       </>
