@@ -1705,19 +1705,19 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             <button
               onClick={onSignOut}
               title="Sign out — clear stored npub and proof token"
+              aria-label="Sign out"
               style={{
                 background: "transparent",
                 border: "none",
                 color: "var(--ink-faint)",
                 fontFamily: "inherit",
-                fontSize: 11,
-                letterSpacing: "0.15em",
-                textTransform: "uppercase",
+                fontSize: 18,
+                lineHeight: 1,
                 cursor: "pointer",
                 alignSelf: "center",
               }}
             >
-              Sign Out
+              🚪
             </button>
           )}
         </div>
