@@ -586,20 +586,44 @@ export async function getMyRank(sortBy: LeaderboardSort = "avg"): Promise<MyRank
   return callTool<MyRankResult>("get_my_rank", { sort_by: sortBy });
 }
 
-/// Paginated list of the signed-in patron's journal entries, newest
-/// first. ``before`` is the cursor — the ISO ``created_at`` of the last
-/// row from the previous page. Omit on first fetch.
-///
-/// The BE's list_entries caps internally at 200; the FE defaults to 25
-/// per page so the Journal tab loads quickly even with thousands of
-/// historical sessions. "Load more" appends successive pages.
+/// Server-side sorted, grouped, offset-paginated list of the signed-in
+/// patron's journal entries. Sorting and grouping happen in SQL, so each
+/// page is a slice of the fully-ordered dataset — not a reordering of one
+/// already-fetched page. Returns `{entries, total, page, page_size,
+/// groups}`; `groups` carries per-group counts over the whole filtered set.
 export async function listJournal(
-  opts: { limit?: number; before?: string; status?: string } = {},
+  opts: {
+    status?: string;
+    groupBy?: string;
+    groupSort?: "asc" | "desc";
+    sortCol?: string;
+    sortDir?: "asc" | "desc";
+    page?: number;
+    pageSize?: number;
+  } = {},
 ): Promise<import("../types").JournalListResult> {
-  const args: Record<string, unknown> = { limit: opts.limit ?? 25 };
-  if (opts.before) args.before = opts.before;
+  const args: Record<string, unknown> = {
+    group_by: opts.groupBy ?? "none",
+    group_sort: opts.groupSort ?? "asc",
+    sort_col: opts.sortCol ?? "created",
+    sort_dir: opts.sortDir ?? "desc",
+    page: opts.page ?? 0,
+    page_size: opts.pageSize ?? 25,
+  };
   if (opts.status) args.status = opts.status;
   return callTool<import("../types").JournalListResult>("list_journal", args);
+}
+
+/// Hard-delete one of the patron's journal entries. Irreversible — the
+/// BE drops the row and recomputes the leaderboard cache. Returns the
+/// deleted id on success.
+export async function deleteJournal(
+  entryId: string,
+): Promise<{ entry_id?: string; deleted?: boolean; error?: string }> {
+  return callTool<{ entry_id?: string; deleted?: boolean; error?: string }>(
+    "delete_journal",
+    { entry_id: entryId },
+  );
 }
 
 /// Fetch the full entry record — scenario, trade proposal, parsed

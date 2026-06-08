@@ -24,17 +24,36 @@ async def save_draft(npub: str, entry_id: str, trade_proposal: str) -> dict[str,
 async def list_journal(
     npub: str,
     status: str | None = None,
-    limit: int = 50,
-    before: str | None = None,
+    group_by: str = "none",
+    group_sort: str = "asc",
+    sort_col: str = "created",
+    sort_dir: str = "desc",
+    page: int = 0,
+    page_size: int = 25,
 ) -> dict[str, Any]:
-    """Paginated list of this patron's journal entries, newest first."""
-    rows = await journal_db.list_entries(
+    """Server-side sorted, grouped, paginated list of this patron's journal.
+
+    Pagination reveals a slice of the fully-ordered dataset. ``groups`` is
+    the per-group aggregate over the whole filtered set (empty unless
+    grouping); each entry carries the ``group_key`` it falls under.
+    """
+    result = await journal_db.list_entries(
         npub=npub,
         status=status or None,
-        limit=limit,
-        before=before or None,
+        group_by=group_by or "none",
+        group_sort=group_sort or "asc",
+        sort_col=sort_col or "created",
+        sort_dir=sort_dir or "desc",
+        page=page,
+        page_size=page_size,
     )
+    entries = result["entries"]
     return {
+        "total": result["total"],
+        "page": result["page"],
+        "page_size": result["page_size"],
+        "count": len(entries),
+        "groups": result["groups"],
         "entries": [
             {
                 "id": str(r["id"]),
@@ -45,12 +64,12 @@ async def list_journal(
                 "score": r.get("score"),
                 "letter_grade": r.get("letter_grade"),
                 "is_shared": bool(r.get("is_shared") or False),
+                "group_key": str(r.get("group_key") or ""),
                 "created_at": str(r.get("created_at") or ""),
                 "updated_at": str(r.get("updated_at") or ""),
             }
-            for r in rows
+            for r in entries
         ],
-        "count": len(rows),
     }
 
 

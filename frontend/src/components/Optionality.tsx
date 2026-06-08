@@ -7,6 +7,7 @@ import type {
   DifficultyDef,
   Evaluation,
   JournalDetail,
+  JournalGroupAgg,
   JournalListEntry,
   LeaderboardResult,
   LeaderboardRow,
@@ -26,6 +27,7 @@ import {
   checkBalance,
   checkPrice,
   dealScenario,
+  deleteJournal,
   getApiUsageStats,
   getJournal,
   getLeaderboard,
@@ -41,6 +43,49 @@ import {
 } from "../lib/mcp";
 import type { SharedEntry } from "../types";
 import { useHashTab } from "../lib/hashTab";
+
+/// Grid column template for the Journal table: caret · Symbol · Historicity
+/// · Difficulty · Created · Updated · Grade · Score · Status · Actions.
+const JOURNAL_COLS = "26px 64px 96px 100px 124px 124px 52px 58px 92px 52px";
+
+/// Sortable column headers. `key` matches the wheel's `sort_col` whitelist
+/// (list_journal); the caret and actions columns aren't sortable.
+const JOURNAL_SORT_HEADERS: { key: string; label: string; align?: "right" }[] = [
+  { key: "symbol", label: "Symbol" },
+  { key: "historicity", label: "Historicity" },
+  { key: "difficulty", label: "Difficulty" },
+  { key: "created", label: "Created" },
+  { key: "updated", label: "Updated" },
+  { key: "grade", label: "Grade", align: "right" },
+  { key: "score", label: "Score", align: "right" },
+  { key: "status", label: "Status" },
+];
+
+const JOURNAL_GROUP_OPTIONS: { val: string; label: string }[] = [
+  { val: "none", label: "None" },
+  { val: "historicity", label: "Historicity" },
+  { val: "difficulty", label: "Difficulty" },
+  { val: "symbol", label: "Symbol" },
+];
+
+/// Compact date+time for the Created / Updated columns.
+function fmtJournalDate(iso?: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString(undefined, {
+    month: "short", day: "numeric", year: "2-digit",
+    hour: "numeric", minute: "2-digit",
+  });
+}
+
+/// Display label for a group header. Symbol keys pass through; the
+/// lowercase enum keys (mode / difficulty) get Title-cased.
+function fmtGroupLabel(groupBy: string, key: string): string {
+  if (!key) return "—";
+  if (groupBy === "symbol") return key;
+  return key.charAt(0).toUpperCase() + key.slice(1);
+}
 
 /// Map MCP-namespaced tool names (the wheel's debit ledger key) to
 /// friendlier labels for the Usage panel. Keys are the
@@ -650,18 +695,29 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [loadingMsg, setLoadingMsg] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [stats, setStats] = useState<Stats>({ played: 0, avg: 0, best: 0, streak: 0 });
-  // Journal — server-authoritative, paginated. The wheel's list_journal
-  // returns lightweight summary rows; expanding a row triggers a lazy
-  // get_journal fetch for the full entry detail (scenario, evaluation,
-  // trade legs). Cursor-based pagination via the ISO created_at of the
-  // last row in the current page; the BE caps at 200 per fetch and the
-  // FE defaults to PAGE_SIZE per page so the tab opens fast even with
-  // thousands of sessions in Neon.
+  // Journal — server-authoritative, sorted + grouped + offset-paginated
+  // by the wheel's list_journal (the TaxSort get_transactions_paged
+  // model). The BE does the ORDER BY / GROUP BY, so each page is a slice
+  // of the fully-ordered dataset; the FE just picks sort_col/sort_dir,
+  // group_by, and page. Lightweight summary rows; expanding a row triggers
+  // a lazy get_journal fetch for the full entry detail.
   const [journalEntries, setJournalEntries] = useState<JournalListEntry[]>([]);
   const [journalLoading, setJournalLoading] = useState<boolean>(false);
-  const [journalLoadingMore, setJournalLoadingMore] = useState<boolean>(false);
-  const [journalEnd, setJournalEnd] = useState<boolean>(false);
   const [journalError, setJournalError] = useState<string>("");
+  // Sort / group / page state — every change re-fetches the page.
+  const [journalSortCol, setJournalSortCol] = useState<string>("created");
+  const [journalSortDir, setJournalSortDir] = useState<"asc" | "desc">("desc");
+  const [journalGroupBy, setJournalGroupBy] = useState<string>("none");
+  const [journalGroupSort, setJournalGroupSort] = useState<"asc" | "desc">("asc");
+  const [journalPage, setJournalPage] = useState<number>(0);
+  const [journalTotal, setJournalTotal] = useState<number>(0);
+  const [journalGroups, setJournalGroups] = useState<JournalGroupAgg[]>([]);
+  // Which row is expanded to show its full review (single-open).
+  const [expandedEntryId, setExpandedEntryId] = useState<string | null>(null);
+  // Entry queued for the "gone gone" delete confirm modal, and the
+  // in-flight guard so a double-tap can't double-delete.
+  const [deletingEntry, setDeletingEntry] = useState<JournalListEntry | null>(null);
+  const [deleteInFlight, setDeleteInFlight] = useState<boolean>(false);
   /// Lazy-loaded detail rows, keyed by entry id. Populated on row
   /// expand; staying in memory across collapses so a re-expand is
   /// free. Cleared on sign-out via the storage-scoped slot mechanism.
@@ -946,10 +1002,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       const nextStats: Stats = { played: newPlayed, avg: newAvg, best: newBest, streak: newStreak };
       // Server is the source of truth for the Journal now — the wheel
       // already persisted this entry in journal_entries via the
-      // judge_trade tool. We invalidate the cached page so the next
-      // Journal-tab visit re-fetches with the new entry at the top.
+      // judge_trade tool. We invalidate the cached page (and reset to
+      // page 0) so the next Journal-tab visit re-fetches with the new
+      // entry at the top.
       setJournalEntries([]);
-      setJournalEnd(false);
+      setJournalPage(0);
+      setExpandedEntryId(null);
       setJournalDetails({});
       setStats(nextStats);
       void persist(nextStats);
@@ -1116,20 +1174,30 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   }
 
   const JOURNAL_PAGE_SIZE = 25;
+  // Columns where "first" naturally means newest / highest, so a fresh
+  // click on them sorts descending; everything else ascends first.
+  const JOURNAL_DESC_FIRST = new Set(["created", "updated", "score"]);
 
-  /// Fetch the first page of the patron's Journal. Replaces any
-  /// prior entries; clears the detail cache; resets the cursor. Used
-  /// on tab open and after a fresh trade submission.
-  async function loadJournalFirstPage(): Promise<void> {
+  /// Fetch the current Journal page from the wheel with the active sort /
+  /// group / page selection. The BE does the ORDER BY / GROUP BY, so this
+  /// returns a slice of the fully-ordered dataset plus the grand total and
+  /// per-group counts. Re-runs on every sort/group/page change via effect.
+  async function loadJournalPage(): Promise<void> {
     setJournalLoading(true);
     setJournalError("");
     try {
-      const r = await listJournal({ limit: JOURNAL_PAGE_SIZE });
+      const r = await listJournal({
+        sortCol: journalSortCol,
+        sortDir: journalSortDir,
+        groupBy: journalGroupBy,
+        groupSort: journalGroupSort,
+        page: journalPage,
+        pageSize: JOURNAL_PAGE_SIZE,
+      });
       const entries = Array.isArray(r.entries) ? r.entries : [];
       setJournalEntries(entries);
-      setJournalEnd(entries.length < JOURNAL_PAGE_SIZE);
-      setJournalDetails({});
-      setJournalDetailLoading({});
+      setJournalTotal(typeof r.total === "number" ? r.total : entries.length);
+      setJournalGroups(Array.isArray(r.groups) ? r.groups : []);
       if (r.error) setJournalError(r.error);
     } catch (e) {
       if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
@@ -1139,34 +1207,160 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
   }
 
-  /// Fetch the next page using the last row's created_at as the
-  /// cursor. Appends to the existing list; sets journalEnd when the
-  /// returned page is shorter than the request (BE returned all
-  /// remaining rows).
-  async function loadJournalMore(): Promise<void> {
-    if (journalEnd || journalLoadingMore || journalEntries.length === 0) return;
-    const last = journalEntries[journalEntries.length - 1];
-    if (!last?.created_at) {
-      setJournalEnd(true);
-      return;
+  /// Column-header click: flip direction on the active column, else
+  /// switch to the new column (descending for newest/highest columns,
+  /// ascending otherwise). Always returns to page 0 so the user lands at
+  /// the top of the new ordering.
+  function applyJournalSort(col: string): void {
+    setExpandedEntryId(null);
+    if (col === journalSortCol) {
+      setJournalSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setJournalSortCol(col);
+      setJournalSortDir(JOURNAL_DESC_FIRST.has(col) ? "desc" : "asc");
     }
-    setJournalLoadingMore(true);
-    setJournalError("");
+    setJournalPage(0);
+  }
+
+  /// Switch the group dimension (or "none"); back to page 0.
+  function applyJournalGroupBy(g: string): void {
+    setExpandedEntryId(null);
+    setJournalGroupBy(g);
+    setJournalPage(0);
+  }
+
+  /// Hard-delete the queued entry after the "gone gone" confirm. Drops it
+  /// from local state, decrements the total, and refetches the current
+  /// page (stepping back a page if that page is now empty).
+  async function confirmDeleteEntry(): Promise<void> {
+    const entry = deletingEntry;
+    if (!entry || deleteInFlight) return;
+    setDeleteInFlight(true);
     try {
-      const r = await listJournal({
-        limit: JOURNAL_PAGE_SIZE,
-        before: last.created_at,
+      const r = await deleteJournal(entry.id);
+      if (r.error) throw new Error(r.error);
+      if (expandedEntryId === entry.id) setExpandedEntryId(null);
+      setJournalDetails((prev) => {
+        if (!prev[entry.id]) return prev;
+        const m = { ...prev };
+        delete m[entry.id];
+        return m;
       });
-      const more = Array.isArray(r.entries) ? r.entries : [];
-      setJournalEntries((prev) => [...prev, ...more]);
-      if (more.length < JOURNAL_PAGE_SIZE) setJournalEnd(true);
-      if (r.error) setJournalError(r.error);
+      setDeletingEntry(null);
+      const remaining = Math.max(0, journalTotal - 1);
+      setJournalTotal(remaining);
+      const lastPage = Math.max(0, Math.ceil(remaining / JOURNAL_PAGE_SIZE) - 1);
+      if (journalPage > lastPage) {
+        setJournalPage(lastPage); // param effect refetches the prior page
+      } else {
+        void loadJournalPage(); // same page — refetch to backfill the gap
+      }
     } catch (e) {
       if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
       setJournalError((e as Error).message);
     } finally {
-      setJournalLoadingMore(false);
+      setDeleteInFlight(false);
     }
+  }
+
+  /// The full review body shown when a Journal row is expanded — trade,
+  /// headline, facts ledger, risk profile, and the status-appropriate
+  /// actions (Redo/Share for evaluated, Resume for open). Reused verbatim
+  /// from the old <details> layout so an expanded table row reads identically.
+  function renderEntryDetail(detail: JournalDetail) {
+    return (
+      <>
+        {detail.trade_proposal && (
+          <>
+            <h3 className="serif">Your trade</h3>
+            <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12 }}>
+              <RichText text={detail.trade_proposal} />
+            </div>
+          </>
+        )}
+        {detail.evaluation?.headline && (
+          <>
+            <h3 className="serif">Headline</h3>
+            <div style={{ fontFamily: "Fraunces, serif", fontStyle: "italic", color: "var(--ink)", marginBottom: 12 }}>
+              &ldquo;<RichText inline text={detail.evaluation.headline} />&rdquo;
+            </div>
+          </>
+        )}
+        {detail.evaluation && (
+          <FactsLedger evaluation={detail.evaluation} />
+        )}
+        {(detail.evaluation?.trade_legs && detail.evaluation.trade_legs.length > 0) && (
+          <>
+            <h3 className="serif">Risk Profile</h3>
+            <RiskProfileChart
+              legs={detail.evaluation.trade_legs}
+              altLegs={detail.evaluation.alt_trade_legs}
+              scenario={detail.scenario ?? null}
+            />
+          </>
+        )}
+        {detail.evaluation?.alternative_trade && (
+          <>
+            <h3 className="serif">Alternative</h3>
+            <div className="alt-trade"><RichText text={detail.evaluation.alternative_trade} /></div>
+          </>
+        )}
+        {detail.evaluation?.deeper_context && (
+          <>
+            <h3 className="serif">Deeper context</h3>
+            <div className="deeper"><RichText text={detail.evaluation.deeper_context} /></div>
+          </>
+        )}
+        {detail.status === "evaluated" && (
+          <div className="actions" style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
+            <button
+              className="btn"
+              onClick={() => { void replayJournalEntry(detail.id); }}
+              title="Reissue this scenario as a mulligan — same setup, fresh pitch"
+            >
+              Redo Again
+            </button>
+            <button
+              className={`btn ${detail.is_shared ? "" : "btn-ghost"}`}
+              onClick={() => { void toggleShareEntry(detail.id, !!detail.is_shared); }}
+              disabled={!!sharingInFlight[detail.id]}
+              title={detail.is_shared
+                ? "Currently shared on your Leaderboard row — click to make private"
+                : "Share this pitch on your Leaderboard row so peers can compare"}
+            >
+              {sharingInFlight[detail.id]
+                ? "…"
+                : detail.is_shared
+                ? "✓ Shared"
+                : "Share"}
+            </button>
+            {detail.is_shared && (
+              <span style={{ fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                Visible to all
+              </span>
+            )}
+          </div>
+        )}
+        {detail.status === "open" && (
+          <div className="actions" style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+            <button
+              className="btn"
+              onClick={() => { resumeOpenEntry(detail); }}
+              title={detail.trade_proposal
+                ? "You have a saved draft — resume in The Pit to finish and pitch it. No new deal, no charge."
+                : "Resume this open scenario in The Pit to pitch a trade and get a review. No new deal, no charge."}
+            >
+              🙋 Resume
+            </button>
+          </div>
+        )}
+        {!detail.evaluation && detail.status !== "evaluated" && detail.status !== "open" && (
+          <div style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic" }}>
+            {`Entry status: ${detail.status}. No pitch review available.`}
+          </div>
+        )}
+      </>
+    );
   }
 
   /// Replay an evaluated journal entry as a fresh "mulligan" play.
@@ -1397,16 +1591,25 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, guest]);
 
-  // Auto-load Journal on tab open. Re-fetches when the cached page is
-  // empty (initial open, or after a fresh trade submission invalidated
-  // it). Doesn't refetch on every open — keeps the cached scroll
-  // position + already-expanded detail rows when bouncing between tabs.
+  // Auto-load the Journal when the tab opens with an empty cache (initial
+  // open, or after a fresh trade submission invalidated it). Bouncing
+  // between tabs with a populated cache doesn't refetch.
   useEffect(() => {
-    if (tab === "journal" && journalEntries.length === 0 && !journalLoading && !journalEnd) {
-      void loadJournalFirstPage();
+    if (tab === "journal" && journalEntries.length === 0 && !journalLoading) {
+      void loadJournalPage();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
+
+  // Refetch whenever the sort / group / page selection changes while the
+  // Journal tab is open — each change asks the wheel for the matching
+  // slice of the fully-ordered dataset.
+  useEffect(() => {
+    if (tab === "journal") {
+      void loadJournalPage();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [journalSortCol, journalSortDir, journalGroupBy, journalGroupSort, journalPage]);
 
   async function loadApiUsage(): Promise<void> {
     setApiUsageLoading(true);
@@ -2750,161 +2953,137 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               <div className="empty">No sessions yet. Deal your first Trade Scenario.</div>
             )}
 
-            {journalEntries.map((row) => {
-              const detail = journalDetails[row.id];
-              const detailLoading = !!journalDetailLoading[row.id];
-              return (
-                <details
-                  key={row.id}
-                  style={{ marginBottom: 6 }}
-                  onToggle={(e) => {
-                    if ((e.target as HTMLDetailsElement).open && !detail && !detailLoading) {
-                      void loadJournalDetail(row.id);
-                    }
-                  }}
-                >
-                  <summary style={{ cursor: "pointer", listStyle: "none" }}>
-                    <div className="history-row">
-                      <div className="h-ticker">{row.ticker || "—"}</div>
-                      <div>
-                        <div style={{ color: "var(--ink)" }}>
-                          {row.mode} · {row.difficulty}
-                          {row.status !== "evaluated" && (
-                            <span style={{ marginLeft: 8, fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                              {row.status}
-                            </span>
-                          )}
-                        </div>
-                        <div className="h-date">
-                          {row.created_at ? new Date(row.created_at).toLocaleString() : ""}
-                          {row.is_shared && (
-                            <span style={{ marginLeft: 8, fontSize: 9, color: "var(--amber)", letterSpacing: "0.15em", textTransform: "uppercase" }}>
-                              · shared
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      <div className="h-grade">{row.letter_grade ?? "—"}</div>
-                      <div className="h-score">{row.score != null ? `${row.score}/100` : "—"}</div>
-                    </div>
-                  </summary>
-                  <div style={{ padding: "10px 14px 20px", background: "var(--bg-soft)" }}>
-                    {detailLoading && (
-                      <div className="loading" style={{ display: "block", padding: "16px 0" }}>Loading entry</div>
-                    )}
-                    {detail && (
-                      <>
-                        {detail.trade_proposal && (
-                          <>
-                            <h3 className="serif">Your trade</h3>
-                            <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12 }}>
-                              <RichText text={detail.trade_proposal} />
-                            </div>
-                          </>
-                        )}
-                        {detail.evaluation?.headline && (
-                          <>
-                            <h3 className="serif">Headline</h3>
-                            <div style={{ fontFamily: "Fraunces, serif", fontStyle: "italic", color: "var(--ink)", marginBottom: 12 }}>
-                              &ldquo;<RichText inline text={detail.evaluation.headline} />&rdquo;
-                            </div>
-                          </>
-                        )}
-                        {detail.evaluation && (
-                          <FactsLedger evaluation={detail.evaluation} />
-                        )}
-                        {(detail.evaluation?.trade_legs && detail.evaluation.trade_legs.length > 0) && (
-                          <>
-                            <h3 className="serif">Risk Profile</h3>
-                            <RiskProfileChart
-                              legs={detail.evaluation.trade_legs}
-                              altLegs={detail.evaluation.alt_trade_legs}
-                              scenario={detail.scenario ?? null}
-                            />
-                          </>
-                        )}
-                        {detail.evaluation?.alternative_trade && (
-                          <>
-                            <h3 className="serif">Alternative</h3>
-                            <div className="alt-trade"><RichText text={detail.evaluation.alternative_trade} /></div>
-                          </>
-                        )}
-                        {detail.evaluation?.deeper_context && (
-                          <>
-                            <h3 className="serif">Deeper context</h3>
-                            <div className="deeper"><RichText text={detail.evaluation.deeper_context} /></div>
-                          </>
-                        )}
-                        {detail.status === "evaluated" && (
-                          <div className="actions" style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center" }}>
-                            <button
-                              className="btn"
-                              onClick={() => { void replayJournalEntry(detail.id); }}
-                              title="Reissue this scenario as a mulligan — same setup, fresh pitch"
-                            >
-                              Redo Again
-                            </button>
-                            <button
-                              className={`btn ${row.is_shared ? "" : "btn-ghost"}`}
-                              onClick={() => { void toggleShareEntry(row.id, !!row.is_shared); }}
-                              disabled={!!sharingInFlight[row.id]}
-                              title={row.is_shared
-                                ? "Currently shared on your Leaderboard row — click to make private"
-                                : "Share this pitch on your Leaderboard row so peers can compare"}
-                            >
-                              {sharingInFlight[row.id]
-                                ? "…"
-                                : row.is_shared
-                                ? "✓ Shared"
-                                : "Share"}
-                            </button>
-                            {row.is_shared && (
-                              <span style={{ fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                                Visible to all
-                              </span>
-                            )}
-                          </div>
-                        )}
-                        {detail.status === "open" && (
-                          <div className="actions" style={{ marginTop: 16, display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                            <button
-                              className="btn"
-                              onClick={() => { resumeOpenEntry(detail); }}
-                              title={detail.trade_proposal
-                                ? "You have a saved draft — resume in The Pit to finish and pitch it. No new deal, no charge."
-                                : "Resume this open scenario in The Pit to pitch a trade and get a review. No new deal, no charge."}
-                            >
-                              🙋 Resume
-                            </button>
-                          </div>
-                        )}
-                        {!detail.evaluation && detail.status !== "evaluated" && detail.status !== "open" && (
-                          <div style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic" }}>
-                            {`Entry status: ${detail.status}. No pitch review available.`}
-                          </div>
-                        )}
-                      </>
-                    )}
-                  </div>
-                </details>
-              );
-            })}
-
-            {journalEntries.length > 0 && !journalEnd && (
-              <div className="actions" style={{ marginTop: 16 }}>
-                <button
-                  className="btn btn-ghost"
-                  onClick={() => { void loadJournalMore(); }}
-                  disabled={journalLoadingMore}
-                >
-                  {journalLoadingMore ? "Loading…" : "Load more"}
-                </button>
+            {journalEntries.length > 0 && (
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
+                <span style={{ fontSize: 11, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Group by</span>
+                {JOURNAL_GROUP_OPTIONS.map((g) => (
+                  <button
+                    key={g.val}
+                    className={`btn ${journalGroupBy === g.val ? "" : "btn-ghost"}`}
+                    style={{ padding: "4px 10px", fontSize: 12 }}
+                    onClick={() => applyJournalGroupBy(g.val)}
+                  >
+                    {g.label}
+                  </button>
+                ))}
+                {journalGroupBy !== "none" && (
+                  <button
+                    className="btn btn-ghost"
+                    style={{ padding: "4px 10px", fontSize: 12 }}
+                    title="Flip the order of the groups"
+                    onClick={() => { setExpandedEntryId(null); setJournalGroupSort((d) => (d === "asc" ? "desc" : "asc")); setJournalPage(0); }}
+                  >
+                    Groups {journalGroupSort === "asc" ? "▲" : "▼"}
+                  </button>
+                )}
               </div>
             )}
 
-            {journalEntries.length > 0 && journalEnd && (
-              <div style={{ fontSize: 11, color: "var(--ink-faint)", fontStyle: "italic", marginTop: 14, textAlign: "center" }}>
-                That's all your sessions.
+            {journalEntries.length > 0 && (
+              <div style={{ overflowX: "auto" }}>
+                <div style={{ minWidth: 760 }}>
+                  <div
+                    className="history-row"
+                    style={{ gridTemplateColumns: JOURNAL_COLS, color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase" }}
+                  >
+                    <div></div>
+                    {JOURNAL_SORT_HEADERS.map((h) => (
+                      <div
+                        key={h.key}
+                        onClick={() => applyJournalSort(h.key)}
+                        title={`Sort by ${h.label.toLowerCase()}`}
+                        style={{ cursor: "pointer", userSelect: "none", textAlign: h.align ?? "left" }}
+                      >
+                        {h.label}{journalSortCol === h.key ? (journalSortDir === "asc" ? " ▲" : " ▼") : ""}
+                      </div>
+                    ))}
+                    <div></div>
+                  </div>
+
+                  {journalEntries.map((row, i) => {
+                    const expanded = expandedEntryId === row.id;
+                    const detail = journalDetails[row.id];
+                    const detailLoading = !!journalDetailLoading[row.id];
+                    const showGroupHeader =
+                      journalGroupBy !== "none" &&
+                      (i === 0 || journalEntries[i - 1].group_key !== row.group_key);
+                    const agg = showGroupHeader
+                      ? journalGroups.find((g) => g.key === row.group_key)
+                      : undefined;
+                    return (
+                      <div key={row.id}>
+                        {showGroupHeader && (
+                          <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "12px 14px 4px", borderTop: i === 0 ? "none" : "1px solid var(--panel-edge)" }}>
+                            <span style={{ fontFamily: "Fraunces, serif", color: "var(--amber-bright)", fontSize: 15 }}>
+                              {fmtGroupLabel(journalGroupBy, row.group_key ?? "")}
+                            </span>
+                            <span style={{ fontSize: 11, color: "var(--ink-faint)" }}>
+                              {agg ? `${agg.count} ${agg.count === 1 ? "session" : "sessions"}` : ""}
+                              {agg?.avg_score != null ? ` · avg ${Math.round(agg.avg_score)}` : ""}
+                            </span>
+                          </div>
+                        )}
+                        <div
+                          className="history-row"
+                          onClick={() => {
+                            const willOpen = !expanded;
+                            setExpandedEntryId(willOpen ? row.id : null);
+                            if (willOpen && !detail && !detailLoading) {
+                              void loadJournalDetail(row.id);
+                            }
+                          }}
+                          style={{ gridTemplateColumns: JOURNAL_COLS, cursor: "pointer", alignItems: "center", fontSize: 12 }}
+                        >
+                          <div style={{ color: "var(--ink-faint)" }}>{expanded ? "▾" : "▸"}</div>
+                          <div className="h-ticker">{row.ticker || "—"}</div>
+                          <div style={{ color: "var(--ink-soft)" }}>{row.mode}</div>
+                          <div style={{ color: "var(--ink-soft)" }}>{row.difficulty}</div>
+                          <div style={{ color: "var(--ink-faint)", fontSize: 11 }}>{fmtJournalDate(row.created_at)}</div>
+                          <div style={{ color: "var(--ink-faint)", fontSize: 11 }}>{fmtJournalDate(row.updated_at)}</div>
+                          <div className="h-grade" style={{ fontSize: 16 }}>{row.letter_grade ?? "—"}</div>
+                          <div className="h-score">{row.score != null ? row.score : "—"}</div>
+                          <div>
+                            <span style={{ fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{row.status}</span>
+                            {row.is_shared && (
+                              <span style={{ marginLeft: 6, fontSize: 9, color: "var(--amber)", letterSpacing: "0.12em", textTransform: "uppercase" }}>· shared</span>
+                            )}
+                          </div>
+                          <div style={{ textAlign: "right" }}>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); setDeletingEntry(row); }}
+                              title="Delete this session — permanent"
+                              style={{ background: "none", border: "none", cursor: "pointer", fontSize: 14, padding: "2px 4px", lineHeight: 1, opacity: 0.7 }}
+                            >
+                              🗑
+                            </button>
+                          </div>
+                        </div>
+                        {expanded && (
+                          <div style={{ padding: "10px 14px 20px", background: "var(--bg-soft)" }}>
+                            {detailLoading && (
+                              <div className="loading" style={{ display: "block", padding: "16px 0" }}>Loading entry</div>
+                            )}
+                            {detail && renderEntryDetail(detail)}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {journalTotal > JOURNAL_PAGE_SIZE && (
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 14, fontSize: 12, color: "var(--ink-faint)", flexWrap: "wrap" }}>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button className="btn btn-ghost" style={{ padding: "3px 9px" }} disabled={journalPage === 0} onClick={() => { setExpandedEntryId(null); setJournalPage(0); }} title="First page">⏮</button>
+                  <button className="btn btn-ghost" style={{ padding: "3px 9px" }} disabled={journalPage === 0} onClick={() => { setExpandedEntryId(null); setJournalPage((p) => Math.max(0, p - 1)); }}>← Prev</button>
+                </div>
+                <span>Page {journalPage + 1} of {Math.ceil(journalTotal / JOURNAL_PAGE_SIZE)} · {journalTotal} total</span>
+                <div style={{ display: "flex", gap: 6 }}>
+                  <button className="btn btn-ghost" style={{ padding: "3px 9px" }} disabled={journalPage >= Math.ceil(journalTotal / JOURNAL_PAGE_SIZE) - 1} onClick={() => { setExpandedEntryId(null); setJournalPage((p) => p + 1); }}>Next →</button>
+                  <button className="btn btn-ghost" style={{ padding: "3px 9px" }} disabled={journalPage >= Math.ceil(journalTotal / JOURNAL_PAGE_SIZE) - 1} onClick={() => { setExpandedEntryId(null); setJournalPage(Math.ceil(journalTotal / JOURNAL_PAGE_SIZE) - 1); }} title="Last page">⏭</button>
+                </div>
               </div>
             )}
           </div>
@@ -2975,6 +3154,64 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 }}
               >
                 Discard &amp; choose another
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {deletingEntry && (
+        <div
+          style={{
+            position: "fixed",
+            inset: 0,
+            background: "rgba(0,0,0,0.65)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            zIndex: 100,
+            padding: 20,
+            backdropFilter: "blur(4px)",
+            WebkitBackdropFilter: "blur(4px)",
+          }}
+          onClick={() => { if (!deleteInFlight) setDeletingEntry(null); }}
+        >
+          <div
+            style={{
+              background: "var(--panel)",
+              border: "1px solid var(--amber)",
+              boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
+              padding: "26px 28px",
+              width: "100%",
+              maxWidth: 460,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 22, color: "var(--amber-bright)", marginBottom: 14 }}>
+              Delete this session — gone gone?
+            </div>
+            <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.6, marginBottom: 22 }}>
+              You're about to permanently delete your{" "}
+              <strong style={{ color: "var(--ink)" }}>{deletingEntry.ticker || "this"}</strong>{" "}
+              session{deletingEntry.letter_grade ? ` (graded ${deletingEntry.letter_grade})` : ""}.
+              The scenario, your pitch, the review, the score, and any leaderboard standing it
+              earned are <strong style={{ color: "var(--ink)" }}>erased for good</strong> — this
+              cannot be undone, and there is no recovering it later.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
+              <button
+                className="btn btn-ghost"
+                onClick={() => setDeletingEntry(null)}
+                disabled={deleteInFlight}
+              >
+                Keep it
+              </button>
+              <button
+                className="btn"
+                onClick={() => { void confirmDeleteEntry(); }}
+                disabled={deleteInFlight}
+              >
+                {deleteInFlight ? "Deleting…" : "Delete forever"}
               </button>
             </div>
           </div>

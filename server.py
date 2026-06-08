@@ -528,20 +528,42 @@ async def save_draft(
 @runtime.paid_tool(capability_uuid("list_journal"))
 async def list_journal(
     status: str = "",
-    limit: int = 50,
-    before: str = "",
+    group_by: str = "none",
+    group_sort: str = "asc",
+    sort_col: str = "created",
+    sort_dir: str = "desc",
+    page: int = 0,
+    page_size: int = 25,
     npub: NpubField = "",
     proof: str = "",
 ) -> dict[str, Any]:
-    """Paginated list of the caller's journal entries, newest first.
+    """Server-side sorted, grouped, paginated list of the caller's journal.
+
+    Sorting and grouping are done in SQL, so each page is a slice of the
+    fully-ordered dataset. Returns ``{total, page, page_size, groups,
+    entries}``; ``groups`` carries per-group counts over the whole set.
 
     Args:
-        status:  Optional. ``open`` | ``submitted`` | ``evaluated`` | ``abandoned``.
-        limit:   1..200 (default 50).
-        before:  Optional ISO timestamp for "load more" pagination.
+        status:     Optional. ``open`` | ``submitted`` | ``evaluated`` | ``abandoned``.
+        group_by:   ``none`` | ``historicity`` | ``difficulty`` | ``symbol``.
+        group_sort: Group order, ``asc`` | ``desc``.
+        sort_col:   ``created`` | ``updated`` | ``symbol`` | ``historicity`` |
+                    ``difficulty`` | ``grade`` | ``score`` | ``status``.
+        sort_dir:   Row order, ``asc`` | ``desc``.
+        page:       0-indexed page number.
+        page_size:  Rows per page (1..200, default 25).
     """
     from tools.journal import list_journal as _impl
-    return await _impl(npub=npub, status=status or None, limit=limit, before=before or None)
+    return await _impl(
+        npub=npub,
+        status=status or None,
+        group_by=group_by,
+        group_sort=group_sort,
+        sort_col=sort_col,
+        sort_dir=sort_dir,
+        page=page,
+        page_size=page_size,
+    )
 
 
 @tool

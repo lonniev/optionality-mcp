@@ -148,6 +148,9 @@ export interface JournalListEntry {
   score?: number | null;
   letter_grade?: string | null;
   is_shared?: boolean;
+  /// The group bucket this row falls under, when the list was fetched
+  /// grouped (e.g. the mode, difficulty, or ticker). Empty when ungrouped.
+  group_key?: string;
   created_at: string;
   updated_at: string;
 }
@@ -175,9 +178,24 @@ export interface SharedEntriesResult {
   error?: string;
 }
 
+/// One group bucket's aggregate over the WHOLE filtered journal — count
+/// of entries and their average score — returned alongside the paged
+/// rows so the table can render group headers without a second query.
+export interface JournalGroupAgg {
+  key: string;
+  count: number;
+  avg_score?: number | null;
+}
+
 export interface JournalListResult {
   entries: JournalListEntry[];
   count: number;
+  /// Total filtered rows across all pages — drives the page count.
+  total: number;
+  page: number;
+  page_size: number;
+  /// Per-group aggregates; empty unless the fetch was grouped.
+  groups: JournalGroupAgg[];
   error?: string;
 }
 

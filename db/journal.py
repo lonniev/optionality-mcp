@@ -21,6 +21,49 @@ from db.neon import execute, fetch, fetchrow
 
 logger = logging.getLogger(__name__)
 
+# Difficulty has a natural skill order; alphabetical sorting would scramble
+# it (adept < apprentice < journeyman < …). This CASE ranks it so both
+# row-sort and group-order on difficulty read as a skill ladder.
+_DIFFICULTY_RANK = (
+    "CASE difficulty "
+    "WHEN 'apprentice' THEN 1 "
+    "WHEN 'journeyman' THEN 2 "
+    "WHEN 'adept' THEN 3 "
+    "WHEN 'sovereign' THEN 4 "
+    "WHEN 'mulligan' THEN 5 "
+    "ELSE 9 END"
+)
+
+# Whitelisted sort columns. The caller-supplied `sort_col` is looked up
+# here with a safe fallback — column expressions NEVER come from caller
+# input, so an unknown value can't reach the query as raw SQL.
+_SORT_MAP: dict[str, str] = {
+    "created": "created_at",
+    "updated": "updated_at",
+    "symbol": "COALESCE(ticker, '~')",
+    "historicity": "mode",
+    "difficulty": _DIFFICULTY_RANK,
+    "grade": "letter_grade",
+    "score": "score",
+    "status": "status",
+}
+
+# Whitelisted group dimensions and the expression each grouped row carries
+# back as `group_key`.
+_GROUP_MAP: dict[str, str] = {
+    "none": "''",
+    "historicity": "mode",
+    "difficulty": "difficulty",
+    "symbol": "COALESCE(ticker, '—')",
+}
+
+# Group ORDER BY uses the difficulty rank (not the bare text column) so
+# difficulty groups also order as a skill ladder.
+_GROUP_ORDER_MAP: dict[str, str] = {
+    **_GROUP_MAP,
+    "difficulty": _DIFFICULTY_RANK,
+}
+
 
 async def open_entry(
     npub: str,
@@ -110,65 +153,117 @@ async def record_evaluation(
 async def list_entries(
     npub: str,
     status: str | None = None,
-    limit: int = 50,
-    before: str | None = None,
-) -> list[dict[str, Any]]:
-    """Paginated list of a patron's journal entries, newest first.
+    group_by: str = "none",
+    group_sort: str = "asc",
+    sort_col: str = "created",
+    sort_dir: str = "desc",
+    page: int = 0,
+    page_size: int = 25,
+) -> dict[str, Any]:
+    """Server-side filtered, grouped, sorted, paginated journal list.
+
+    Sorting and grouping run in SQL so each page is a slice of the fully
+    ordered dataset — not just a reordering of one already-fetched page.
+    All ORDER BY / GROUP BY expressions come from the fixed whitelists
+    (`_SORT_MAP`, `_GROUP_MAP`); caller input only selects a key, so an
+    unknown `sort_col`/`group_by` falls back to a safe default rather than
+    reaching the query as raw SQL.
 
     Args:
-        status:   Optional filter: ``open``, ``submitted``, ``evaluated``, ``abandoned``.
-        limit:    Max rows (1..200).
-        before:   ISO timestamp; only entries with ``created_at < before`` are returned.
-                  Used by the UI for "load more" pagination.
+        status:     Optional lifecycle filter (``open``/``submitted``/``evaluated``/``abandoned``).
+        group_by:   ``none`` | ``historicity`` | ``difficulty`` | ``symbol``.
+        group_sort: Group order direction, ``asc`` | ``desc``.
+        sort_col:   A key of `_SORT_MAP`. Row order within (each group of) the result.
+        sort_dir:   Row order direction, ``asc`` | ``desc``.
+        page:       0-indexed page number.
+        page_size:  Rows per page (clamped 1..200).
+
+    Returns a dict: ``{total, page, page_size, groups, entries}``. ``groups``
+    is the per-group ``{key, count, avg_score}`` aggregate over the WHOLE
+    filtered set (computed once, not paged); empty when ``group_by='none'``.
     """
-    lim = max(1, min(200, limit))
-    if status and before:
-        return await fetch(
-            """
-            SELECT id::text AS id, status, mode, difficulty, ticker, score, letter_grade,
-                   is_shared, created_at, updated_at
-            FROM journal_entries
-            WHERE npub = $1 AND status = $2 AND created_at < $3::timestamptz
-            ORDER BY created_at DESC
-            LIMIT $4
-            """,
-            npub, status, before, lim,
-        )
+    psize = max(1, min(200, page_size))
+    pg = max(0, page)
+    offset = pg * psize
+
+    sort_expr = _SORT_MAP.get(sort_col, "created_at")
+    row_dir = "DESC" if str(sort_dir).lower() == "desc" else "ASC"
+    grp_dir = "DESC" if str(group_sort).lower() == "desc" else "ASC"
+
+    grouped = group_by in _GROUP_MAP and group_by != "none"
+    group_expr = _GROUP_MAP.get(group_by, "''") if grouped else "''"
+    group_order_expr = _GROUP_ORDER_MAP.get(group_by, "''") if grouped else "''"
+
+    # WHERE — npub always; status optional. Bound positionally as $1, $2…
+    params: list[Any] = [npub]
+    where = "npub = $1"
     if status:
-        return await fetch(
-            """
-            SELECT id::text AS id, status, mode, difficulty, ticker, score, letter_grade,
-                   is_shared, created_at, updated_at
-            FROM journal_entries
-            WHERE npub = $1 AND status = $2
-            ORDER BY created_at DESC
-            LIMIT $3
-            """,
-            npub, status, lim,
-        )
-    if before:
-        return await fetch(
-            """
-            SELECT id::text AS id, status, mode, difficulty, ticker, score, letter_grade,
-                   is_shared, created_at, updated_at
-            FROM journal_entries
-            WHERE npub = $1 AND created_at < $2::timestamptz
-            ORDER BY created_at DESC
-            LIMIT $3
-            """,
-            npub, before, lim,
-        )
-    return await fetch(
-        """
-        SELECT id::text AS id, status, mode, difficulty, ticker, score, letter_grade,
-               created_at, updated_at
-        FROM journal_entries
-        WHERE npub = $1
-        ORDER BY created_at DESC
-        LIMIT $2
-        """,
-        npub, lim,
+        params.append(status)
+        where += f" AND status = ${len(params)}"
+
+    # ── Total (filtered, before pagination) ──
+    total_row = await fetchrow(
+        f"SELECT COUNT(*) AS n FROM journal_entries WHERE {where}",
+        *params,
     )
+    total = int(total_row["n"]) if total_row and total_row.get("n") is not None else 0
+
+    # ── Group aggregates: every group, once — separate from the paged rows ──
+    groups: list[dict[str, Any]] = []
+    if grouped:
+        group_rows = await fetch(
+            f"""
+            SELECT {group_expr} AS gk, COUNT(*) AS cnt, AVG(score) AS avg_score
+            FROM journal_entries
+            WHERE {where}
+            GROUP BY {group_expr}
+            ORDER BY {group_order_expr} {grp_dir}
+            """,
+            *params,
+        )
+        groups = [
+            {
+                "key": str(g.get("gk") if g.get("gk") is not None else ""),
+                "count": int(g.get("cnt") or 0),
+                "avg_score": (
+                    float(g["avg_score"]) if g.get("avg_score") is not None else None
+                ),
+            }
+            for g in group_rows
+        ]
+
+    # ── Paged rows. Within a grouping, order by group then the chosen sort;
+    # created_at is the stable tiebreak. The idx_journal_npub_created index
+    # covers the default sort; other sorts scan one patron's rows (small N). ──
+    order_clause = (
+        f"{group_order_expr} {grp_dir}, {sort_expr} {row_dir}, created_at DESC"
+        if grouped
+        else f"{sort_expr} {row_dir}, created_at DESC"
+    )
+    params.append(psize)
+    limit_idx = len(params)
+    params.append(offset)
+    offset_idx = len(params)
+
+    entries = await fetch(
+        f"""
+        SELECT id::text AS id, status, mode, difficulty, ticker, score, letter_grade,
+               is_shared, created_at, updated_at, {group_expr} AS group_key
+        FROM journal_entries
+        WHERE {where}
+        ORDER BY {order_clause}
+        LIMIT ${limit_idx} OFFSET ${offset_idx}
+        """,
+        *params,
+    )
+
+    return {
+        "total": total,
+        "page": pg,
+        "page_size": psize,
+        "groups": groups,
+        "entries": entries,
+    }
 
 
 async def get_entry(npub: str, entry_id: str) -> dict[str, Any] | None:
