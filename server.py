@@ -1,6 +1,7 @@
 """Optionality MCP — server entry point.
 
 A FastMCP SSE server that backs the Optionality options-trading drill UI.
+Deploy marker: list_journal sort/group/page schema (2026-06-08).
 All eleven domain tools are registered below; per-tool logic lives in
 ``tools.*``. Auth, balance, pricing, and proof verification
 come from the wheel via ``register_standard_tools`` and ``@runtime.paid_tool``.
