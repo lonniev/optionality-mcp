@@ -98,6 +98,15 @@ const MI_LOGOUT = "M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5
 const MI_DELETE = "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z";
 const MI_REFRESH = "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z";
 const MI_CART = "M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z";
+// Tab glyphs. waving_hand + emoji_people fetched verbatim from Google's
+// material-design-icons repo; the rest are standard Material paths.
+const MI_WAVE = "M23,17c0,3.31-2.69,6-6,6v-1.5c2.48,0,4.5-2.02,4.5-4.5H23z M1,7c0-3.31,2.69-6,6-6v1.5C4.52,2.5,2.5,4.52,2.5,7H1z M8.01,4.32l-4.6,4.6c-3.22,3.22-3.22,8.45,0,11.67s8.45,3.22,11.67,0l7.07-7.07c0.49-0.49,0.49-1.28,0-1.77 c-0.49-0.49-1.28-0.49-1.77,0l-4.42,4.42l-0.71-0.71l6.54-6.54c0.49-0.49,0.49-1.28,0-1.77s-1.28-0.49-1.77,0l-5.83,5.83l-0.71-0.71 l6.89-6.89c0.49-0.49,0.49-1.28,0-1.77s-1.28-0.49-1.77,0l-6.89,6.89L11.02,9.8l5.48-5.48c0.49-0.49,0.49-1.28,0-1.77 s-1.28-0.49-1.77,0l-7.62,7.62c1.22,1.57,1.11,3.84-0.33,5.28l-0.71-0.71c1.17-1.17,1.17-3.07,0-4.24l-0.35-0.35l4.07-4.07 c0.49-0.49,0.49-1.28,0-1.77C9.29,3.83,8.5,3.83,8.01,4.32z";
+const MI_PERSON = "M15.89,8.11C15.5,7.72,14.83,7,13.53,7c-0.21,0-1.42,0-2.54,0C8.24,6.99,6,4.75,6,2H4c0,3.16,2.11,5.84,5,6.71V22h2v-6h2 v6h2V10.05L18.95,14l1.41-1.41L15.89,8.11z";
+const MI_EYE = "M12 4.5C7 4.5 2.73 7.61 1 12c1.73 4.39 6 7.5 11 7.5s9.27-3.11 11-7.5c-1.73-4.39-6-7.5-11-7.5zM12 17c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm0-8c-1.66 0-3 1.34-3 3s1.34 3 3 3 3-1.34 3-3-1.34-3-3-3z";
+const MI_BOOKS = "M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-1 9H9V9h10v2zm-4 4H9v-2h6v2zm4-8H9V5h10v2z";
+const MI_BARCHART = "M5 9.2h3V19H5zM10.6 5h2.8v14h-2.8zm5.6 8H19v6h-2.8z";
+const MI_MONEY = "M11.8 10.9c-2.27-.59-3-1.2-3-2.15 0-1.09 1.01-1.85 2.7-1.85 1.78 0 2.44.85 2.5 2.1h2.21c-.07-1.72-1.12-3.3-3.21-3.81V3h-3v2.16c-1.94.42-3.5 1.68-3.5 3.61 0 2.31 1.91 3.46 4.7 4.13 2.5.6 3 1.48 3 2.41 0 .69-.49 1.79-2.7 1.79-2.06 0-2.87-.92-2.98-2.1h-2.2c.12 2.19 1.76 3.42 3.68 3.83V21h3v-2.15c1.95-.37 3.5-1.5 3.5-3.55 0-2.84-2.43-3.81-4.7-4.4z";
+const MI_GEAR = "M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z";
 
 function MaterialIcon({ path, size = 18 }: { path: string; size?: number }) {
   return (
@@ -582,8 +591,9 @@ const styles = `
 
   .error { color: var(--crimson); background: rgba(164,69,58,0.08); border-left: 2px solid var(--crimson); padding: 10px 14px; font-size: 12px; }
 
-  .tab-bar { display:flex; gap:0; border-bottom:1px solid var(--panel-edge); margin-bottom: 20px; max-width: min(1400px, 100%); margin-left:auto; margin-right:auto;}
-  .tab { padding: 10px 16px; cursor:pointer; font-size:11px; letter-spacing:0.2em; text-transform:uppercase; color: var(--ink-faint); border-bottom:2px solid transparent; background:none; border-top:none; border-left:none; border-right:none; font-family:inherit;}
+  .tab-bar { display:flex; gap:0; border-bottom:1px solid var(--panel-edge); margin-bottom: 20px; width:100%; max-width: min(1400px, 100%); margin-left:auto; margin-right:auto;}
+  .tab { flex:1 1 0; min-width:0; display:flex; flex-direction:column; align-items:center; gap:5px; padding: 10px 8px; cursor:pointer; font-size:10px; letter-spacing:0.15em; text-transform:uppercase; line-height:1.2; text-align:center; color: var(--ink-faint); border-bottom:2px solid transparent; background:none; border-top:none; border-left:none; border-right:none; font-family:inherit; transition: color 0.15s;}
+  .tab svg { opacity:0.85; }
   .tab:hover { color: var(--ink-soft);}
   .tab.active { color: var(--amber-bright); border-bottom-color: var(--amber); }
 
@@ -1749,22 +1759,36 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             for anyone "without money to play": guests, and signed-in
             patrons whose balance is zero. Stays available afterwards
             so seasoned patrons can find a refresher. */}
-        <button className={`tab ${tab === "welcome" ? "active" : ""}`} onClick={() => setTab("welcome")}>Welcome</button>
-        <button className={`tab ${tab === "play" ? "active" : ""}`} onClick={() => setTab("play")}>The Pit</button>
+        <button className={`tab ${tab === "welcome" ? "active" : ""}`} onClick={() => setTab("welcome")}>
+          <MaterialIcon path={MI_WAVE} size={24} /><span>Welcome</span>
+        </button>
+        <button className={`tab ${tab === "play" ? "active" : ""}`} onClick={() => setTab("play")}>
+          <MaterialIcon path={MI_PERSON} size={24} /><span>The Pit</span>
+        </button>
         {/* Sample Assessment tab — visible for guests AND for signed-in
             patrons who've run their balance to zero. Acts as both
             inspiration ("look what you could have judged") and a
             soft nudge toward Top Off. Disappears as soon as the
             balance is positive again. */}
         {(guest || currentBalance === 0) && (
-          <button className={`tab ${tab === "sample" ? "active" : ""}`} onClick={() => setTab("sample")}>See Assessment</button>
+          <button className={`tab ${tab === "sample" ? "active" : ""}`} onClick={() => setTab("sample")}>
+            <MaterialIcon path={MI_EYE} size={24} /><span>See Assessment</span>
+          </button>
         )}
         {!guest && (
           <>
-            <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>Journal</button>
-            <button className={`tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}>Leaderboard</button>
-            <button className={`tab ${tab === "usage" ? "active" : ""}`} onClick={() => setTab("usage")}>Usage</button>
-            <button className={`tab ${tab === "profile" ? "active" : ""}`} onClick={() => setTab("profile")}>Profile</button>
+            <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>
+              <MaterialIcon path={MI_BOOKS} size={24} /><span>Journal</span>
+            </button>
+            <button className={`tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}>
+              <MaterialIcon path={MI_BARCHART} size={24} /><span>Leaderboard</span>
+            </button>
+            <button className={`tab ${tab === "usage" ? "active" : ""}`} onClick={() => setTab("usage")}>
+              <MaterialIcon path={MI_MONEY} size={24} /><span>Usage</span>
+            </button>
+            <button className={`tab ${tab === "profile" ? "active" : ""}`} onClick={() => setTab("profile")}>
+              <MaterialIcon path={MI_GEAR} size={24} /><span>Profile</span>
+            </button>
           </>
         )}
       </div>
