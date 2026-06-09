@@ -80,7 +80,7 @@ function fmtJournalDate(iso?: string): string {
   if (isNaN(d.getTime())) return "—";
   return d.toLocaleString(undefined, {
     month: "short", day: "numeric", year: "2-digit",
-    hour: "numeric", minute: "2-digit",
+    hour: "2-digit", minute: "2-digit", hour12: false,
   });
 }
 
