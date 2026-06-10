@@ -2143,6 +2143,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         name={scenario.asset.name}
                         spot={scenario.asset.spot}
                         iv30d={scenario.asset.iv_30d}
+                        ivRank={scenario.asset.iv_rank}
                         iv25dPut={scenario.asset.iv_25d_put}
                         iv25dCall={scenario.asset.iv_25d_call}
                         skewNote={scenario.asset.skew_note}

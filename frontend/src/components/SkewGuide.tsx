@@ -14,6 +14,13 @@ interface SkewGuideProps {
   name: string;
   spot: number;
   iv30d: number; // ATM 30-day IV as a percent, e.g. 24
+  // IV Rank (0–100): where today's IV level sits within this name's own
+  // trailing range. This is the *level* signal — "is premium rich at
+  // all right now?" — as opposed to skew, which is the *shape* signal.
+  // The scenario carries it (asset.iv_rank) and the card shows it, but
+  // the guide needs it to teach level-vs-shape. Optional: some scenarios
+  // are dealt without a rank.
+  ivRank?: number;
   // Structured smile anchors from the scenario. Both in vol-percent
   // (same units as iv30d). When both are present, the curve is a
   // *literal* read of the scenario's smile — what the chain you're
@@ -49,7 +56,7 @@ function roundTo(v: number, step: number): number {
   return Math.round(v / step) * step;
 }
 
-export default function SkewGuide({ ticker, name, spot, iv30d, iv25dPut, iv25dCall }: SkewGuideProps) {
+export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut, iv25dCall }: SkewGuideProps) {
   const [open, setOpen] = useState(false);
   const [widthMult, setWidthMult] = useState<1 | 2>(1);
 
@@ -183,6 +190,25 @@ export default function SkewGuide({ ticker, name, spot, iv30d, iv25dPut, iv25dCa
 
   const ivPct = Math.round(iv30d || 24);
 
+  // ── the LEVEL read (separate from skew, which is SHAPE) ──────────
+  // IV Rank answers "is premium rich at all right now?" — the go/no-go
+  // a seller asks *before* skew tells them which strike. We band it into
+  // plain language so the trainee doesn't have to interpret a bare 0–100.
+  const hasRank = typeof ivRank === "number";
+  const rankPct = hasRank ? Math.round(ivRank as number) : null;
+  const levelRead = (() => {
+    if (rankPct == null) {
+      return `This scenario didn't supply an IV Rank, so judge the level off ATM IV (${ivPct}%) and your own sense of whether that's high for ${ticker}.`;
+    }
+    if (rankPct >= 67) {
+      return `IV Rank ${rankPct} — premium is rich (expensive) versus ${ticker}'s own trailing range. That's a seller's green light: options across the board are well-paid right now. Skew then tells you which strike to sell.`;
+    }
+    if (rankPct >= 34) {
+      return `IV Rank ${rankPct} — premium is middling: not a fat pitch, not a famine. Lean on the scenario's own catalysts and let skew decide where the relative value sits.`;
+    }
+    return `IV Rank ${rankPct} — premium is cheap versus ${ticker}'s own range. Thin reward for sellers; the whole curve is low, so be choosier even where skew looks inviting.`;
+  })();
+
   // Verdict reads the *actual* curve rather than a synthesized shape.
   // fear is the 25Δ put minus 25Δ call IV (in vol points): positive
   // = put-bid (the standard equity "smirk"), negative = call-bid
@@ -241,7 +267,9 @@ export default function SkewGuide({ ticker, name, spot, iv30d, iv25dPut, iv25dCa
           <p className="sg-lede">
             Implied volatility is not one number — it's a <em>curve</em> across strikes, a map of
             where the market is paying up for fear. For a premium seller it shows where the
-            insurance is richest.{" "}
+            insurance is <em>richest</em> — and throughout this guide <strong>rich means
+            expensive</strong> (a high premium): good to <em>sell</em>, bad to buy. It never means
+            the option's holder gets rich.{" "}
             {hasSmile ? (
               <>
                 The curve below is the <em>literal</em> smile this scenario prices — anchored to{" "}
@@ -414,7 +442,7 @@ export default function SkewGuide({ ticker, name, spot, iv30d, iv25dPut, iv25dCa
             <div className="sg-card call-c">
               <div className="sg-cardtag">Commodities — oil, gas, grains</div>
               <h4 className="serif">Forward skew</h4>
-              <p>IV climbs as strikes <em>rise</em>. <span className="call-t">OTM calls are richest</span> because the feared shock is to the <em>upside</em> — a supply disruption that spikes price. Energy names live closer to this regime.</p>
+              <p>IV climbs as strikes <em>rise</em>. <span className="call-t">OTM calls are the most expensive options on the board</span> because the feared shock is to the <em>upside</em> — a supply disruption that spikes price. Energy names live closer to this regime.</p>
             </div>
             <div className="sg-card">
               <div className="sg-cardtag">The number to actually watch</div>
@@ -426,25 +454,72 @@ export default function SkewGuide({ ticker, name, spot, iv30d, iv25dPut, iv25dCa
           {/* the selling lens */}
           <h4 className="serif sg-h">Why it matters when you sell premium</h4>
           <p className="sg-p">
-            You're not buying insurance — you're underwriting it. The skew is your actuarial
-            table: it tells you which part of the curve is overpaying and where your strikes sit
-            relative to that.
+            You're not buying insurance — you're underwriting it. But a seller is really asking{" "}
+            <strong>two separate questions</strong>, and <em>skew only answers the second one.</em>
           </p>
 
+          {/* the two questions — the frame that resolves "is steep skew
+              good or bad?". Level (IV Rank) says whether to play at all;
+              shape (skew) says which strike and which structure. */}
+          <table className="sg-table sg-2q">
+            <thead>
+              <tr><th>The question</th><th>Answered by</th><th>On this card</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>“Is premium <em>rich</em> at all right now?”</td>
+                <td><strong>IV level + IV Rank</strong> — how high the whole curve sits</td>
+                <td>IV 30d {ivPct}%{hasRank ? `, IV Rank ${rankPct}` : ""}</td>
+              </tr>
+              <tr>
+                <td>“<em>Which strike</em>, and with what structure, do I keep the most of it?”</td>
+                <td><strong>Skew</strong> — the <em>shape</em> of the curve across strikes</td>
+                <td>the curve above</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <p className="sg-p">
+            <strong>Level is what pays you. Skew just decides how that pay is spread across
+            strikes — and which structure captures it versus hands it back.</strong> A rich
+            (expensive) curve means options everywhere are well-paid; skew is your actuarial table
+            for where the overpaying concentrates.
+          </p>
+
+          {/* live level read — pulls IV Rank into the guide so the
+              go/no-go isn't left implicit on the scenario card. */}
+          <div className={`sg-level ${hasRank ? (rankPct! >= 67 ? "go" : rankPct! >= 34 ? "mid" : "no") : "mid"}`}>
+            <div className="sg-ruleh">Step 1 · The level read (go / no-go)</div>
+            {levelRead}
+          </div>
+
           <div className="sg-rule">
-            <div className="sg-ruleh">The bull-put-spread wrinkle</div>
-            In a reverse-skew name, the put you <strong>buy</strong> (lower strike) sits on a{" "}
-            <em>higher</em> part of the curve than the one you <strong>sell</strong>. Your
-            protection is relatively pricey in vol terms, which trims the net credit versus a
-            flat-vol world. Watch the <strong>skew gap</strong> readout above shrink your edge as
-            you push the short strike deeper into the fear wing.
+            <div className="sg-ruleh">Step 2 · The shape read — and the spread wrinkle</div>
+            Once the level says “play,” skew says <em>how</em>. The two seller structures use skew
+            in opposite ways:
+            <ul className="sg-ul">
+              <li>
+                <strong>Cash-secured put</strong> (sell one put outright): a steep put skew is a
+                pure <em>tailwind</em> — you collect the single richest, most fear-bid option on
+                the board and keep all of it.
+              </li>
+              <li>
+                <strong>Bull put spread</strong> (sell the higher put, buy the lower one): here
+                steep skew is a <em>tax</em>. The put you <strong>buy</strong> sits higher on the
+                curve than the one you <strong>sell</strong>, so you pay rich and collect cheap —
+                the steeper the skew, the smaller your net credit. That shrunk credit is the price
+                of a capped, defined risk. Watch the <strong>skew gap</strong> readout do exactly
+                this as you walk the short strike down.
+              </li>
+            </ul>
           </div>
 
           <p className="sg-p">
-            But that same steep skew is the <span className="sg-gold">"fear = opportunity"</span>{" "}
-            signal in numeric form: a put wing bid to the moon means elevated absolute premium and
-            a market paying handsomely to be protected — exactly the insurance a disciplined seller
-            wants to write, provided the strike sits below where you believe price will hold.
+            So <span className="sg-gold">“fear = opportunity”</span> and the spread wrinkle aren't a
+            contradiction: a fear-bid put wing means <em>elevated absolute premium</em> (good — you
+            collect more), while the <em>tilt</em> of that wing is what a spread gives back for its
+            risk cap. Your edge in either structure is the same: sell where the market's priced fear
+            is <strong>richer than your own belief that price will hold</strong>.
           </p>
 
           {/* checklist */}
@@ -454,11 +529,12 @@ export default function SkewGuide({ ticker, name, spot, iv30d, iv25dPut, iv25dCa
               <tr><th>What you see</th><th>What it means</th><th>Seller's move</th></tr>
             </thead>
             <tbody>
-              <tr><td>Steep put skew</td><td>Crash fear richly priced</td><td>Rich put premium — sell below the steep zone, not into it</td></tr>
-              <tr><td>Flat skew</td><td>Complacency</td><td>Thin premium, little cushion priced — be choosier</td></tr>
+              <tr><td>High IV Rank + steep put skew</td><td>Premium rich (expensive) AND the richness sits in the puts</td><td>The textbook seller's setup — rich wing to sell, and the level says it's well-paid</td></tr>
+              <tr><td>Steep put skew</td><td>Crash fear expensively priced</td><td>Put premium is fat — put your short strike <em>below</em> the steepest part of the ramp, so you collect fear-bid premium at a strike price still has room to avoid</td></tr>
+              <tr><td>Flat skew</td><td>Complacency</td><td>Thin premium, little cushion priced in — be choosier</td></tr>
               <tr><td>Skew steepening fast</td><td>Stress building</td><td>IV expanding — the entry window is opening</td></tr>
               <tr><td>Smile forming</td><td>Binary event ahead</td><td>Two-sided gap risk — don't be short through it</td></tr>
-              <tr><td>Forward skew (energy)</td><td>Upside shock feared</td><td>Calls rich; puts relatively cheap to sell</td></tr>
+              <tr><td>Forward skew (energy)</td><td>Upside shock feared</td><td>Calls are the expensive wing; puts relatively cheap to sell</td></tr>
             </tbody>
           </table>
 
@@ -659,8 +735,29 @@ export default function SkewGuide({ ticker, name, spot, iv30d, iv25dPut, iv25dCa
           font-family: 'JetBrains Mono', monospace; font-size: 9.5px;
           letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); margin-bottom: 6px;
         }
+        .sg-rule .sg-ul { margin: 8px 0 0; padding-left: 18px; }
+        .sg-rule .sg-ul li { margin-bottom: 8px; line-height: 1.5; }
+        .sg-rule .sg-ul li:last-child { margin-bottom: 0; }
+
+        /* Step-1 level read. Left-border + tint shift with the go/no-go
+           band so the trainee feels the verdict before reading it. */
+        .sg-level {
+          border: 1px solid var(--panel-edge); border-left: 3px solid var(--ink-faint);
+          border-radius: 8px; padding: 12px 14px; margin: 12px 0;
+          font-size: 13px; color: var(--ink-soft); line-height: 1.5;
+        }
+        .sg-level.go { border-left-color: var(--sg-call); background: linear-gradient(90deg, color-mix(in srgb, var(--sg-call) 12%, transparent), transparent); }
+        .sg-level.mid { border-left-color: var(--amber); background: linear-gradient(90deg, var(--amber-glow), transparent); }
+        .sg-level.no { border-left-color: var(--rust); background: linear-gradient(90deg, color-mix(in srgb, var(--rust) 12%, transparent), transparent); }
+        .sg-level .sg-ruleh { color: var(--ink-faint); }
 
         .sg-table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 12.5px; }
+        /* The two-questions table is prose, not a code-style ledger, so
+           opt its first column out of the monospace-amber treatment the
+           checklist tables use. */
+        .sg-2q td:first-child { font-family: 'Fraunces', Georgia, serif; color: var(--ink); font-size: 13px; }
+        .sg-2q em { font-style: italic; color: var(--amber-bright); }
+        .sg-2q strong { color: var(--ink); font-weight: 600; }
         .sg-table th, .sg-table td { text-align: left; padding: 7px 6px; border-bottom: 1px solid var(--panel-edge); }
         .sg-table th {
           font-family: 'JetBrains Mono', monospace; font-size: 9px;
