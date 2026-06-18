@@ -61,6 +61,27 @@ optionality-mcp/
 
 Heavy LLM tools (deal, judge, clue desk) use a claim-check async pattern: the call returns a claim immediately and the client polls a free fetch tool, so slow generations survive client timeouts.
 
+## DPYC Ecosystem
+
+`optionality-mcp` is one Operator in the DPYC federation — independent MCP servers that share a Nostr identity model, Bitcoin Lightning payments, and the `tollbooth-dpyc` SDK. Peer repos:
+
+| Repo | Role |
+|---|---|
+| [tollbooth-dpyc](https://github.com/lonniev/tollbooth-dpyc) | Python SDK — vault, auth, pricing, Lightning, Nostr identity |
+| [dpyc-community](https://github.com/lonniev/dpyc-community) | Governance registry: membership, advisories, threat model |
+| [dpyc-oracle](https://github.com/lonniev/dpyc-oracle) | Community concierge (free onboarding + member lookup) |
+| [tollbooth-authority](https://github.com/lonniev/tollbooth-authority) | Certification backbone (Schnorr-signed certificates) |
+| [tollbooth-sample](https://github.com/lonniev/tollbooth-sample) | Sample Operator (canonical template) |
+| [tollbooth-pricing-studio](https://github.com/lonniev/tollbooth-pricing-studio) | iOS pricing-model editor / operator console |
+| [cypher-mcp](https://github.com/lonniev/cypher-mcp) | Monetized graph answers: named Cypher templates over Neo4j/AuraDB |
+| [schwab-mcp](https://github.com/lonniev/schwab-mcp) | Charles Schwab brokerage data |
+| [thebrain-mcp](https://github.com/lonniev/thebrain-mcp) | TheBrain personal knowledge graph |
+| [excalibur-mcp](https://github.com/lonniev/excalibur-mcp) | X/Twitter posting |
+| [taxsort-mcp](https://github.com/lonniev/taxsort-mcp) | Tax classification + Cloudflare Pages UI |
+| [optionality-mcp](https://github.com/lonniev/optionality-mcp) | Options analytics (brokerage-data Operator) |
+| [tollbooth-oauth2-collector](https://github.com/lonniev/tollbooth-oauth2-collector) | OAuth2 callback handler (advocate service) |
+| [tollbooth-shortlinks](https://github.com/lonniev/tollbooth-shortlinks) | URL shortener utility |
+
 ## License
 
 Apache 2.0 &mdash; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
