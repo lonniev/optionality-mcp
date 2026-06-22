@@ -24,30 +24,9 @@ from pydantic import Field
 from tollbooth.credential_templates import CredentialTemplate, FieldSpec
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
+from tollbooth.version import resolve_service_version
 
-def _resolve_version(dist: str) -> str:
-    """Single source of truth: pyproject [project].version. Installed metadata
-    first, falling back to the source pyproject.toml for from-checkout deploys
-    (FastMCP Cloud runs flat py-modules apps without installing them)."""
-    from importlib.metadata import PackageNotFoundError, version
-    try:
-        return version(dist)
-    except PackageNotFoundError:
-        pass
-    try:
-        import tomllib
-        from pathlib import Path
-        for parent in (Path(__file__).resolve().parent, *Path(__file__).resolve().parents):
-            pp = parent / "pyproject.toml"
-            if pp.is_file():
-                with pp.open("rb") as fh:
-                    return tomllib.load(fh)["project"]["version"]
-    except Exception:
-        pass
-    return "0.0.0"
-
-
-__version__ = _resolve_version("optionality-mcp")
+__version__ = resolve_service_version("optionality-mcp", __file__)
 
 logger = logging.getLogger(__name__)
 
