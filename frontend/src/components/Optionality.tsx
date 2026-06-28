@@ -413,6 +413,16 @@ const styles = `
     letter-spacing: 0.15em;
   }
   .stats b { display:block; font-family:'Fraunces',serif; font-size:22px; color: var(--amber-bright); letter-spacing:0; text-transform:none; margin-top:2px; font-weight:500;}
+  .balance-chip {
+    display:flex; flex-direction:column; align-items:flex-start; gap:0;
+    background:transparent; border:none; padding:0; cursor:pointer; font:inherit;
+    font-size:11px; letter-spacing:0.15em; text-transform:uppercase; color: var(--ink-soft);
+  }
+  .balance-chip b { display:block; font-family:'Fraunces',serif; font-size:22px; color: var(--amber-bright); letter-spacing:0; text-transform:none; margin-top:2px; font-weight:500;}
+  .balance-chip small { font-family:'JetBrains Mono',monospace; font-size:11px; color: var(--ink-faint); }
+  .balance-chip-cta { margin-top:3px; font-size:9px; letter-spacing:0.2em; color: var(--amber); }
+  .balance-chip:hover .balance-chip-cta { color: var(--amber-bright); }
+  .balance-chip.zero b, .balance-chip.zero .balance-chip-cta { color: var(--rust); }
 
   .container { max-width: min(1400px, 100%); margin: 0 auto; }
 
@@ -1731,6 +1741,25 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
           <div>Avg Score<b>{stats.avg}</b></div>
           <div>Best<b>{stats.best}</b></div>
           <div>Streak<b>{stats.streak}</b></div>
+          {/* Persistent balance + Top Off. Always reachable for signed-in
+              patrons (mirrors eXcalibur's Nav wallet affordance) so a
+              zero balance always has a one-click recovery path, not just
+              the Welcome/Usage screens. Turns rust at zero to pull the eye. */}
+          {!guest && (
+            <button
+              type="button"
+              className={`balance-chip${currentBalance === 0 ? " zero" : ""}`}
+              onClick={() => setTopOffOpen(true)}
+              title="Top Off — buy sats over Bitcoin Lightning"
+            >
+              Balance
+              <b>
+                {currentBalance === null ? "—" : currentBalance.toLocaleString()}
+                <small> sats</small>
+              </b>
+              <span className="balance-chip-cta">＋ Top Off</span>
+            </button>
+          )}
           {onSignOut && (
             <button
               onClick={onSignOut}
