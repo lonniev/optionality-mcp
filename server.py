@@ -349,7 +349,7 @@ async def deal_scenario(
     mode: str,
     difficulty: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
     max_loss_usd: int | None = None,
     replay_entry_id: str | None = None,
     sector: str = "",
@@ -406,7 +406,7 @@ async def deal_scenario(
 async def fetch_scenario(
     claim_check: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Redeem a deal_scenario claim check.
 
@@ -425,7 +425,7 @@ async def ask_tip(
     question: str,
     history: str = "",
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Get a non-spoiler Socratic hint for an open journal entry.
 
@@ -456,7 +456,7 @@ async def ask_tip(
 async def fetch_tip(
     claim_check: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Redeem an ask_tip claim check.
 
@@ -474,7 +474,7 @@ async def judge_trade(
     entry_id: str,
     trade_proposal: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Evaluate the trainee's trade. Persists evaluation, parses legs, recomputes leaderboard.
 
@@ -501,7 +501,7 @@ async def judge_trade(
 async def fetch_judgement(
     claim_check: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Redeem a judge_trade claim check.
 
@@ -519,7 +519,7 @@ async def save_draft(
     entry_id: str,
     trade_proposal: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Persist a draft trade proposal without running the judge."""
     from tools.journal import save_draft as _impl
@@ -537,7 +537,7 @@ async def list_journal(
     page: int = 0,
     page_size: int = 25,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Server-side sorted, grouped, paginated list of the caller's journal.
 
@@ -573,7 +573,7 @@ async def list_journal(
 async def get_journal(
     entry_id: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Return the full journal entry including scenario + evaluation."""
     from tools.journal import get_journal as _impl
@@ -585,7 +585,7 @@ async def get_journal(
 async def delete_journal(
     entry_id: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Hard-delete a journal entry and recompute the leaderboard cache."""
     from tools.journal import delete_journal as _impl
@@ -598,7 +598,7 @@ async def share_entry(
     entry_id: str,
     shared: bool = True,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Toggle a journal entry's share flag.
 
@@ -642,7 +642,7 @@ async def get_leaderboard(
     limit: int = 25,
     scope: str = "",
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Global leaderboard ordered by ``sort_by``.
 
@@ -661,7 +661,7 @@ async def get_leaderboard(
 async def get_my_rank(
     sort_by: str = "avg",
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """The caller's leaderboard row plus their ordinal rank under ``sort_by``."""
     from tools.leaderboard import get_my_rank as _impl
@@ -673,7 +673,7 @@ async def get_my_rank(
 async def set_display_name(
     name: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Set the caller's display name on the leaderboard. 1..32 chars, unicode allowed."""
     from tools.leaderboard import set_display_name as _impl
@@ -684,7 +684,7 @@ async def set_display_name(
 @runtime.paid_tool(capability_uuid("get_patron_profile"))
 async def get_patron_profile(
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Return the caller's profile — display_name, avatar, bio, relays."""
     from tools.profile import get_patron_profile as _impl
@@ -699,7 +699,7 @@ async def set_profile(
     bio: str | None = None,
     relays: str | None = None,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Update any subset of the caller's profile fields.
 
@@ -728,7 +728,7 @@ async def set_profile(
 async def escrow_nsec(
     nsec: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Deposit a freshly-generated nsec for operator-managed Nostr signing.
 
@@ -750,7 +750,7 @@ async def escrow_nsec(
 async def withdraw_nsec(
     acknowledgment: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Return the plaintext nsec once and remove it from operator storage.
 
@@ -771,7 +771,7 @@ async def send_patron_dm(
     target_npub: str,
     message: str,
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Sign and publish a Nostr DM as the patron, using the escrowed nsec.
 
@@ -793,7 +793,7 @@ async def send_patron_dm(
 @runtime.paid_tool(capability_uuid("get_escrow_status"))
 async def get_escrow_status(
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Return ``{"escrowed": bool}`` — whether Optionality holds the
     patron's nsec. Free; the FE polls this to render Withdraw vs
@@ -806,7 +806,7 @@ async def get_escrow_status(
 @runtime.paid_tool(capability_uuid("get_api_usage_stats"))
 async def get_api_usage_stats(
     npub: NpubField = "",
-    proof: str = "",
+    dpop_token: str = "",
 ) -> dict[str, Any]:
     """Aggregated Claude API token usage for this patron's calls.
 
