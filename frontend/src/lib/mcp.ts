@@ -315,6 +315,11 @@ const BOOTSTRAP_TOOLS = new Set([
   // browse a peer's shared trades. The wheel-side signature has no
   // npub/proof params, so injecting them is a Pydantic-strict error.
   "get_shared_entries",
+  // Nostr kind-0 profile: public read + client-signed publish. The wheel
+  // signatures take only (npub) / (npub, signed_event) — the signature IS the
+  // authorization, so no proof envelope (injecting one is a Pydantic-strict error).
+  "get_nostr_profile",
+  "publish_nostr_profile",
 ]);
 
 async function callTool<T = unknown>(
@@ -1042,4 +1047,49 @@ export async function listMyCoupons(): Promise<ListMyCouponsResult> {
  */
 export async function forgetCoupon(couponId: string): Promise<ForgetCouponResult> {
   return callTool<ForgetCouponResult>("forget_coupon", { coupon_id: couponId });
+}
+
+// ─── Nostr kind-0 profile (served by the wheel; no relay I/O in the FE) ────
+
+export interface Kind0 {
+  name?: string;
+  display_name?: string;
+  about?: string;
+  picture?: string;
+  banner?: string;
+  nip05?: string;
+  website?: string;
+  lud16?: string;
+}
+
+export interface GetNostrProfileResult {
+  success: boolean;
+  npub?: string;
+  profile?: Kind0;
+  error?: string;
+}
+
+/// Read an npub's public kind-0 profile via the operator MCP (free, no proof).
+export async function getNostrProfile(npub: string): Promise<GetNostrProfileResult> {
+  return callTool<GetNostrProfileResult>("get_nostr_profile", { npub });
+}
+
+export interface PublishNostrProfileResult {
+  success: boolean;
+  ok?: number;
+  total?: number;
+  errors?: string[];
+  error?: string;
+}
+
+/// Relay a CLIENT-signed kind-0 event through the operator MCP. The FE signs;
+/// the wheel verifies pubkey+signature and fans out to relays.
+export async function publishNostrProfile(
+  npub: string,
+  signedEvent: string,
+): Promise<PublishNostrProfileResult> {
+  return callTool<PublishNostrProfileResult>("publish_nostr_profile", {
+    npub,
+    signed_event: signedEvent,
+  });
 }
