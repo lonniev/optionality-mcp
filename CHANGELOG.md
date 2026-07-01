@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.2] — 2026-06-30
+
+### Added — Nostr kind-0 profile (self-sovereign identity, like eXcalibur)
+
+- New "Nostr Profile" panel on the Profile page: discovers the patron's kind-0 metadata from Nostr (via the operator's free `get_nostr_profile`) and lets them edit + publish a CLIENT-signed kind-0 (`publish_nostr_profile`) visible in every Nostr client. Fields: display name, lud16, NIP-05, website, about, avatar. Signing happens in-browser (session nsec via nostr-tools `finalizeEvent`, or a NIP-07 extension) — the key never reaches the backend; the wheel only verifies + relays. Read-only when no signer is present.
+- This is distinct from the existing app-local "identity at Optionality" panel (leaderboard alias/avatar/bio in Optionality's own DB). Frontend-only; the backend tools already ship in the wheel.
+
 ## [0.2.1] — 2026-06-30
 
 ### Fixed — frontend adopts the wheel dpop_token rename (was broken against its own operator)

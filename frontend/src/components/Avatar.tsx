@@ -38,7 +38,7 @@ interface Props {
 /// glyph (emoji / single character). URL-shaped avatars render as an
 /// <img> filling the circle; everything else renders as text centered
 /// in the circle, preserving the original emoji-picker behavior.
-function isAvatarUrl(value: string): boolean {
+export function isAvatarUrl(value: string): boolean {
   return /^(https?:\/\/|data:image\/)/i.test(value);
 }
 

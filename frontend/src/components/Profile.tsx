@@ -27,6 +27,7 @@ import { useTheme, type Theme } from "../lib/theme";
 import type { PatronProfile } from "../types";
 import Avatar, { shortNpub } from "./Avatar";
 import AvatarPicker from "./AvatarPicker";
+import NostrProfilePanel from "./NostrProfilePanel";
 
 const DEFAULT_RELAYS = [
   "wss://relay.damus.io",
@@ -324,6 +325,8 @@ export default function ProfileTab({ npub }: { npub: string }) {
           </button>
         </div>
       </div>
+
+      <NostrProfilePanel npub={npub} />
 
       <GamePersonaKeyPanel
         escrowed={profile?.escrowed ?? false}
