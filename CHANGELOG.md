@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.3] — 2026-07-01
+
+### Fixed — "The Pit" nav icon was headless (looked like an elephant's trunk)
+
+- The `MI_PERSON` glyph used for the "The Pit" tab was a two-arms-raised silhouette with no head circle, so the raised arms read as an elephant raising its trunk. Added the head (centred above the shoulders, in the clear gap between the arms) so it reads as a person raising their hand.
+
 ## [0.2.2] — 2026-06-30
 
 ### Added — Nostr kind-0 profile (self-sovereign identity, like eXcalibur)
