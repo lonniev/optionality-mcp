@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.2.4] — 2026-07-01
+
+### Changed — "The Pit" icon is now the proper Material Symbols person_raised_hand
+
+- Replaced the earlier custom / head-grafted silhouette with the official Material Symbols `person_raised_hand` glyph (24px) — a clean person with one raised arm. Fixes the "headless / elephant trunk" look properly with a common icon rather than a bespoke path.
+
 ## [0.2.3] — 2026-07-01
 
 ### Fixed — "The Pit" nav icon was headless (looked like an elephant's trunk)
