@@ -326,7 +326,7 @@ async function callTool<T = unknown>(
     ? { ...args }
     : {
         npub: getStoredNpub(),
-        proof: getCachedProof(toolName),
+        dpop_token: getCachedProof(toolName),
         ...args,
       };
   let result: ToolResult;
@@ -936,7 +936,7 @@ export interface NpubProofResult {
   verified?: boolean;
   status?: string;
   message?: string;
-  proof_token?: string;
+  dpop_token?: string;
   popped_dms?: number;
   expires_in_seconds?: number;
   expires_at?: string;
@@ -972,7 +972,7 @@ export async function receiveNpubProof(
 ): Promise<NpubProofResult> {
   return callTool<NpubProofResult>("receive_npub_proof", {
     patron_npub: patronNpub,
-    poison,
+    dpop_token: poison,  // wire key renamed (wheel 0.57.0+); value unchanged
   });
 }
 

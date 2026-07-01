@@ -381,12 +381,12 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
         setError(result.error);
         return;
       }
-      if (!result.proof_token) {
+      if (!result.dpop_token) {
         setError("Server did not return a proof_token. Try again.");
         return;
       }
       setStoredNpub(trimmed);
-      setPendingProof(result.proof_token);
+      setPendingProof(result.dpop_token);
       setStage("awaiting-reply");
     } catch (e) {
       setError(`Could not send proof challenge: ${(e as Error).message}`);
@@ -406,7 +406,7 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
         setStage("awaiting-reply");
         return;
       }
-      const token = result.proof_token || pendingProof;
+      const token = result.dpop_token || pendingProof;
       if (!token) {
         setError("No proof_token returned. Resend the DM and try again.");
         setStage("awaiting-reply");
