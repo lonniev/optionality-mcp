@@ -1,5 +1,6 @@
 import { useCallback, useState } from "react";
 
+import DebugPanel from "./components/DebugPanel";
 import NpubGate from "./components/NpubGate";
 import Optionality from "./components/Optionality";
 import { isLoggedIn, logOut } from "./lib/mcp";
@@ -16,9 +17,16 @@ export default function App() {
     setAuthed(false);
   }, []);
 
-  if (!authed) {
-    return <NpubGate onAuthenticated={handleAuthenticated} />;
-  }
-
-  return <Optionality onSignOut={handleSignOut} />;
+  // DebugPanel renders in both states so a stuck deal *or* a sign-in bounce is
+  // always visible — it's the trace that makes "spins then reloads" diagnosable.
+  return (
+    <>
+      {authed ? (
+        <Optionality onSignOut={handleSignOut} />
+      ) : (
+        <NpubGate onAuthenticated={handleAuthenticated} />
+      )}
+      <DebugPanel />
+    </>
+  );
 }

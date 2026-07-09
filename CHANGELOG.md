@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.2] — 2026-07-09
+
+### Added
+- **On-screen MCP diagnostic trace ("Debug" panel).** A fixed bottom bar (ported from eXcalibur / taxsort) showing every MCP call, result, and error the FE makes — so a deal that spins is no longer invisible. It logs the claim-check lifecycle explicitly: `deal_scenario` accepted with a claim id, each `fetch_scenario` poll's status (`running` → `done`/`error`), the curated terminal situation (`service_warming_up`, `operator_llm_unfunded`, `upstream_timeout`, …), and the client-side give-up if the server never returns a terminal status. Present in both the sign-in gate and the app; the toggle turns red with an error count when something fails.
+
 ## [0.3.1] — 2026-07-09
 
 ### Fixed

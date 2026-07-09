@@ -17,6 +17,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
+import { debugPush } from "./debugLog";
 import type { Evaluation, Scenario, TipExchange } from "../types";
 import { clearSessionNsec, hasSessionNsec, sessionNsecNpub } from "./sessionNsec";
 import { signInlineProof } from "./inlineProof";
@@ -322,10 +323,28 @@ const BOOTSTRAP_TOOLS = new Set([
   "publish_nostr_profile",
 ]);
 
+/// Tools too noisy/background to clutter the debug log (polled liveness +
+/// profile hydration). Everything else — deals, clues, judging, credits,
+/// proof — is logged so the panel shows what the FE is actually doing. The
+/// claim-check polls (`fetch_scenario` / `fetch_tip` / `fetch_judgement`) are
+/// intentionally NOT quiet: each poll's status (running → done/error) must be
+/// visible, or a deal that spins looks like it never calls back.
+const QUIET_TOOLS = new Set([
+  "service_status",
+  "session_status",
+  "check_balance",
+  "get_nostr_profile",
+]);
+
 async function callTool<T = unknown>(
   toolName: string,
   args: Record<string, unknown>,
 ): Promise<T> {
+  const quiet = QUIET_TOOLS.has(toolName);
+  // `args` holds only the wrapper's own params — never npub/proof (those are
+  // injected below), so it is safe to log verbatim.
+  if (!quiet) debugPush("call", `optionality_${toolName}(${JSON.stringify(args).slice(0, 140)})`);
+
   const c = await getClient();
   const merged: Record<string, unknown> = BOOTSTRAP_TOOLS.has(toolName)
     ? { ...args }
@@ -342,6 +361,7 @@ async function callTool<T = unknown>(
       { timeout: 120_000 },
     )) as ToolResult;
   } catch (e) {
+    if (!quiet) debugPush("error", `optionality_${toolName}: ${(e as Error).message}`);
     throw new Error(`optionality_${toolName}: ${(e as Error).message}`);
   }
   if (result.isError) {
@@ -349,6 +369,7 @@ async function callTool<T = unknown>(
       .filter((b) => b.type === "text" && typeof b.text === "string")
       .map((b) => String(b.text))
       .join("\n") || "Tool call failed";
+    if (!quiet) debugPush("error", `optionality_${toolName}: ${errText.slice(0, 200)}`);
     throw new Error(errText);
   }
 
@@ -368,6 +389,13 @@ async function callTool<T = unknown>(
     } else {
       payload = result;
     }
+  }
+
+  if (!quiet) {
+    const preview = typeof payload === "string" ? payload : JSON.stringify(payload);
+    const p = payload as Record<string, unknown> | null;
+    const failed = p !== null && typeof p === "object" && (p.success === false || Boolean(p.error));
+    debugPush(failed ? "error" : "result", `optionality_${toolName} → ${String(preview).slice(0, 220)}`);
   }
 
   // Wheel `require_proof` returns `{success: false, error_code: ...}` for
@@ -429,10 +457,12 @@ async function startAndPoll<T>(
   const start = await callTool<ClaimCheckStart>(startTool, args);
   const claim = start.claim_check;
   if (!claim) {
+    debugPush("error", `${startTool}: no claim check returned — ${start.error ?? "unknown"}`);
     throw new Error(
       start.error ?? `optionality_${startTool}: no claim check returned`,
     );
   }
+  debugPush("info", `${startTool}: claim ${claim.slice(0, 8)} accepted — polling for result`);
   const deadline = Date.now() + CLAIM_MAX_WAIT_MS;
   // Probe EARLY on the first poll. The backend's budget-sized first wait
   // (~75% of the job's runtime) is right for a job that runs the full budget —
@@ -462,6 +492,10 @@ async function startAndPoll<T>(
       );
     }
     if (Date.now() > deadline) {
+      debugPush(
+        "error",
+        `${startTool}: client gave up after ${Math.round(CLAIM_MAX_WAIT_MS / 1000)}s — server never returned a terminal status`,
+      );
       throw new Error(
         `optionality_${startTool}: timed out waiting for the result.`,
       );
