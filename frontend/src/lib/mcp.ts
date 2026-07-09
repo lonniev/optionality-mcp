@@ -442,12 +442,14 @@ interface ClaimFetch<T> {
   poll_after_seconds?: number;
 }
 
-// Client-side poll ceiling. Comfortably over the slowest backend job budget
-// (deal_scenario/judge_trade max_runtime 300s + poll overhead) so a live job
-// finishes before the browser gives up — but far below the old 600s, which
-// coincided with the Anthropic SDK's default timeout and made a stalled
-// provider spin the full ten minutes.
-const CLAIM_MAX_WAIT_MS = 330_000;
+// Client-side poll ceiling. Must sit ABOVE the backend's terminal-state time,
+// not just its max_runtime: a job's started_at is offset from the patron's
+// click (a cold-Neon claim can lag ~40s), so the wheel's 300s cap can fire
+// ~340s after the click. At 330s the browser gave up ~15s before the
+// job_timed_out refund was written — the patron saw a silent stall instead of
+// the refund message. 360s covers max_runtime (300) + claim offset + margin,
+// while staying far below the old 600s that let a stall spin ten minutes.
+const CLAIM_MAX_WAIT_MS = 360_000;
 
 async function startAndPoll<T>(
   startTool: string,

@@ -5,6 +5,15 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.3] — 2026-07-09
+
+### Fixed
+- **`live`-mode scenarios no longer stall to the runtime cap.** Confirmed via the new trace: non-live deals (fiction / historical) complete in ~20s, but `live` mode rode the full 300s budget and refunded — Anthropic `web_search` was fanning out into a slow, unbounded chain of queries on the basic `web_search_20250305` variant.
+
+### Changed
+- **Upgraded web search to the current dynamic-filtering variant** (`web_search_20250305` → `web_search_20260209`, the one recommended for Sonnet 4.6) and **bounded it with `max_uses: 5`**, so a live deal (and clue) resolves quickly instead of stalling on unbounded search rounds.
+- **Raised the frontend claim-check ceiling 330s → 360s.** A job's `started_at` is offset from the patron's click (a cold-Neon claim can lag ~40s), so the wheel's 300s cap can fire ~340s after the click — just past the old 330s ceiling, so a timed-out deal gave up silently instead of showing the refund message.
+
 ## [0.3.2] — 2026-07-09
 
 ### Added

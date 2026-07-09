@@ -34,6 +34,14 @@ def _status_error(status: int, message: str) -> anthropic.APIStatusError:
     return _E(status, message)
 
 
+def test_web_search_tool_uses_current_variant_and_is_bounded() -> None:
+    # Live scenarios stalled on the basic 20250305 variant with no cap; the
+    # current dynamic-filtering variant + a max_uses bound is the fix.
+    assert claude.WEB_SEARCH_TOOL["type"] == "web_search_20260209"
+    assert claude.WEB_SEARCH_TOOL["name"] == "web_search"
+    assert int(claude.WEB_SEARCH_TOOL["max_uses"]) >= 1
+
+
 def test_clamp_timeout_bounds() -> None:
     assert clamp_timeout(None) == 210.0
     assert clamp_timeout(0) == 210.0

@@ -24,9 +24,14 @@ logger = logging.getLogger(__name__)
 # Latest stable Sonnet. Per CLAUDE.md the family is 4.6.
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
-# Anthropic-hosted server-side web search tool. The version string is fixed
-# by Anthropic and must be updated when they release a new revision.
-WEB_SEARCH_TOOL = {"type": "web_search_20250305", "name": "web_search"}
+# Anthropic-hosted server-side web search tool. ``web_search_20260209`` is the
+# current dynamic-filtering variant (supported on Sonnet 4.6): it filters
+# results server-side, so a "live" scenario resolves far faster than the basic
+# ``20250305`` variant did. ``max_uses`` bounds the search rounds so a single
+# deal can't fan out into an unbounded — and slow — chain of queries that
+# stalls the whole job budget. (Do NOT also declare code_execution: dynamic
+# filtering runs it under the hood.)
+WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5}
 
 # Default LLM request timeout when the caller declares none. Generous for a
 # web-search-augmented generation, but the caller's async-job budget is the
