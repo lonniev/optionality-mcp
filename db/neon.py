@@ -22,14 +22,74 @@ spirit of the task by writing the canonical DDL as ``migrations/0001_initial.sql
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
-from typing import Any
+from typing import Any, Awaitable, Callable
+
+import httpx
+from tollbooth import AsyncJobSituation
 
 logger = logging.getLogger(__name__)
 
 _vault: Any = None
 _schema_done: bool = False
+
+# Neon autosuspends its compute when idle; the first query after a nap can
+# miss the vault client's connect/read timeout while the compute wakes. These
+# are the httpx failures that mean "Neon hasn't answered yet", as opposed to a
+# real query error (which we never retry).
+_NEON_TRANSIENT: tuple[type[Exception], ...] = (
+    httpx.ConnectTimeout,
+    httpx.ReadTimeout,
+    httpx.WriteTimeout,
+    httpx.PoolTimeout,
+    httpx.ConnectError,
+)
+
+# Sleeps between warm-up retries (one per gap; N gaps = N+1 attempts). Sized to
+# span a typical Neon scale-to-zero wake (~a few seconds), staying well inside
+# every async-job budget (deal/judge 120–240s) and the FE's per-call timeout.
+_NEON_WARMUP_BACKOFFS: tuple[float, ...] = (1.0, 2.0, 4.0, 8.0)
+
+
+def _service_warming_up_situation() -> AsyncJobSituation:
+    """A curated, refundable situation for a Neon cold-start that never woke."""
+    return AsyncJobSituation(
+        error_code="service_warming_up",
+        message="The service's database is waking up and didn't respond in time. "
+                "No fare was charged.",
+        next_steps="Please try again in a few seconds.",
+        transient=True,
+    )
+
+
+async def _run_with_warmup(make_awaitable: Callable[[], Awaitable[Any]], label: str) -> Any:
+    """Run a Neon operation, riding out a serverless cold-start.
+
+    Retries the operation across Neon's wake window on transient httpx timeouts
+    (a fresh awaitable per attempt, so a timed-out connection is fully redone).
+    If Neon still won't answer, raises a curated, refundable ``service_warming_up``
+    ``AsyncJobSituation`` instead of a raw httpx timeout — so the async-job runner
+    refunds and the frontend renders a clean "try again" rather than a generic
+    failure after burning the wheel's own retries. Non-timeout errors (a real
+    query fault) propagate immediately and are never retried here.
+    """
+    last: Exception | None = None
+    for i in range(len(_NEON_WARMUP_BACKOFFS) + 1):
+        try:
+            return await make_awaitable()
+        except _NEON_TRANSIENT as e:
+            last = e
+            if i < len(_NEON_WARMUP_BACKOFFS):
+                delay = _NEON_WARMUP_BACKOFFS[i]
+                logger.warning(
+                    "Neon %s timed out (%s); warm-up retry %d/%d in %.0fs",
+                    label, type(e).__name__, i + 1, len(_NEON_WARMUP_BACKOFFS), delay,
+                )
+                await asyncio.sleep(delay)
+    logger.error("Neon %s still unreachable after warm-up retries: %s", label, last)
+    raise _service_warming_up_situation() from last
 
 # Bare table name → schema-qualified renamed version. The wheel's vault._t()
 # is then applied on top, so the final form is "<schema_prefix>optionality_X".
@@ -205,10 +265,16 @@ async def _ensure_domain_schema(vault: Any) -> None:
 
 
 async def execute(query: str, *args: Any) -> dict[str, Any]:
-    v = await _get_vault()
-    q = _qualify(query)
-    logger.debug("execute: %s | args=%s", q[:150], list(args)[:3])
-    return await v._execute(q, list(args))
+    async def _op() -> dict[str, Any]:
+        # Vault acquisition (wheel schema-ensure) and the query itself both
+        # touch Neon and can each hit a cold-start timeout — retry the whole
+        # step so a single warm-up covers either.
+        v = await _get_vault()
+        q = _qualify(query)
+        logger.debug("execute: %s | args=%s", q[:150], list(args)[:3])
+        return await v._execute(q, list(args))
+
+    return await _run_with_warmup(_op, "execute")
 
 
 async def fetch(query: str, *args: Any) -> list[dict[str, Any]]:
@@ -222,7 +288,10 @@ async def fetchrow(query: str, *args: Any) -> dict[str, Any] | None:
 
 
 async def executemany(query: str, args_list: list[list[Any]]) -> None:
-    v = await _get_vault()
-    q = _qualify(query)
-    for args in args_list:
-        await v._execute(q, list(args))
+    async def _op() -> None:
+        v = await _get_vault()
+        q = _qualify(query)
+        for args in args_list:
+            await v._execute(q, list(args))
+
+    await _run_with_warmup(_op, "executemany")

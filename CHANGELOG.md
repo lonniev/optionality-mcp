@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.1] — 2026-07-09
+
+### Fixed
+- **A Neon cold-start no longer kills a deal / clue / judge.** Neon autosuspends when idle; the first DB touch on a cold compute (e.g. `deal_scenario`'s `upsert_patron`) could miss the vault client's timeout while Neon woke, and the wheel's short generic retries all landed inside that wake window → the job failed and the fare was refunded even though Neon came up seconds later.
+
+### Changed
+- **`db/neon.py` rides out the cold-start.** `execute` / `executemany` now retry transient httpx timeouts (`ConnectTimeout` / `ReadTimeout` / `ConnectError` / …) across Neon's wake window (~1+2+4+8s), covering both vault acquisition and the query. A genuine query error is never retried. If Neon still won't answer, the operation raises a curated, refundable `service_warming_up` `AsyncJobSituation` ("the database is waking up, try again in a few seconds") instead of a raw timeout — so the async-job runner refunds and the frontend shows a clean retry hint.
+
 ## [0.3.0] — 2026-07-09
 
 ### Fixed
