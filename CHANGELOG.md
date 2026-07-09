@@ -5,6 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-07-09
+
+### Fixed
+- **Deal / clue / judge no longer spin to the frontend's poll ceiling on a stalled AI provider.** `call_claude` built its Anthropic client with no timeout, so a stalled call (usually the operator's Anthropic account out of credits, or `live`-mode web search) inherited the SDK's 600s default — which coincided with the frontend's 600s claim-check ceiling, leaving the job `running` for the full ten minutes with the fare debited and never refunded.
+
+### Changed
+- **`call_claude` is now bounded by the job budget and disables SDK retries** (`timeout_seconds` per call — 120s standard / 240s live for deal & judge, 120s for clues — with `max_retries=0` so a hang can't be multiplied). A stall now fails fast.
+- **LLM failures raise a curated, refundable `AsyncJobSituation`** instead of a paid `{"error": ...}`: the wheel refunds the fare and the frontend renders a safe message + next steps. Mapped codes: `operator_llm_unfunded`, `operator_llm_auth`, `upstream_rate_limited`, `upstream_timeout`, `llm_empty`, `operator_llm_unconfigured`.
+- **Operator gets a self-DM** (surfaces in Pricing Studio) on a definitive provider-down situation — "your Anthropic account is out of credits", so the human running the operator sees it without watching logs.
+- **Frontend claim-check polling** probes early (first wait ≤8s so fast failures surface in seconds), lowers its ceiling 600s→330s, and threads the situation's `next_steps` into the surfaced error.
+- Budget-aware poll cadence via `expected_seconds` on each async job.
+
+### Added
+- `tests/test_claude_situations.py` — timeout clamping, provider-error → situation mapping, and empty-output handling.
+
 ## [0.2.4] — 2026-07-01
 
 ### Changed — "The Pit" icon is now the proper Material Symbols person_raised_hand

@@ -7,7 +7,7 @@ import logging
 from typing import Any
 
 import prompts
-from claude import call_claude, extract_json, ClaudeError
+from claude import call_claude, extract_json, empty_output_situation, ClaudeError
 from db import journal, leaderboard
 
 logger = logging.getLogger(__name__)
@@ -31,21 +31,19 @@ async def judge_trade(npub: str, entry_id: str, trade_proposal: str) -> dict[str
         f"Return evaluation JSON only."
     )
 
-    try:
-        raw = await call_claude(
-            prompt,
-            prompts.EVAL_SYSTEM,
-            max_tokens=5500,
-            npub=npub,
-            tool="judge_trade",
-        )
-    except ClaudeError as e:
-        return {"error": str(e)}
+    raw = await call_claude(
+        prompt,
+        prompts.EVAL_SYSTEM,
+        max_tokens=5500,
+        npub=npub,
+        tool="judge_trade",
+        timeout_seconds=240,
+    )
 
     try:
         evaluation = extract_json(raw)
     except ClaudeError as e:
-        return {"error": str(e)}
+        raise empty_output_situation() from e
 
     await journal.record_evaluation(
         npub=npub,

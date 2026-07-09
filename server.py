@@ -398,6 +398,9 @@ async def deal_scenario(
         tool_id=DEAL_SCENARIO_UUID,
         max_runtime_seconds=300,
         result_ttl_seconds=900,
+        # Budget-aware poll cadence: live mode runs web_search and takes longer.
+        # Mirrors the LLM timeout the runner enforces (tools/dealer.py).
+        expected_seconds=(240 if mode == "live" else 120),
     )
 
 
@@ -448,6 +451,7 @@ async def ask_tip(
         tool_id=ASK_TIP_UUID,
         max_runtime_seconds=180,
         result_ttl_seconds=900,
+        expected_seconds=120,
     )
 
 
@@ -493,6 +497,7 @@ async def judge_trade(
         tool_id=JUDGE_TRADE_UUID,
         max_runtime_seconds=360,
         result_ttl_seconds=900,
+        expected_seconds=240,
     )
 
 

@@ -11,7 +11,7 @@ import logging
 from typing import Any
 
 import prompts
-from claude import call_claude, extract_json, ClaudeError
+from claude import call_claude, extract_json, empty_output_situation, ClaudeError
 from db import journal, patrons
 from tools.options_chain import build_option_chain
 
@@ -168,22 +168,24 @@ async def deal_scenario(
     enable_web_search = mode == "live"
     max_tokens = 4000 if enable_web_search else 2500
 
-    try:
-        raw = await call_claude(
-            prompt,
-            prompts.SCENARIO_SYSTEM,
-            max_tokens=max_tokens,
-            enable_web_search=enable_web_search,
-            npub=npub,
-            tool="deal_scenario",
-        )
-    except ClaudeError as e:
-        return {"error": str(e)}
+    # Bound the LLM call by the job budget: live mode runs Anthropic web_search
+    # and legitimately takes longer; a plain generation should finish well
+    # inside two minutes. A stall past this raises a refundable situation.
+    timeout_seconds = 240 if enable_web_search else 120
+    raw = await call_claude(
+        prompt,
+        prompts.SCENARIO_SYSTEM,
+        max_tokens=max_tokens,
+        enable_web_search=enable_web_search,
+        npub=npub,
+        tool="deal_scenario",
+        timeout_seconds=timeout_seconds,
+    )
 
     try:
         scenario = extract_json(raw)
     except ClaudeError as e:
-        return {"error": str(e)}
+        raise empty_output_situation() from e
 
     scenario["mode"] = mode  # belt-and-suspenders: ensure mode round-trips
     # Echo the operator-supplied risk budget into the scenario JSON so the
@@ -319,19 +321,18 @@ async def ask_tip(
         "Answer per your classification rules (educational / tactical / out-of-scope). "
         "No specific strikes, structures, or directional bias for THIS scenario."
     )
-    try:
-        # Web search is available so a genuinely curious question can be
-        # answered against a current, authoritative source — and so the
-        # desk can recommend a real link it actually found. max_tokens is
-        # raised to leave room for the search round-trip plus a short
-        # answer; the prompt still keeps the clue itself brief.
-        text = await call_claude(
-            prompt, prompts.TIP_SYSTEM, max_tokens=1500,
-            enable_web_search=True,
-            npub=npub, tool="ask_tip",
-        )
-    except ClaudeError as e:
-        return {"error": str(e)}
+    # Web search is available so a genuinely curious question can be
+    # answered against a current, authoritative source — and so the
+    # desk can recommend a real link it actually found. max_tokens is
+    # raised to leave room for the search round-trip plus a short
+    # answer; the prompt still keeps the clue itself brief. A stall past
+    # the budget raises a refundable situation.
+    text = await call_claude(
+        prompt, prompts.TIP_SYSTEM, max_tokens=1500,
+        enable_web_search=True,
+        npub=npub, tool="ask_tip",
+        timeout_seconds=120,
+    )
     # Count this clue against the entry so the judge can apply a small
     # score penalty per clue used. Best-effort; failure shouldn't deny
     # the patron the answer they paid for.

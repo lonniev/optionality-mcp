@@ -414,7 +414,12 @@ interface ClaimFetch<T> {
   poll_after_seconds?: number;
 }
 
-const CLAIM_MAX_WAIT_MS = 600_000;
+// Client-side poll ceiling. Comfortably over the slowest backend job budget
+// (deal_scenario/judge_trade max_runtime 300s + poll overhead) so a live job
+// finishes before the browser gives up — but far below the old 600s, which
+// coincided with the Anthropic SDK's default timeout and made a stalled
+// provider spin the full ten minutes.
+const CLAIM_MAX_WAIT_MS = 330_000;
 
 async function startAndPoll<T>(
   startTool: string,
@@ -429,7 +434,13 @@ async function startAndPoll<T>(
     );
   }
   const deadline = Date.now() + CLAIM_MAX_WAIT_MS;
-  let waitSeconds = start.poll_after_seconds ?? 3;
+  // Probe EARLY on the first poll. The backend's budget-sized first wait
+  // (~75% of the job's runtime) is right for a job that runs the full budget —
+  // but a job that fails fast (the operator's AI provider is unfunded, surfaced
+  // only once the job starts) would otherwise sit "loading…" for that whole
+  // first wait before the refundable error shows. One quick probe surfaces
+  // early failures in seconds; after it we honor the backend's countdown.
+  let waitSeconds = Math.min(start.poll_after_seconds ?? 3, 8);
   for (;;) {
     await new Promise((r) => setTimeout(r, waitSeconds * 1000));
     const fetched = await callTool<ClaimFetch<T>>(fetchTool, {
@@ -439,9 +450,11 @@ async function startAndPoll<T>(
       return fetched.result;
     }
     if (fetched.status === "error") {
-      throw new Error(
-        fetched.error ?? "The request failed; the fee was refunded.",
-      );
+      // The row holds a curated situation (safe message + actionable next
+      // steps); the fare was already refunded server-side. Surface both so the
+      // patron sees why and what to do, not a bare "request failed".
+      const base = fetched.error ?? "The request failed; the fee was refunded.";
+      throw new Error(fetched.next_steps ? `${base} ${fetched.next_steps}` : base);
     }
     if (fetched.status === "expired") {
       throw new Error(
@@ -453,6 +466,7 @@ async function startAndPoll<T>(
         `optionality_${startTool}: timed out waiting for the result.`,
       );
     }
+    // Honor the backend's next-poll advice (its countdown tightens toward done).
     waitSeconds = fetched.poll_after_seconds ?? 3;
   }
 }
