@@ -26,7 +26,7 @@ import {
 import { useTheme, type Theme } from "../lib/theme";
 import type { PatronProfile } from "../types";
 import Avatar, { shortNpub } from "./Avatar";
-import AvatarPicker from "./AvatarPicker";
+import AvatarModal from "./AvatarModal";
 import NostrProfilePanel from "./NostrProfilePanel";
 
 const DEFAULT_RELAYS = [
@@ -49,6 +49,7 @@ export default function ProfileTab({ npub }: { npub: string }) {
   const [bioInput, setBioInput] = useState<string>("");
   const [relayInputs, setRelayInputs] = useState<string[]>([]);
   const [newRelay, setNewRelay] = useState<string>("");
+  const [avatarPickerOpen, setAvatarPickerOpen] = useState<boolean>(false);
 
   useEffect(() => {
     (async () => {
@@ -195,9 +196,20 @@ export default function ProfileTab({ npub }: { npub: string }) {
         />
 
         <FieldLabel>Avatar</FieldLabel>
-        <div style={{ marginBottom: 16 }}>
-          <AvatarPicker value={avatarInput} onChange={setAvatarInput} npub={npub} />
+        <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
+          <Avatar value={avatarInput} size={40} />
+          <button type="button" className="btn btn-ghost" onClick={() => setAvatarPickerOpen(true)}>
+            Change avatar
+          </button>
         </div>
+        {avatarPickerOpen && (
+          <AvatarModal
+            value={avatarInput}
+            onChange={setAvatarInput}
+            onClose={() => setAvatarPickerOpen(false)}
+            npub={npub}
+          />
+        )}
 
         <FieldLabel>Bio</FieldLabel>
         <textarea

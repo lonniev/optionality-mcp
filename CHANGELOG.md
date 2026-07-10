@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-07-10
+
+### Changed — the avatar chooser is now a popup, not an always-open catalog
+
+- **"Change avatar" opens a modal.** The Iconify avatar catalog used to sit open inline on both the Profile page and the Nostr Profile panel — heavy, and in your face even when you weren't choosing. Now each spot shows your current avatar next to a **Change avatar** button; clicking it opens a focused popup (`AvatarModal`) with the picker and a live preview, and closing applies your pick. The popup closes on Done, ×, backdrop click, or Escape. Persisting is still your explicit **Save Changes** / **Publish to Nostr** — unchanged.
+- **Picker polish** carried in from eXcalibur's nicer version, kept in Optionality's sharp amber/mono skin: a denser icon grid and segmented amber tabs (replacing the thin underline). The picker's redundant inline preview moved into the modal footer.
+- The frontend build version is now unified with the release version (it had been frozen at a placeholder), so the Build & License panel reflects each shipped build.
+
 ## [0.3.4] — 2026-07-09
 
 ### Changed
