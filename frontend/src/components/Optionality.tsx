@@ -192,6 +192,7 @@ import OptionChainGuide from "./OptionChainGuide";
 import RichText from "./RichText";
 import SkewGuide from "./SkewGuide";
 import { getGuestId, getPatronProfile, getStoredNpub } from "../lib/mcp";
+import { getEcosystemRelays } from "../lib/relays";
 
 // ============================================================
 //  OPTIONALITY — A Sovereign Trader's Drill
@@ -690,10 +691,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     displayName?: string | null;
     avatar?: string | null;
   } | null>(null);
-  // Sender's preferred Nostr relays — needed when we publish a DM. Loaded
-  // once at sign-in from the patron's Profile; refreshed lazily on
-  // Profile-tab edits via a Profile-component callback (not wired here
-  // for Phase 2 — relays change ~never per session).
+  // Relays for publishing a NIP-07 DM. These are the ecosystem's shared set
+  // (dpyc-community/relays.json), not a per-patron choice — loaded once at
+  // sign-in with a baked-in fallback, so a DM never lacks somewhere to land.
   const [userRelays, setUserRelays] = useState<string[]>([]);
   // Escrow status — true when Optionality holds the patron's nsec and
   // the DM modal can route through the BE signer instead of requiring
@@ -888,13 +888,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   useEffect(() => {
     if (guest) return;
     (async () => {
+      // Relays are an ecosystem constant now, not a profile field.
+      void getEcosystemRelays().then(setUserRelays).catch(() => { /* fallback covers it */ });
       try {
         const r = await getPatronProfile();
-        if (r.profile?.relays) setUserRelays(r.profile.relays);
         if (typeof r.profile?.escrowed === "boolean") setEscrowed(r.profile.escrowed);
         if (r.profile?.display_name) setPatronDisplayName(r.profile.display_name);
       } catch {
-        /* silent — DM modal will tell the user if relays are missing */
+        /* silent — escrow/name just default */
       }
       // Initial balance check — drives the Sample-Assessment tab
       // surfacing when the patron is at zero.

@@ -5,6 +5,21 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-07-10
+
+### Changed — one profile, sourced from Nostr
+
+- **The Profile page no longer has two identity editors.** It had an app-local "Your identity at Optionality" editor (name/avatar/bio saved to Optionality's DB) *and* a "Nostr Profile" kind-0 editor — redundant. The app-local editor is gone. The Nostr panel (now titled **Profile**) is the single, self-sovereign identity surface: it reads your kind-0 from relays and publishes kind-0.
+- **Publishing mirrors your identity to the leaderboard cache.** On a successful publish, the FE also copies name/avatar/bio into Optionality's store (best-effort) so the leaderboard and patron-to-patron DM addressing keep rendering names/avatars fast, without a live relay fetch per row. Nostr is the source of truth; Optionality's DB is a derived cache, not an editable identity surface. (A glyph avatar — which can't be a kind-0 `picture` URL — still mirrors so the leaderboard shows it.)
+
+### Removed — patron relay selection
+
+- The per-patron **Nostr Relays** editor is gone. The DPYC ecosystem now agrees on one relay set published at `dpyc-community/relays.json` (the same single source the wheel's relay registry reads). A new `getEcosystemRelays()` helper fetches it (with a baked-in fallback so it never blocks), and the NIP-07 patron-to-patron DM path publishes to that shared set instead of a per-patron list.
+
+### Note
+
+- With identity sourced from Nostr, editing your profile now requires a signer (an in-browser session key or a NIP-07 extension). An npub-only session with no signer is read-only for profile edits — the panel disables Publish and says so.
+
 ## [0.4.0] — 2026-07-10
 
 ### Changed — the avatar chooser is now a popup, not an always-open catalog
