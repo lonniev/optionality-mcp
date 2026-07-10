@@ -1,16 +1,16 @@
 // DM Compose modal — Phase 2 of the patron-to-patron Nostr DM feature.
 //
-// Single-shot send: compose, sign via NIP-07, publish to the sender's
-// configured relays, report success, close. Not a chat interface —
+// Single-shot send: compose, sign via NIP-07, publish to the DPYC
+// ecosystem relay set, report success, close. Not a chat interface —
 // no thread view, no history. The recipient sees the DM in their
 // Nostr client of choice (0xchat, Damus, Amethyst).
 //
 // Hard requirements communicated to the user when they don't apply:
 //   - NIP-07 browser extension installed (no extension → install
 //     prompt instead of a compose form).
-//   - At least one relay configured in Profile (no relays → "configure
-//     relays" message). The relay list is owned by the sender's
-//     Profile, not pulled from the recipient.
+//   - The shared relay set (dpyc-community/relays.json) is loaded — it
+//     always resolves (baked-in fallback), so an empty list only means
+//     it's still loading, not that the patron must configure anything.
 
 import { useEffect, useState } from "react";
 import {
@@ -130,8 +130,7 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
 
         {signingMode === "nip07" && relays.length === 0 && (
           <div style={STYLES.warn}>
-            No Nostr relays configured. Open <b>Profile → Nostr Relays</b> and add at least one
-            (we recommend <code>wss://relay.damus.io</code>).
+            The shared relay set is still loading — close this and try again in a moment.
             <div style={STYLES.actions}>
               <button onClick={onClose} style={STYLES.btnGhost}>Close</button>
             </div>
@@ -162,7 +161,7 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
                 <>
                   Signed locally by your NIP-07 extension (your nsec never reaches
                   Optionality). Published to <b>{relays.length}</b>{" "}
-                  relay{relays.length === 1 ? "" : "s"} from your Profile.
+                  relay{relays.length === 1 ? "" : "s"} from the shared DPYC set.
                 </>
               )}
             </p>

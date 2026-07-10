@@ -9,6 +9,7 @@
 import React, { useEffect, useState } from "react";
 import Avatar, { isAvatarUrl } from "./Avatar";
 import AvatarModal from "./AvatarModal";
+import { setProfile } from "../lib/mcp";
 import { canSignProfile, fetchProfile, publishProfile, type Kind0 } from "../lib/nostrProfile";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -87,6 +88,18 @@ export default function NostrProfilePanel({ npub }: { npub: string }) {
           tone: ok > 0 ? "ok" : "err",
           text: (ok > 0 ? `Published to ${ok}/${r.total} relays.` : "No relay accepted the event.") + note,
         });
+        if (ok > 0) {
+          // Mirror the just-published identity into Optionality's store so the
+          // leaderboard + DM addressing render this name/avatar without a live
+          // relay fetch per row. Nostr is the source of truth; the DB is a
+          // derived cache. A glyph avatar (kept out of kind-0 because a picture
+          // must be a URL) still mirrors here so the leaderboard shows it.
+          void setProfile({
+            display_name: displayName,
+            avatar: picture,
+            bio: about,
+          }).catch(() => { /* cache mirror is best-effort, never blocks publish */ });
+        }
       }
     } catch (e) {
       setMsg({ tone: "err", text: (e as Error).message });
@@ -97,11 +110,12 @@ export default function NostrProfilePanel({ npub }: { npub: string }) {
 
   return (
     <div className="panel" style={{ marginTop: 20 }}>
-      <span className="panel-label">Nostr Profile</span>
+      <span className="panel-label">Profile</span>
       <h2 className="serif">Your self-sovereign identity.</h2>
       <p style={{ fontSize: 12, color: "var(--ink-soft)", marginTop: -4, marginBottom: 16, lineHeight: 1.5 }}>
-        Read from your kind-0 metadata and shown in every Nostr client. Edits are signed in your
-        browser and relayed — your key never leaves this device.
+        Your profile lives in your Nostr kind-0 metadata — read from relays and shown in every Nostr
+        client. Edits are signed in your browser and relayed; your key never leaves this device.
+        Optionality mirrors your name and avatar so the leaderboard can address you.
       </p>
 
       {loading ? (
