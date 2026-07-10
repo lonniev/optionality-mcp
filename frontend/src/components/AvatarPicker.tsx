@@ -18,7 +18,7 @@
 
 import { useEffect, useState } from "react";
 
-import Avatar, { AVATAR_CHOICES } from "./Avatar";
+import { AVATAR_CHOICES } from "./Avatar";
 
 interface AvatarPickerProps {
   /// Currently-selected avatar value (Iconify URL, emoji glyph, or custom URL).
@@ -106,20 +106,12 @@ export default function AvatarPicker({ value, onChange }: AvatarPickerProps) {
 
   return (
     <div>
-      {/* Tab strip */}
-      <div style={{ display: "flex", gap: 4, marginBottom: 12, borderBottom: "1px solid var(--panel-edge)" }}>
-        <button
-          type="button"
-          onClick={() => setTab("catalog")}
-          style={tabStyle(tab === "catalog")}
-        >
+      {/* Tab strip — segmented amber pills (sharp-cornered to match the app). */}
+      <div style={{ display: "flex", gap: 6, marginBottom: 14 }}>
+        <button type="button" onClick={() => setTab("catalog")} style={tabStyle(tab === "catalog")}>
           Catalog
         </button>
-        <button
-          type="button"
-          onClick={() => setTab("emoji")}
-          style={tabStyle(tab === "emoji")}
-        >
+        <button type="button" onClick={() => setTab("emoji")} style={tabStyle(tab === "emoji")}>
           Glyphs
         </button>
       </div>
@@ -164,7 +156,7 @@ export default function AvatarPicker({ value, onChange }: AvatarPickerProps) {
 
           {!loading && !error && (
             <>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(64px, 1fr))", gap: 8 }}>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(48px, 1fr))", gap: 6 }}>
                 {visibleIcons.map((name) => {
                   const url = iconifySvgUrl(collection, name);
                   const selected = value === url;
@@ -231,7 +223,7 @@ export default function AvatarPicker({ value, onChange }: AvatarPickerProps) {
           <div style={{ color: "var(--ink-faint)", fontSize: 11, marginBottom: 10, fontStyle: "italic" }}>
             Pick a single glyph — minimalist alternative to the catalog.
           </div>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(48px, 1fr))", gap: 6 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(44px, 1fr))", gap: 6 }}>
             {AVATAR_CHOICES.map((emoji) => {
               const selected = value === emoji;
               return (
@@ -280,29 +272,20 @@ export default function AvatarPicker({ value, onChange }: AvatarPickerProps) {
         />
       </details>
 
-      {/* Live preview of the currently-selected avatar */}
-      {value && (
-        <div style={{ marginTop: 16, display: "flex", alignItems: "center", gap: 12 }}>
-          <Avatar value={value} size={56} />
-          <div style={{ fontSize: 11, color: "var(--ink-faint)" }}>
-            Currently selected. Tap Save below to apply.
-          </div>
-        </div>
-      )}
     </div>
   );
 }
 
 function tabStyle(active: boolean): React.CSSProperties {
   return {
-    padding: "6px 14px",
-    background: "transparent",
-    border: "none",
-    borderBottom: active ? "2px solid var(--amber)" : "2px solid transparent",
+    padding: "7px 16px",
+    background: active ? "var(--amber-glow)" : "transparent",
+    border: `1px solid ${active ? "var(--amber)" : "var(--panel-edge)"}`,
     color: active ? "var(--amber-bright)" : "var(--ink-soft)",
     cursor: "pointer",
-    fontSize: 12,
+    fontSize: 11,
     letterSpacing: "0.15em",
     textTransform: "uppercase",
+    transition: "border-color 120ms ease, background 120ms ease, color 120ms ease",
   };
 }

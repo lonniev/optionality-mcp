@@ -8,7 +8,7 @@
 
 import React, { useEffect, useState } from "react";
 import Avatar, { isAvatarUrl } from "./Avatar";
-import AvatarPicker from "./AvatarPicker";
+import AvatarModal from "./AvatarModal";
 import { canSignProfile, fetchProfile, publishProfile, type Kind0 } from "../lib/nostrProfile";
 
 const INPUT_STYLE: React.CSSProperties = {
@@ -108,16 +108,19 @@ export default function NostrProfilePanel({ npub }: { npub: string }) {
         <div className="loading" style={{ display: "block", padding: "16px 0" }}>Reading from relays…</div>
       ) : (
         <>
-          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 16 }}>
             <Avatar value={picture} size={48} />
-            <button type="button" className="btn btn-ghost" onClick={() => setShowPicker((v) => !v)}>
-              {showPicker ? "Done" : "Change avatar"}
+            <button type="button" className="btn btn-ghost" onClick={() => setShowPicker(true)}>
+              Change avatar
             </button>
           </div>
           {showPicker && (
-            <div style={{ marginBottom: 16 }}>
-              <AvatarPicker value={picture} onChange={setPicture} npub={npub} />
-            </div>
+            <AvatarModal
+              value={picture}
+              onChange={setPicture}
+              onClose={() => setShowPicker(false)}
+              npub={npub}
+            />
           )}
 
           <FieldLabel>Display name</FieldLabel>
