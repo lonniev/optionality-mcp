@@ -54,7 +54,9 @@ export default function PayoffPanel({
   // "available" for a live scenario on a real, listed underlying whose
   // structure maps to a known strategy preset; historical/fiction/custom
   // fall back to a one-line reason (the in-app payoff already covers them).
-  const modeler = useMemo(() => externalModelerFor(scenario, tradeLegs), [scenario, tradeLegs]);
+  // Pass the ProposedLegs (not tradeLegs) so the provider can encode each
+  // leg's absolute expiration date into the deep-link.
+  const modeler = useMemo(() => externalModelerFor(scenario, legs), [scenario, legs]);
 
   function loadPreset(label: string): void {
     if (legs.length > 0) {
