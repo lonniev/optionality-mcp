@@ -21,6 +21,7 @@ import { debugPush } from "./debugLog";
 import type { Evaluation, Scenario, TipExchange } from "../types";
 import { clearSessionNsec, hasSessionNsec, sessionNsecNpub } from "./sessionNsec";
 import { signInlineProof } from "./inlineProof";
+import { PROOF_EXPIRED_EVENT, isProofExpiryPayload } from "./proofExpiry";
 
 /// Return the npub proof that authenticates a paid tool call. One
 /// of two cached sources, depending on how the patron signed in:
@@ -61,6 +62,11 @@ const MCP_URL = _envUrl.startsWith("/")
 
 const NPUB_STORAGE_KEY = "optionality:patron_npub:v1";
 const PROOF_STORAGE_KEY = "optionality:proof_token:v1";
+
+// Re-exported (imported at the top) so existing importers like App.tsx
+// keep a single mcp entry point; the source of truth is the dependency-
+// free proofExpiry module.
+export { PROOF_EXPIRED_EVENT };
 
 let client: Client | null = null;
 let connecting: Promise<void> | null = null;
@@ -402,18 +408,22 @@ async function callTool<T = unknown>(
   // proof failures. These are "soft" errors at the MCP layer (no isError
   // flag) but the FE must treat them as auth bounces — clear the stale
   // proof_token and let the gate handle re-sign-in.
-  if (payload && typeof payload === "object") {
+  // A soft proof-expiry ({success:false, error_code:proof_*}) is an auth
+  // bounce, not a tool error. The predicate normalizes the wheel's
+  // lowercase ErrorCode (a prior inline UPPERCASE compare never matched,
+  // so a lapsed proof silently failed every paid call).
+  if (isProofExpiryPayload(payload)) {
     const p = payload as Record<string, unknown>;
-    const errCode = String(p.error_code ?? "");
-    if (p.success === false && (errCode === "PROOF_REQUIRED" || errCode === "PROOF_REFRESH_NEEDED")) {
-      // Also evict the cached entry for this npub so the gate's
-      // "Recent identities" picker doesn't immediately re-arm the same
-      // dead proof_token on the next visit.
-      const currentNpub = getStoredNpub();
-      if (currentNpub) forgetRecentLogin(currentNpub);
-      window.localStorage.removeItem(PROOF_STORAGE_KEY);
-      throw new ProofRequiredError(String(p.error ?? "Sign-in required."));
-    }
+    // Evict the cached entry for this npub so the gate's "Recent
+    // identities" picker doesn't immediately re-arm the same dead
+    // proof_token on the next visit.
+    const currentNpub = getStoredNpub();
+    if (currentNpub) forgetRecentLogin(currentNpub);
+    window.localStorage.removeItem(PROOF_STORAGE_KEY);
+    // Broadcast so the gate drops even when this call's caller swallows
+    // the error (e.g. a background profile/rank/coupons hydration read).
+    window.dispatchEvent(new Event(PROOF_EXPIRED_EVENT));
+    throw new ProofRequiredError(String(p.error ?? "Sign-in required."));
   }
   return payload as T;
 }

@@ -5,6 +5,11 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — a lapsed npub-proof now bounces to the sign-in gate
+
+- **An expired npub-proof no longer silently fails every call.** The wheel returns `{success:false, error_code:"proof_refresh_needed"}` when the proof cache lapses, but the FE compared the code against UPPERCASE strings — so the match never fired and paid calls just failed in place instead of re-presenting the gate (the same case-sensitivity bug fixed earlier in eXcalibur). The check now normalizes the wheel's lowercase ErrorCode.
+- **The bounce is global, not per-call.** Detection is centralized in a new dependency-free `frontend/src/lib/proofExpiry.ts` (`isProofExpiryPayload`), and on a lapse `mcp.ts` fires a `PROOF_EXPIRED_EVENT` that `App` listens for — so the patron is returned to the gate even when the failing call is a background hydration read (profile / rank / coupons) that swallows its own error. Regression-guarded by `frontend/verify/proofExpiry.smoke.ts` (`npm run verify:proof`).
+
 ### Added — "second opinion" deep-link to an external options modeler
 
 - **The Payoff Lab can now hand a built structure to a rigorous external modeler.** Optionality draws the expiration payoff in-app (pure intrinsic-value math, no chain needed), but deliberately doesn't rebuild the market-derived layer — live Greeks, IV surface, probability-of-profit — which needs a *real, quoted* contract to anchor. When one exists, the Payoff Panel shows a **Verify on OptionStrat ↗** link.
