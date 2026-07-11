@@ -9,6 +9,7 @@ import {
   proposedToTradeLegs,
   summarizePayoff,
 } from "../lib/payoff";
+import { externalModelerFor } from "../lib/externalModeler";
 
 interface PayoffPanelProps {
   ticker: string;
@@ -48,6 +49,12 @@ export default function PayoffPanel({
     () => (stats ? describeOrderTicket(tradeLegs, ticker, stats, name) : ""),
     [tradeLegs, ticker, stats, name],
   );
+
+  // Second-opinion deep-link out to a rigorous external modeler. Only
+  // "available" for a live scenario on a real, listed underlying whose
+  // structure maps to a known strategy preset; historical/fiction/custom
+  // fall back to a one-line reason (the in-app payoff already covers them).
+  const modeler = useMemo(() => externalModelerFor(scenario, tradeLegs), [scenario, tradeLegs]);
 
   function loadPreset(label: string): void {
     if (legs.length > 0) {
@@ -148,6 +155,33 @@ export default function PayoffPanel({
               small
             />
           </div>
+
+          {/* Second opinion — deep-link out to an external modeler for
+              live Greeks / IV / probability, which Optionality doesn't
+              rebuild. Available only when a real listed chain can be
+              quoted; otherwise a muted note says why. */}
+          {modeler.kind === "available" ? (
+            <div className="pp-secondop">
+              <a
+                className="pp-secondop-link"
+                href={modeler.url}
+                target="_blank"
+                rel="noopener noreferrer"
+                title={`Open this ${modeler.structureName} on ${modeler.provider.label} for live Greeks, IV, and probability`}
+              >
+                Verify on {modeler.provider.label} ↗
+              </a>
+              <span className="pp-secondop-note">
+                live Greeks · IV · probability — on the real chain
+              </span>
+            </div>
+          ) : (
+            modeler.reason && (
+              <div className="pp-secondop pp-secondop-muted">
+                <span className="pp-secondop-note">{modeler.reason}</span>
+              </div>
+            )
+          )}
 
           {/* Order ticket */}
           <div className="pp-ticket">
@@ -271,6 +305,40 @@ export default function PayoffPanel({
         }
 
         .pp-chart { margin-bottom: 14px; }
+
+        .pp-secondop {
+          display: flex;
+          align-items: baseline;
+          gap: 10px;
+          flex-wrap: wrap;
+          margin-bottom: 16px;
+          padding: 10px 12px;
+          background: var(--bg-soft);
+          border: 1px solid var(--panel-edge);
+          border-left: 3px solid var(--amber);
+          border-radius: 8px;
+        }
+        .pp-secondop-muted {
+          border-left-color: var(--panel-edge);
+        }
+        .pp-secondop-link {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 12px;
+          font-weight: 700;
+          letter-spacing: 0.04em;
+          color: var(--amber);
+          text-decoration: none;
+          white-space: nowrap;
+          transition: color 120ms;
+        }
+        .pp-secondop-link:hover { color: var(--amber-bright); }
+        .pp-secondop-note {
+          font-family: 'JetBrains Mono', monospace;
+          font-size: 10.5px;
+          color: var(--ink-faint);
+          letter-spacing: 0.03em;
+          line-height: 1.5;
+        }
 
         .pp-ribbon {
           display: grid;

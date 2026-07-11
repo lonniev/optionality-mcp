@@ -7,7 +7,8 @@
     "dev": "vite",
     "prebuild": "node scripts/fetch-anthropic-pricing.mjs",
     "build": "tsc -b && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "verify:modeler": "esbuild verify/externalModeler.smoke.ts --bundle --format=esm --platform=node | node --input-type=module"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

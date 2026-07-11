@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Added — "second opinion" deep-link to an external options modeler
+
+- **The Payoff Lab can now hand a built structure to a rigorous external modeler.** Optionality draws the expiration payoff in-app (pure intrinsic-value math, no chain needed), but deliberately doesn't rebuild the market-derived layer — live Greeks, IV surface, probability-of-profit — which needs a *real, quoted* contract to anchor. When one exists, the Payoff Panel shows a **Verify on InsiderFinance ↗** link that deep-links the exact ticker + strategy to InsiderFinance's Options Profit Calculator, which loads the underlying's live chain. The URL carries only public market identifiers (ticker, strategy) — nothing from the vault.
+- **Applicability is mode-gated, matching what a chain-driven modeler can actually quote.** Only `live` scenarios get the link. `historical` (the modeler shows today's chain, not the scenario's past date) and `fiction` (the underlying doesn't exist to be quoted) instead show a one-line note explaining that the in-app payoff is authoritative for that case. Structures with no single-strategy preset (calendars, diagonals, custom N-leg) likewise fall back to the note.
+- New pure module `frontend/src/lib/externalModeler.ts` (provider registry + applicability gate + structure→slug map, slugs verified live against InsiderFinance), covered by a dependency-free smoke test runnable with `npm run verify:modeler`.
+
 ## [0.5.0] — 2026-07-10
 
 ### Changed — one profile, sourced from Nostr
