@@ -24,6 +24,12 @@ logger = logging.getLogger(__name__)
 # Latest stable Sonnet. Per CLAUDE.md the family is 4.6.
 DEFAULT_MODEL = "claude-sonnet-4-6"
 
+# Anthropic messages endpoint. The in-process path uses the SDK client; the
+# durable detached path (see server.py's closure specs) bakes a fully-formed
+# request to this URL into a sealed job spec that the generic long-runner flow
+# executes outside the MCP container — so a container recycle can't orphan it.
+_ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages"
+
 # Anthropic-hosted server-side web search tool. ``web_search_20260209`` is the
 # current dynamic-filtering variant (supported on Sonnet 4.6): it filters
 # results server-side, so a "live" scenario resolves far faster than the basic
@@ -62,26 +68,28 @@ def empty_output_situation() -> AsyncJobSituation:
     )
 
 
-def _provider_situation(exc: Exception) -> AsyncJobSituation:
-    """Curate an Anthropic SDK error into a frontend-facing, refundable situation.
+def anthropic_error_message(body: object) -> str:
+    """Pull Anthropic's ``error.message`` from a raw response body, if present."""
+    if isinstance(body, dict):
+        err = body.get("error")
+        if isinstance(err, dict):
+            return str(err.get("message") or "")
+    return ""
 
-    The raw status + body stay operator-side (the wheel's logger / job row); the
-    patron's frontend gets only a machine ``error_code``, safe human copy, and a
-    ``transient`` flag. Anthropic reports billing exhaustion as a 400 with a
-    "credit balance too low" message (not a 402), so we match on the message.
+
+def situation_from_status(status: int | None, upstream_msg: str) -> AsyncJobSituation:
+    """Curate an Anthropic HTTP status + error message into a frontend situation.
+
+    Shared by the in-process SDK path (``_provider_situation``) and the detached
+    closure path (each job's ``shape_result``), so both classify a provider
+    failure identically. The raw status/body stay operator-side; the patron's
+    frontend gets only a machine ``error_code``, safe copy, and a ``transient``
+    flag. Anthropic reports billing exhaustion as a 400 with a "credit balance
+    too low" message (not a 402), so we match on the message.
     """
-    if isinstance(exc, anthropic.APITimeoutError):
-        return AsyncJobSituation(
-            error_code="upstream_timeout",
-            message="The AI provider took too long to respond, so this request "
-                    "couldn't be completed. No fare was charged.",
-            next_steps="Please try again.",
-            transient=True,
-        )
-    status = getattr(exc, "status_code", None)
-    body = str(getattr(exc, "message", "") or exc).lower()
+    low = (upstream_msg or "").lower()
     if status in (400, 402) and any(
-        s in body for s in ("credit balance", "purchase credits", "plans & billing", "billing")
+        s in low for s in ("credit balance", "purchase credits", "plans & billing", "billing")
     ):
         return AsyncJobSituation(
             error_code="operator_llm_unfunded",
@@ -113,6 +121,26 @@ def _provider_situation(exc: Exception) -> AsyncJobSituation:
         next_steps="Please try again.",
         transient=True,
     )
+
+
+def _provider_situation(exc: Exception) -> AsyncJobSituation:
+    """Curate an Anthropic SDK error into a frontend-facing, refundable situation.
+
+    The in-process peer of ``situation_from_status``: it pulls the status + body
+    off the SDK exception, handling the timeout case (no status) specially, then
+    delegates the status-code mapping so both execution paths agree.
+    """
+    if isinstance(exc, anthropic.APITimeoutError):
+        return AsyncJobSituation(
+            error_code="upstream_timeout",
+            message="The AI provider took too long to respond, so this request "
+                    "couldn't be completed. No fare was charged.",
+            next_steps="Please try again.",
+            transient=True,
+        )
+    status = getattr(exc, "status_code", None)
+    body = str(getattr(exc, "message", "") or exc)
+    return situation_from_status(status, body)
 
 
 async def _alert_operator_provider_down(situation: AsyncJobSituation) -> None:
@@ -180,6 +208,25 @@ async def _get_api_key() -> str | None:
     return key if key else None
 
 
+async def require_api_key() -> str:
+    """Load the operator's Anthropic key or raise the curated unconfigured situation.
+
+    For the detached ``build_closure`` path, which bakes the key into the sealed
+    request. Mirrors ``call_claude``'s in-process guard so a missing credential
+    fails the same refundable way on either execution path.
+    """
+    api_key = await _get_api_key()
+    if not api_key:
+        raise AsyncJobSituation(
+            error_code="operator_llm_unconfigured",
+            message="This service's AI provider isn't configured yet, so your "
+                    "request couldn't be completed. No fare was charged.",
+            next_steps="Please try again later.",
+            transient=False,
+        )
+    return api_key
+
+
 async def call_claude(
     prompt: str,
     system: str,
@@ -206,15 +253,7 @@ async def call_claude(
     ``optionality_api_usage`` for the Profile/Usage view. Best-effort —
     a usage-write failure does not affect the response.
     """
-    api_key = await _get_api_key()
-    if not api_key:
-        raise AsyncJobSituation(
-            error_code="operator_llm_unconfigured",
-            message="This service's AI provider isn't configured yet, so your "
-                    "request couldn't be completed. No fare was charged.",
-            next_steps="Please try again later.",
-            transient=False,
-        )
+    api_key = await require_api_key()
 
     tools: list[dict[str, Any]] | None = [WEB_SEARCH_TOOL] if enable_web_search else None
 
@@ -285,6 +324,115 @@ async def call_claude(
         logger.info("call_claude empty output (tool=%s, stop_reason=%s)", tool, stop)
         raise empty_output_situation()
     return out
+
+
+def build_anthropic_request(
+    *,
+    api_key: str,
+    prompt: str,
+    system: str,
+    max_tokens: int,
+    enable_web_search: bool = False,
+    model: str = DEFAULT_MODEL,
+    timeout_seconds: float | int | None = None,
+) -> dict[str, Any]:
+    """Build the fully-formed Anthropic messages request for the detached path.
+
+    Returns a declarative, JSON-serializable request envelope (method, url,
+    headers, json body, timeout) — the shape the durable long-runner's generic
+    ``http_request`` op executes. The operator's ``api_key`` is baked in here,
+    in-process, so the wheel can seal it into the closure before it ever leaves
+    the server; it appears only as the ``x-api-key`` header. Issues the SAME call
+    the in-process ``call_claude`` does (same model / tokens / system / tools),
+    so both paths produce identical output. Raises ``ValueError`` on empty prompt.
+    """
+    if not prompt or not prompt.strip():
+        raise ValueError("empty prompt")
+    body: dict[str, Any] = {
+        "model": model,
+        "max_tokens": max_tokens,
+        "system": system,
+        "messages": [{"role": "user", "content": prompt}],
+    }
+    if enable_web_search:
+        body["tools"] = [WEB_SEARCH_TOOL]
+    return {
+        "method": "POST",
+        "url": _ANTHROPIC_ENDPOINT,
+        "headers": {
+            "x-api-key": api_key,
+            "anthropic-version": "2023-06-01",
+            "content-type": "application/json",
+        },
+        "json": body,
+        "timeout": clamp_timeout(timeout_seconds),
+    }
+
+
+def response_text_from_json(raw_json: dict[str, Any] | None) -> str:
+    """Join the text blocks of a raw Anthropic messages response body.
+
+    The detached path returns the HTTP JSON (a plain dict), not the SDK's typed
+    message object, so ``content`` is a list of block dicts. Mirrors the block
+    extraction in ``call_claude``. Returns "" when nothing usable came back.
+    """
+    parts: list[str] = []
+    for block in (raw_json or {}).get("content") or []:
+        if isinstance(block, dict):
+            text = block.get("text")
+            if isinstance(text, str) and text.strip():
+                parts.append(text)
+    return "\n".join(parts).strip()
+
+
+async def _record_usage_from_json(
+    raw_json: dict[str, Any] | None, *, npub: str, tool: str, model: str
+) -> None:
+    """Journal token usage from a raw Anthropic response (detached-path parity).
+
+    Best-effort; a usage-write failure never affects the shaped result.
+    """
+    try:
+        usage_obj = (raw_json or {}).get("usage") or {}
+        in_tok = int(usage_obj.get("input_tokens") or 0)
+        out_tok = int(usage_obj.get("output_tokens") or 0)
+        if in_tok or out_tok:
+            from db import usage as _usage
+            await _usage.record_call(
+                npub=npub, tool=tool, model=model,
+                input_tokens=in_tok, output_tokens=out_tok,
+            )
+    except Exception:
+        pass
+
+
+async def shape_llm_text(
+    raw: dict[str, Any] | None, *, npub: str = "", tool: str = "", model: str = DEFAULT_MODEL
+) -> str:
+    """Turn a detached long-runner result into the model's text, or raise.
+
+    ``raw`` is the generic flow's return: ``{"status": <http_code>, "json": <body>}``.
+    On 2xx, extract the text (and journal usage); on a 2xx with no usable text,
+    raise the empty-output situation; on non-2xx, curate the upstream error into a
+    refundable ``AsyncJobSituation`` via the shared ``situation_from_status`` — the
+    raw status/body stay operator-side (Prefect logs). Symmetric with ``call_claude``.
+    """
+    raw = raw or {}
+    status = raw.get("status")
+    body = raw.get("json")
+    if status == 200:
+        text = response_text_from_json(body if isinstance(body, dict) else {})
+        if not text:
+            raise empty_output_situation()
+        await _record_usage_from_json(body, npub=npub, tool=tool, model=model)
+        return text
+    situation = situation_from_status(
+        status if isinstance(status, int) else None,
+        anthropic_error_message(body),
+    )
+    if not situation.transient:
+        await _alert_operator_provider_down(situation)
+    raise situation
 
 
 def extract_json(text: str) -> dict[str, Any]:

@@ -5,6 +5,20 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-07-11
+
+### Changed — SDK pin
+
+- Pinned `tollbooth-dpyc[nostr]==0.62.2` for the durable async-job shape callback (`shape_result(raw, params)`).
+
+### Fixed — the LLM jobs survive a container recycle (durable detached execution)
+
+- **`judge_trade` / `deal_scenario` / `ask_tip` now register a durable closure path, not just an in-process runner.** The reported failure — `judge_trade` polling "running" for 17 minutes then "client gave up after 360s — server never returned a terminal status" — was a Horizon container recycle killing the in-process asyncio task mid-LLM-call: nothing survived to write a terminal state, so the row stayed `running` until a later poll re-kicked a *fresh* 360s attempt the frontend had already abandoned. Each job now also registers a `build_closure` + `shape_result` spec (via SDK 0.62.2). Once the operator couriers the optional `dpyc-longrunner` creds (`prefect_api_url`, `prefect_api_key`, `closure_seal_key` — now in the operator credential template, v3), the wheel runs the LLM call in a detached Prefect flow **outside** the request container, so a recycle can't orphan it. Until then the in-process runner serves unchanged (no regression).
+- **Each job's side effects live in one shared `_finalize` half**, called by the in-process runner AND by `shape_result` when settling a detached run — so opening a journal entry / recording an evaluation / counting a clue fires exactly once on whichever path runs, never twice.
+- **`claude.py` gains the declarative request path**: `build_anthropic_request` (bakes the operator key for the wheel to seal), `shape_llm_text` (extracts the model text from the detached HTTP result, records usage, and curates a non-2xx into a refundable situation via the shared `situation_from_status`). `_provider_situation` (in-process) now delegates to the same mapper, so both paths classify a provider failure identically.
+- **A degenerate clue question and a scenario replay no longer spin up a claim-check job.** `ask_tip` returns its LLM-free nudge synchronously, and a replay (deterministic — no LLM) returns the settled entry directly (`status:"done"`, no claim to poll). The frontend's poller (`claimCheck.ts`, extracted + smoke-tested via `npm run verify:claimcheck`) short-circuits on a terminal start response, and `startAndPoll` reuses that resolver for the poll loop.
+- **A pre-flight rejection is now a clean refund.** A missing journal entry or invalid deal request raised while building the job settles as a curated, refundable situation (SDK 0.62.2) instead of a paid `{"error": ...}` dict.
+
 ### Fixed — a lapsed npub-proof now bounces to the sign-in gate
 
 - **An expired npub-proof no longer silently fails every call.** The wheel returns `{success:false, error_code:"proof_refresh_needed"}` when the proof cache lapses, but the FE compared the code against UPPERCASE strings — so the match never fired and paid calls just failed in place instead of re-presenting the gate (the same case-sensitivity bug fixed earlier in eXcalibur). The check now normalizes the wheel's lowercase ErrorCode.

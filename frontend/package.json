@@ -1,6 +1,6 @@
 {
   "name": "optionality-frontend",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "verify:modeler": "esbuild verify/externalModeler.smoke.ts --bundle --format=esm --platform=node | node --input-type=module",
     "verify:proof": "esbuild verify/proofExpiry.smoke.ts --bundle --format=esm --platform=node | node --input-type=module",
-    "verify": "npm run verify:modeler && npm run verify:proof"
+    "verify:claimcheck": "esbuild verify/claimCheck.smoke.ts --bundle --format=esm --platform=node | node --input-type=module",
+    "verify": "npm run verify:modeler && npm run verify:proof && npm run verify:claimcheck"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",

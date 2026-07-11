@@ -18,6 +18,11 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
 import { debugPush } from "./debugLog";
+import {
+  claimTerminalOutcome,
+  type ClaimCheckStart,
+  type ClaimFetch,
+} from "./claimCheck";
 import type { Evaluation, Scenario, TipExchange } from "../types";
 import { clearSessionNsec, hasSessionNsec, sessionNsecNpub } from "./sessionNsec";
 import { signInlineProof } from "./inlineProof";
@@ -435,22 +440,7 @@ async function callTool<T = unknown>(
 // server and outlives any single MCP call. Each has a free companion
 // tool that redeems the claim. We poll the companion until the work is
 // done; every poll is a fast call, so the per-call MCP timeout never
-// comes into play.
-
-interface ClaimCheckStart {
-  success?: boolean;
-  claim_check?: string;
-  poll_after_seconds?: number;
-  error?: string;
-}
-
-interface ClaimFetch<T> {
-  status?: string; // running | done | error | expired
-  result?: T;
-  error?: string;
-  next_steps?: string;
-  poll_after_seconds?: number;
-}
+// comes into play. Terminal resolution lives in ./claimCheck (imported above).
 
 // Client-side poll ceiling. Must sit ABOVE the backend's terminal-state time,
 // not just its max_runtime: a job's started_at is offset from the patron's
@@ -466,7 +456,13 @@ async function startAndPoll<T>(
   fetchTool: string,
   args: Record<string, unknown>,
 ): Promise<T> {
-  const start = await callTool<ClaimCheckStart>(startTool, args);
+  const start = await callTool<ClaimCheckStart<T>>(startTool, args);
+  // A synchronous terminal result (deterministic replay, degenerate-input nudge,
+  // or a pre-flight rejection) skips polling entirely.
+  const startOutcome = claimTerminalOutcome<T>(start);
+  if (startOutcome !== "pending") {
+    return startOutcome.value;
+  }
   const claim = start.claim_check;
   if (!claim) {
     debugPush("error", `${startTool}: no claim check returned — ${start.error ?? "unknown"}`);
@@ -488,20 +484,9 @@ async function startAndPoll<T>(
     const fetched = await callTool<ClaimFetch<T>>(fetchTool, {
       claim_check: claim,
     });
-    if (fetched.status === "done" && fetched.result !== undefined) {
-      return fetched.result;
-    }
-    if (fetched.status === "error") {
-      // The row holds a curated situation (safe message + actionable next
-      // steps); the fare was already refunded server-side. Surface both so the
-      // patron sees why and what to do, not a bare "request failed".
-      const base = fetched.error ?? "The request failed; the fee was refunded.";
-      throw new Error(fetched.next_steps ? `${base} ${fetched.next_steps}` : base);
-    }
-    if (fetched.status === "expired") {
-      throw new Error(
-        fetched.next_steps ?? "The claim check expired — please retry.",
-      );
+    const outcome = claimTerminalOutcome<T>(fetched);
+    if (outcome !== "pending") {
+      return outcome.value;
     }
     if (Date.now() > deadline) {
       debugPush(

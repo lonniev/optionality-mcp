@@ -21,7 +21,11 @@ from typing import Annotated, Any
 from fastmcp import FastMCP
 from pydantic import Field
 
-from tollbooth.credential_templates import CredentialTemplate, FieldSpec
+from tollbooth.credential_templates import (
+    LONGRUNNER_CREDENTIAL_FIELDS,
+    CredentialTemplate,
+    FieldSpec,
+)
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 from tollbooth.version import resolve_service_version
@@ -282,12 +286,15 @@ runtime = OperatorRuntime(
     tool_registry={**STANDARD_IDENTITIES, **TOOL_REGISTRY},
     operator_credential_template=CredentialTemplate(
         service="optionality-mcp-operator",
-        version=2,
+        version=3,
         description=(
             "Operator credentials for Anthropic Claude (dealer + judge LLM "
-            "calls) and BTCPay Lightning (patron credit purchases)."
+            "calls) and BTCPay Lightning (patron credit purchases). Optional "
+            "dpyc-longrunner fields enable durable detached execution of the "
+            "LLM jobs (survives a container recycle)."
         ),
         fields={
+            **LONGRUNNER_CREDENTIAL_FIELDS,
             "anthropic_api_key": FieldSpec(
                 required=True,
                 sensitive=True,
@@ -383,7 +390,16 @@ async def deal_scenario(
     with ``optionality_fetch_scenario``, polling until ``status`` is
     ``done``. Results expire after a short while; start a new request if
     your claim expires.
+
+    A **replay** (``replay_entry_id`` set) is deterministic — no LLM — so it
+    returns the settled result directly (``status: "done"`` with no claim
+    check) instead of a claim to poll.
     """
+    if replay_entry_id:
+        from tools.dealer import replay_scenario
+        return await replay_scenario(
+            npub=npub, replay_entry_id=replay_entry_id, max_loss_usd=max_loss_usd
+        )
     return await runtime.start_async_job(
         "deal_scenario",
         npub,
@@ -392,7 +408,6 @@ async def deal_scenario(
             "mode": mode,
             "difficulty": difficulty,
             "max_loss_usd": max_loss_usd,
-            "replay_entry_id": replay_entry_id,
             "sector": sector,
         },
         tool_id=DEAL_SCENARIO_UUID,
@@ -438,7 +453,14 @@ async def ask_tip(
 
     Returns a **claim check**, not the hint. Redeem the ``claim_check``
     with ``optionality_fetch_tip``, polling until ``status`` is ``done``.
+
+    A degenerate question (empty or oversized) needs no LLM, so it returns a
+    settled ``{status: "done"}`` nudge directly instead of a claim to poll.
     """
+    from tools.dealer import precheck_tip_question
+    canned = precheck_tip_question(question)
+    if canned is not None:
+        return {"success": True, "status": "done", "result": canned}
     return await runtime.start_async_job(
         "ask_tip",
         npub,
@@ -831,13 +853,30 @@ async def get_api_usage_stats(
 # lets a fresh container resume a job orphaned by a serverless recycle.
 # ---------------------------------------------------------------------------
 
-from tools.dealer import ask_tip as _ask_tip_runner  # noqa: E402
-from tools.dealer import deal_scenario as _deal_scenario_runner  # noqa: E402
-from tools.judge import judge_trade as _judge_trade_runner  # noqa: E402
+from tools import dealer as _dealer  # noqa: E402
+from tools import judge as _judge  # noqa: E402
 
-runtime.register_job_runner("deal_scenario", _deal_scenario_runner)
-runtime.register_job_runner("ask_tip", _ask_tip_runner)
-runtime.register_job_runner("judge_trade", _judge_trade_runner)
+# In-process runners resume a job orphaned by a serverless recycle only when a
+# fresh container next polls it — fragile. The closure specs register the
+# durable detached path for the SAME kind: once the operator couriers the
+# dpyc-longrunner creds, the wheel auto-installs the Prefect executor and the
+# LLM call runs OUTSIDE the request container, so a recycle can't orphan it.
+# Until then the in-process runner serves (no regression). Each job's side
+# effects live in a shared _finalize half, so they fire exactly once on
+# whichever path runs — never both.
+runtime.register_job_runner("deal_scenario", _dealer.deal_scenario)
+runtime.register_job_runner("ask_tip", _dealer.ask_tip)
+runtime.register_job_runner("judge_trade", _judge.judge_trade)
+
+runtime.register_job_spec(
+    "deal_scenario", _dealer.deal_build_closure, _dealer.deal_shape_result
+)
+runtime.register_job_spec(
+    "ask_tip", _dealer.tip_build_closure, _dealer.tip_shape_result
+)
+runtime.register_job_spec(
+    "judge_trade", _judge.build_closure, _judge.shape_result
+)
 
 
 def main() -> None:
