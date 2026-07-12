@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.2] — 2026-07-11
+
+### Fixed — the detached executor now activates reliably on cold containers
+
+- Pinned `tollbooth-dpyc[nostr]==0.62.3`. A live `deal_scenario` was observed timing out `job_timed_out` while running in-process (`recovered:true`) even though the detached Prefect executor was active elsewhere in the fleet — a container that hit a transient cold-vault failure on its first job was permanently pinned to in-process execution (SDK `_ensure_async_executor` cached the miss). 0.62.3 retries the probe on a transient failure, so every container installs the detached executor once its vault is reachable. No optionality code change.
+
 ## [0.6.1] — 2026-07-11
 
 ### Fixed — a scenario can no longer sit in The Pit without a journal entry
