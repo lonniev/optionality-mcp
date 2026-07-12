@@ -33,11 +33,14 @@ _ANTHROPIC_ENDPOINT = "https://api.anthropic.com/v1/messages"
 # Anthropic-hosted server-side web search tool. ``web_search_20260209`` is the
 # current dynamic-filtering variant (supported on Sonnet 4.6): it filters
 # results server-side, so a "live" scenario resolves far faster than the basic
-# ``20250305`` variant did. ``max_uses`` bounds the search rounds so a single
-# deal can't fan out into an unbounded — and slow — chain of queries that
-# stalls the whole job budget. (Do NOT also declare code_execution: dynamic
-# filtering runs it under the hood.)
-WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 5}
+# ``20250305`` variant did. ``max_uses`` bounds the search ROUNDS — each round
+# is the dominant latency cost of a live deal: the model writes a query,
+# Anthropic runs the search AND spins up a code-execution sandbox to
+# dynamic-filter the results, then the model reads and may search again. Three
+# rounds cover a live scenario (ticker + catalyst + price/IV); five just added
+# minutes. Tune here if scenario grounding suffers. (Do NOT also declare
+# code_execution: dynamic filtering runs it under the hood.)
+WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_uses": 3}
 
 # Default LLM request timeout when the caller declares none. Generous for a
 # web-search-augmented generation, but the caller's async-job budget is the

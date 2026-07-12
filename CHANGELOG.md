@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.10] — 2026-07-12
+
+### Changed — faster LIVE deals: fewer web-search rounds
+
+- **`web_search max_uses` 5 → 3.** A performance study found the dominant cost of a live deal is the search fan-out: each round has the model write a query, Anthropic run the search *and* spin up a code-execution sandbox to dynamic-filter results (the `web_search_20260209` variant), then read and possibly search again. Five sequential rounds added minutes; three cover a live scenario (ticker + catalyst + price/IV). The model (`claude-sonnet-4-6`, thinking-off) and the ~2.6K-token prompt were confirmed *not* to be the bottleneck. Tunable in `claude.py` if grounding depth suffers.
+
 ## [0.6.9] — 2026-07-12
 
 ### Fixed — LIVE deals no longer time out before they finish composing
