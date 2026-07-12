@@ -27,7 +27,6 @@ import {
   askTip,
   checkBalance,
   checkPrice,
-  type ClaimStartInfo,
   ClaimCheckError,
   dealScenario,
   deleteJournal,
@@ -43,11 +42,20 @@ import {
   resumeDealClaim,
   saveDraft,
   shareEntry,
+  startDeal,
   type CheckBalanceResult,
 } from "../lib/mcp";
 import type { SharedEntry } from "../types";
 import { useHashTab } from "../lib/hashTab";
-import { LEGACY_SESSION_KEY, pendingDealKey, sessionKey } from "../lib/sessionKey";
+import { LEGACY_SESSION_KEY, sessionKey } from "../lib/sessionKey";
+import {
+  legacyPendingDealKey,
+  pendingDealsKey,
+  prunePending,
+  removePending,
+  upsertPending,
+} from "../lib/pendingDeals";
+import { etaLabel as computeEtaLabel, fmtClock } from "../lib/dealClock";
 
 /// Grid column template for the Journal table: caret · Symbol · Historicity
 /// · Difficulty · Created · Updated · Grade · Score · Status · Actions.
@@ -353,32 +361,29 @@ function clearSession(npub: string): void {
   }
 }
 
-// A paid deal still composing, persisted per-npub so a reload / dropped
-// connection resumes the claim (which is what settles the job and journals it)
-// rather than abandoning the fare. See PendingDeal.
-function loadPendingDeal(npub: string): PendingDeal | null {
+// The per-npub queue of paid scenarios still composing ("Scenarios in
+// Preparation"). Persisted as a LIST so several concurrent deals survive a
+// reload / dropped connection independently — each is resumed and settled on
+// next load. See PendingDeal and ../lib/pendingDeals.
+function loadPendingDeals(npub: string): PendingDeal[] {
   try {
-    const raw = window.localStorage.getItem(pendingDealKey(npub));
-    if (!raw) return null;
-    return JSON.parse(raw) as PendingDeal;
+    // One-time cleanup of the superseded 0.6.4 single-slot key.
+    window.localStorage.removeItem(legacyPendingDealKey(npub));
+    const raw = window.localStorage.getItem(pendingDealsKey(npub));
+    if (!raw) return [];
+    const list = JSON.parse(raw) as PendingDeal[];
+    return Array.isArray(list) ? list : [];
   } catch {
-    return null;
+    return [];
   }
 }
 
-function savePendingDeal(npub: string, d: PendingDeal): void {
+function savePendingDeals(npub: string, list: PendingDeal[]): void {
   try {
-    window.localStorage.setItem(pendingDealKey(npub), JSON.stringify(d));
+    if (list.length === 0) window.localStorage.removeItem(pendingDealsKey(npub));
+    else window.localStorage.setItem(pendingDealsKey(npub), JSON.stringify(list));
   } catch (e) {
-    console.error("pending-deal save failed", e);
-  }
-}
-
-function clearPendingDeal(npub: string): void {
-  try {
-    window.localStorage.removeItem(pendingDealKey(npub));
-  } catch {
-    /* noop */
+    console.error("pending-deals save failed", e);
   }
 }
 
@@ -781,12 +786,19 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingMsg, setLoadingMsg] = useState<string>("");
-  // Live claim details while a deal composes — drives the waiting status card
-  // (claim id, elapsed, ETA). Null until the claim is accepted (or for a
-  // synchronous replay), and cleared the moment the deal settles or fails.
-  const [dealProgress, setDealProgress] = useState<
-    { claimCheck: string; startedAt: number; expectedSeconds: number } | null
-  >(null);
+  // The queue of scenarios the Firm is still composing — a patron can fire
+  // several at once and wander off. Each is polled by a background poller
+  // (pollersRef) that settles it into its own `open` journal entry. Surfaced as
+  // the "Scenarios in Preparation" table in the Journal.
+  const [preparing, setPreparing] = useState<PendingDeal[]>([]);
+  // Which preparing claim the full-screen "Reading the tape" overlay is showing,
+  // if any. Null = no overlay (patron is elsewhere while deals compose).
+  const [focusedClaim, setFocusedClaim] = useState<string | null>(null);
+  // Mirror of focusedClaim readable inside a poller closure without re-subscribing.
+  const focusedClaimRef = useRef<string | null>(null);
+  focusedClaimRef.current = focusedClaim;
+  // Claims with a live background poller — guards against double-spawning.
+  const pollersRef = useRef<Set<string>>(new Set());
   const [error, setError] = useState<string>("");
   const [stats, setStats] = useState<Stats>({ played: 0, avg: 0, best: 0, streak: 0 });
   // Journal — server-authoritative, sorted + grouped + offset-paginated
@@ -1009,79 +1021,126 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     })();
   }, []);
 
-  // Resume a deal left composing on a PRIOR load. This is what makes "you can
-  // wander off" true: the claim is polled to a terminal state here, which is
-  // also what settles the detached job and writes its `open` journal entry. A
-  // patron who reloaded, lost their connection, or closed the tab mid-wait comes
-  // back to their finished assignment instead of a lost fare.
+  // Hydrate the "Scenarios in Preparation" queue on load. Deals left composing
+  // on a prior load (reload, dropped connection, closed tab) are picked back up
+  // here; the poller-manager below resumes each, which is what settles the
+  // detached job and writes its `open` journal entry — so a wandered-off patron
+  // returns to a finished assignment, never a lost fare. If exactly one is
+  // pending and the Pit is idle, focus it so the reload feels continuous.
   useEffect(() => {
     const me = getStoredNpub();
     if (guest || !me || me === "_guest") return;
-    // A settled board already restored above wins — a pending claim and an
-    // active session are mutually exclusive in normal flow.
-    if (loadSession(me)?.scenario) return;
-    const pending = loadPendingDeal(me);
-    if (!pending?.claimCheck) return;
-    // Defensive: discard an absurdly old crumb (corrupt store / prior day). A
-    // merely stale-but-recent claim is left to the server to call "expired".
-    if (Date.now() - pending.startedAt > 24 * 60 * 60 * 1000) {
-      clearPendingDeal(me);
-      return;
-    }
-    let cancelled = false;
-    (async () => {
-      setMode(pending.mode);
-      setDifficulty(pending.difficulty);
-      if (typeof pending.maxLossUsd === "number") setMaxLossInput(String(pending.maxLossUsd));
-      if (typeof pending.sector === "string") setSector(pending.sector);
+    const fresh = prunePending(loadPendingDeals(me), Date.now());
+    savePendingDeals(me, fresh); // write back any pruned crumbs
+    if (fresh.length === 0) return;
+    setPreparing(fresh);
+    if (fresh.length === 1 && !loadSession(me)?.scenario) {
+      const only = fresh[0];
+      setMode(only.mode);
+      setDifficulty(only.difficulty);
+      if (typeof only.maxLossUsd === "number") setMaxLossInput(String(only.maxLossUsd));
+      if (typeof only.sector === "string") setSector(only.sector);
       setLoadingMsg("Reading the tape");
-      setDealProgress({
-        claimCheck: pending.claimCheck,
-        startedAt: pending.startedAt,
-        expectedSeconds: pending.expectedSeconds,
-      });
-      setLoading(true);
-      try {
-        const result = await resumeDealClaim(pending.claimCheck, pending.startedAt);
-        if (cancelled) return;
-        if (result.error) throw new Error(result.error);
-        const json = result.scenario;
-        json.mode = pending.mode;
-        setScenario(json);
-        setEntryId(result.entry_id);
-        setJournalEntries([]);
-        setJournalPage(0);
-        void refreshBalance();
-        clearPendingDeal(me); // settled — the assignment is now seated + journaled
-      } catch (e) {
-        if (cancelled) return;
-        if (e instanceof ProofRequiredError) {
-          // Proof lapsed — KEEP the pending crumb so a later load (post
-          // re-auth) can still resume and settle. Just drop the overlay.
-          return;
-        }
-        // Expired / not-found / genuine failure: the fare was refunded
-        // server-side. Clear the crumb and nudge back to a fresh deal.
-        clearPendingDeal(me);
-        setError(
-          e instanceof ClaimCheckError && e.code === "expired"
-            ? "Your last assignment aged out before you returned — no fare was charged. Deal a fresh one."
-            : "Couldn't recover your last assignment. " + (e as Error).message,
-        );
-      } finally {
-        // UI reset only — crumb lifetime is decided in the branches above so the
-        // proof-lapsed case can preserve it for a later resume.
-        if (!cancelled) {
-          setDealProgress(null);
-          setLoading(false);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      setFocusedClaim(only.claimCheck);
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The poller manager: one background poller per preparing claim. Polling a
+  // claim to terminal is ALSO what settles it server-side (fetch_async_job runs
+  // shape_result → open_entry), so these run regardless of which one — if any —
+  // is focused. On settle a deal leaves the queue and becomes an `open` journal
+  // entry; if it was the focused one, it seats into the Pit so the wait flows
+  // straight into pitching (the lone-deal happy path).
+  useEffect(() => {
+    const me = getStoredNpub();
+    if (guest || me === "_guest") return;
+    for (const pd of preparing) {
+      if (pollersRef.current.has(pd.claimCheck)) continue;
+      pollersRef.current.add(pd.claimCheck);
+      void (async () => {
+        try {
+          const result = await resumeDealClaim(pd.claimCheck, pd.startedAt);
+          if (result.error) throw new Error(result.error);
+          const json = result.scenario;
+          json.mode = pd.mode;
+          dequeuePreparing(me, pd.claimCheck);
+          setJournalEntries([]); // the new `open` entry now tops the Journal
+          setJournalPage(0);
+          void refreshBalance();
+          if (focusedClaimRef.current === pd.claimCheck) {
+            seatScenario(json, result.entry_id, pd); // drop the overlay into the Pit
+          }
+        } catch (e) {
+          if (e instanceof ProofRequiredError) {
+            // Proof lapsed — KEEP the crumb so a later load (post re-auth) can
+            // resume and settle. Just release the poller and drop any overlay.
+            pollersRef.current.delete(pd.claimCheck);
+            setFocusedClaim((fc) => (fc === pd.claimCheck ? null : fc));
+            return;
+          }
+          // Expired / not-found / genuine failure — the fare was refunded
+          // server-side. Drop it from the queue and, if focused, surface why.
+          dequeuePreparing(me, pd.claimCheck);
+          if (focusedClaimRef.current === pd.claimCheck) {
+            setFocusedClaim(null);
+            setError(
+              e instanceof ClaimCheckError && e.code === "expired"
+                ? "That assignment aged out before you returned — no fare was charged. Deal a fresh one."
+                : "Couldn't recover that assignment. " + (e as Error).message,
+            );
+          }
+        } finally {
+          pollersRef.current.delete(pd.claimCheck);
+        }
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [preparing, guest]);
+
+  // 1 Hz clock so the Preparation table's elapsed / ETA advance while any deal
+  // is composing. Idle (no interval) when the queue is empty.
+  const [prepNow, setPrepNow] = useState<number>(() => Date.now());
+  useEffect(() => {
+    if (preparing.length === 0) return;
+    const id = window.setInterval(() => setPrepNow(Date.now()), 1000);
+    return () => window.clearInterval(id);
+  }, [preparing.length]);
+
+  /// Add a just-started deal to the preparation queue (state + storage).
+  function enqueuePreparing(npub: string, pd: PendingDeal): void {
+    setPreparing((prev) => {
+      const next = upsertPending(prev, pd);
+      savePendingDeals(npub, next);
+      return next;
+    });
+  }
+
+  /// Remove a settled/failed deal from the preparation queue (state + storage).
+  function dequeuePreparing(npub: string, claim: string): void {
+    setPreparing((prev) => {
+      const next = removePending(prev, claim);
+      savePendingDeals(npub, next);
+      return next;
+    });
+  }
+
+  /// Seat a finished scenario into the Pit for pitching, restoring the drill's
+  /// mode/difficulty/envelope. Shared by a focused-deal settle and the "Resume"
+  /// affordance path.
+  function seatScenario(json: Scenario, seatEntryId: string, pd: PendingDeal): void {
+    setScenario(json);
+    setEntryId(seatEntryId);
+    setMode(pd.mode);
+    setDifficulty(pd.difficulty);
+    if (typeof pd.maxLossUsd === "number") setMaxLossInput(String(pd.maxLossUsd));
+    if (typeof pd.sector === "string") setSector(pd.sector);
+    setAnswer("");
+    setEvaluation(null);
+    setFocusedClaim(null);
+    setLoading(false);
+    setTimeout(() => answerRef.current?.focus(), 100);
+  }
 
   // Persist active session whenever the play state changes. The clear
   // path is `nextRound()`, which removes the row; otherwise this keeps
@@ -1113,12 +1172,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
   async function generateScenario(): Promise<void> {
     setError("");
+    // Clear the current board — the new deal becomes the focus. Any unpitched
+    // scenario already survives as its own `open` journal entry to resume later.
     setEvaluation(null);
     setAnswer("");
     setScenario(null);
     setEntryId(null);
-    setLoading(true);
-    setDealProgress(null);
     setLoadingMsg(mode === "live" ? "Reading the tape" : "Tapping the wire");
     const startedAt = Date.now();
     const me = getStoredNpub();
@@ -1126,64 +1185,53 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       const parsedMaxLoss = parseInt(maxLossInput, 10);
       const maxLossArg = Number.isFinite(parsedMaxLoss) && parsedMaxLoss > 0 ? parsedMaxLoss : undefined;
       const sectorArg = sector.trim() || undefined;
-      // The instant the claim is accepted, persist it and light up the status
-      // card. Persisting BEFORE the poll returns is the whole point: a reload or
-      // dropped connection during the (minutes-long) live composition resumes
-      // this claim on next load, which is what settles the job and journals it.
-      const onStart = (info: ClaimStartInfo) => {
-        savePendingDeal(me, {
-          claimCheck: info.claimCheck,
-          mode,
-          difficulty,
-          startedAt,
-          expectedSeconds: info.expectedSeconds,
-          maxLossUsd: maxLossArg,
-          sector: sectorArg,
-        });
-        setDealProgress({
-          claimCheck: info.claimCheck,
-          startedAt,
-          expectedSeconds: info.expectedSeconds,
-        });
+      // Start the deal but don't block on the (minutes-long) composition — queue
+      // the claim and hand it to a background poller. The toll was just debited
+      // for requesting the work; the poller settles it into an `open` journal
+      // entry whether or not the patron stays on this screen.
+      const { claim, expectedSeconds } = await startDeal(mode, difficulty, maxLossArg, sectorArg);
+      const pd: PendingDeal = {
+        claimCheck: claim,
+        mode,
+        difficulty,
+        startedAt,
+        expectedSeconds,
+        maxLossUsd: maxLossArg,
+        sector: sectorArg,
       };
-      const result = await dealScenario(mode, difficulty, maxLossArg, undefined, sectorArg, onStart);
-      if (result.error) throw new Error(result.error);
-      const json = result.scenario;
-      json.mode = mode;
-      setScenario(json);
-      setEntryId(result.entry_id);
-      setTimeout(() => answerRef.current?.focus(), 100);
-      // Toll for deal_scenario was just debited — keep the header
-      // chip current and let the Sample-Assessment-at-zero affordance
-      // appear or disappear as appropriate.
+      enqueuePreparing(me, pd);
+      setFocusedClaim(claim); // watch this one compose
       void refreshBalance();
-      // The wheel just journaled this scenario as an `open` entry — invalidate
-      // the cached Journal page so it shows up if the patron opens the tab.
-      setJournalEntries([]);
-      setJournalPage(0);
     } catch (e) {
       if (e instanceof ProofRequiredError) {
         onSignOut?.();
         return;
       }
-      setError("Could not generate scenario. " + (e as Error).message);
-    } finally {
-      // Terminal, whichever way it went — drop the in-flight claim and card.
-      clearPendingDeal(me);
-      setDealProgress(null);
-      setLoading(false);
+      setError("Could not start scenario. " + (e as Error).message);
     }
   }
 
-  // Leave the wait and go claim the assignment from the Journal. The deal keeps
-  // composing in the background (this component stays mounted across tabs, so
-  // the poll — and its eventual settle — survives); we never cancel or re-charge.
-  // The Journal cache is already invalidated on settle, so the newly-journaled
-  // `open` entry shows when the tab loads.
+  // Leave the wait and let the assignment finish in the background. It keeps
+  // composing (its poller is independent of this overlay); the Journal's
+  // "Scenarios in Preparation" table shows it until it's ready, then it settles
+  // into an `open` entry to claim. Never cancels, never re-charges.
   function claimInJournal(): void {
+    setFocusedClaim(null);
     setJournalEntries([]);
     setJournalPage(0);
     setTab("journal");
+  }
+
+  // Re-open the "Reading the tape" overlay for a still-composing scenario picked
+  // from the Preparation table.
+  function watchPreparing(pd: PendingDeal): void {
+    setMode(pd.mode);
+    setDifficulty(pd.difficulty);
+    if (typeof pd.maxLossUsd === "number") setMaxLossInput(String(pd.maxLossUsd));
+    if (typeof pd.sector === "string") setSector(pd.sector);
+    setLoadingMsg("Reading the tape");
+    setFocusedClaim(pd.claimCheck);
+    setTab("play");
   }
 
   async function submitTrade(): Promise<void> {
@@ -1814,15 +1862,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, guest]);
 
-  // Auto-load the Journal when the tab opens with an empty cache (initial
-  // open, or after a fresh trade submission invalidated it). Bouncing
-  // between tabs with a populated cache doesn't refetch.
+  // Auto-load the Journal when the tab opens with an empty cache, or when the
+  // cache is invalidated while the tab is open — a fresh trade submission or a
+  // background deal settling (both set journalEntries=[]) then surfaces without
+  // a manual refresh. Bouncing between tabs with a populated cache doesn't
+  // refetch.
   useEffect(() => {
     if (tab === "journal" && journalEntries.length === 0 && !journalLoading) {
       void loadJournalPage();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [tab, journalEntries.length]);
 
   // Refetch whenever the sort / group / page selection changes while the
   // Journal tab is open — each change asks the wheel for the matching
@@ -2294,37 +2344,39 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               </div>
             )}
 
-            {loading &&
-              (loadingMsg === "Judging your Pitch" ? (
-                // Full-viewport immersive scene — see JudgeAnimation;
-                // its fixed overlay paints the full page.
-                <JudgeAnimation />
-              ) : (
-                // Deal / mulligan scene — full-viewport overlay using
-                // the login backdrop so the trainee waits inside the
-                // institutional setting the Firm is pretending to be. Once a
-                // claim is in flight, the status card (claim id, elapsed, ETA,
-                // "Claim in Journal") makes the multi-minute wait bearable and
-                // walk-away-safe. A synchronous replay never sets dealProgress,
-                // so it keeps the plain animation.
-                <DealAnimation
-                  loadingMsg={loadingMsg}
-                  mode={mode}
-                  status={
-                    dealProgress
-                      ? {
-                          claimId: dealProgress.claimCheck,
-                          startedAt: dealProgress.startedAt,
-                          expectedSeconds: dealProgress.expectedSeconds,
-                          assignmentName: `${MODES.find((m) => m.id === mode)?.label ?? mode} · ${
-                            DIFFICULTIES.find((d) => d.id === difficulty)?.label ?? difficulty
-                          }`,
-                          onClaimInJournal: claimInJournal,
-                        }
-                      : undefined
-                  }
-                />
-              ))}
+            {/* Overlays: judging a pitch, watching a focused deal compose, or a
+                brief synchronous replay. The deal overlay is driven by
+                focusedClaim (not `loading`) so it can persist across the
+                minutes-long wait and be re-opened from the Preparation table. */}
+            {loading && loadingMsg === "Judging your Pitch" ? (
+              // Full-viewport immersive scene — see JudgeAnimation.
+              <JudgeAnimation />
+            ) : (() => {
+              const focused = focusedClaim
+                ? preparing.find((p) => p.claimCheck === focusedClaim)
+                : undefined;
+              if (focused) {
+                // The status card (claim id, elapsed, ETA, "Claim in Journal")
+                // makes the multi-minute wait bearable and walk-away-safe.
+                return (
+                  <DealAnimation
+                    loadingMsg={loadingMsg}
+                    mode={focused.mode}
+                    status={{
+                      claimId: focused.claimCheck,
+                      startedAt: focused.startedAt,
+                      expectedSeconds: focused.expectedSeconds,
+                      assignmentName: `${MODES.find((m) => m.id === focused.mode)?.label ?? focused.mode} · ${
+                        DIFFICULTIES.find((d) => d.id === focused.difficulty)?.label ?? focused.difficulty
+                      }`,
+                      onClaimInJournal: claimInJournal,
+                    }}
+                  />
+                );
+              }
+              // A synchronous replay (mulligan) — brief plain animation.
+              return loading ? <DealAnimation loadingMsg={loadingMsg} mode={mode} /> : null;
+            })()}
 
             {scenario && !loading && (
               <div className="panel">
@@ -3217,6 +3269,68 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               that you started but had to set aside.
             </p>
 
+            {preparing.length > 0 && (
+              <div className="prep-section">
+                <div className="prep-head">
+                  <span className="prep-dot" aria-hidden="true" />
+                  Scenarios in Preparation · {preparing.length}
+                </div>
+                <div className="prep-list">
+                  {[...preparing]
+                    .sort((a, b) => b.startedAt - a.startedAt)
+                    .map((pd) => {
+                      const elapsed = (prepNow - pd.startedAt) / 1000;
+                      const eta = computeEtaLabel(elapsed, pd.expectedSeconds);
+                      const name = `${MODES.find((m) => m.id === pd.mode)?.label ?? pd.mode} · ${
+                        DIFFICULTIES.find((d) => d.id === pd.difficulty)?.label ?? pd.difficulty
+                      }`;
+                      return (
+                        <button
+                          key={pd.claimCheck}
+                          type="button"
+                          className="prep-row"
+                          onClick={() => watchPreparing(pd)}
+                          title="Return to the Reading-the-Tape screen for this scenario"
+                        >
+                          <span className="prep-name">
+                            {name}
+                            {pd.sector ? <span className="prep-sector"> · {pd.sector}</span> : null}
+                          </span>
+                          <span className="prep-meta">
+                            <span className="prep-elapsed">{fmtClock(elapsed)}</span>
+                            {eta && <span className="prep-eta">{eta}</span>}
+                            <span className="prep-claim">{pd.claimCheck.slice(0, 8)}</span>
+                          </span>
+                          <span className="prep-cta">Watch ›</span>
+                        </button>
+                      );
+                    })}
+                </div>
+                <div className="prep-note">
+                  The Firm is composing these in the background — you can leave and come back. When one
+                  is ready it drops out of this list and appears below as an open entry to claim.
+                </div>
+                <style>{`
+                  .prep-section { margin: 4px 0 22px; padding: 14px 16px 12px; border: 1px solid var(--amber); border-radius: 10px; background: color-mix(in srgb, var(--amber) 8%, transparent); }
+                  .prep-head { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 0.16em; text-transform: uppercase; color: var(--amber); margin-bottom: 10px; }
+                  .prep-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--amber); animation: prep-pulse 1.4s ease-in-out infinite; }
+                  @keyframes prep-pulse { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }
+                  .prep-list { display: flex; flex-direction: column; gap: 6px; }
+                  .prep-row { display: flex; align-items: center; gap: 12px; width: 100%; text-align: left; padding: 10px 12px; border: 1px solid var(--line, rgba(255,255,255,0.1)); border-radius: 8px; background: var(--panel); color: var(--ink); cursor: pointer; font: inherit; transition: border-color 0.15s, background 0.15s; }
+                  .prep-row:hover { border-color: var(--amber); background: var(--bg-soft); }
+                  .prep-name { flex: 1 1 auto; font-family: Fraunces, serif; font-size: 15px; }
+                  .prep-sector { color: var(--rust); }
+                  .prep-meta { display: flex; align-items: center; gap: 12px; font-variant-numeric: tabular-nums; }
+                  .prep-elapsed { font-weight: 600; }
+                  .prep-eta { font-size: 12px; color: var(--ink-faint); }
+                  .prep-claim { font-family: 'JetBrains Mono', monospace; font-size: 12px; color: var(--ink-faint); }
+                  .prep-cta { color: var(--amber); font-size: 13px; white-space: nowrap; }
+                  .prep-note { margin-top: 10px; font-size: 12px; color: var(--ink-soft, var(--ink-faint)); font-style: italic; }
+                  @media (max-width: 560px) { .prep-row { flex-wrap: wrap; gap: 6px 12px; } .prep-cta { width: 100%; } }
+                `}</style>
+              </div>
+            )}
+
             {journalLoading && journalEntries.length === 0 && (
               <div className="loading" style={{ display: "block", padding: "20px 0" }}>Pulling sessions</div>
             )}
@@ -3226,7 +3340,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             )}
 
             {!journalLoading && journalEntries.length === 0 && !journalError && (
-              <div className="empty">No sessions yet. Deal your first Trade Scenario.</div>
+              <div className="empty">
+                {preparing.length > 0
+                  ? "No finished sessions yet — your scenario is still being prepared above."
+                  : "No sessions yet. Deal your first Trade Scenario."}
+              </div>
             )}
 
             {journalEntries.length > 0 && (

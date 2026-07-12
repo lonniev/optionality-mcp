@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.5] — 2026-07-12
+
+### Added — "Scenarios in Preparation": fire off several deals, claim them later
+
+- **Concurrent deals.** Dealing a scenario no longer blocks on the (minutes-long) composition — the claim is queued and a background poller settles it. A patron can fire several at once; each is polled independently and settles into its own `open` journal entry. The pending queue is persisted per-npub as a **list** (`optionality:pending:v2:<npub>`, superseding the 0.6.4 single slot) so concurrent deals survive a reload without clobbering each other.
+- **A "Scenarios in Preparation" table at the top of the Journal.** Each in-flight scenario shows its assignment (mode · difficulty), a live elapsed clock, an ETA, and its claim id. Clicking a row re-opens the "Reading the Tape" screen for that production. This fixes the dead end where "Claim in Journal" (tapped before a scenario was ready) landed on nothing — the Journal now shows what's still cooking, and each finished one drops out of the list and appears below as an open entry to resume and pitch.
+- The lone-deal happy path is unchanged: deal one, watch it compose, and it seats straight into the Pit to pitch when ready. `mcp.ts` now exposes `startDeal` (start-only, returns the claim) alongside the existing `resumeDealClaim` (the shared background poller); pure queue reducers live in `lib/pendingDeals.ts` with a dep-free `verify:pending` smoke test. The Journal also auto-refreshes when a background deal settles while the tab is open.
+
 ## [0.6.4] — 2026-07-12
 
 ### Added — a walk-away-safe waiting card for the (multi-minute) deal

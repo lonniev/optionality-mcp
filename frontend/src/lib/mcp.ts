@@ -453,15 +453,6 @@ async function callTool<T = unknown>(
 // while staying far below the old 600s that let a stall spin ten minutes.
 const CLAIM_MAX_WAIT_MS = 360_000;
 
-// Details a caller learns the instant a claim is accepted — before the first
-// poll — so a slow-tool UI can show a live status card (claim id, ETA) and
-// persist the claim for durable resume. Fired only for the async (claim-check)
-// path; a synchronous terminal result never calls it.
-export interface ClaimStartInfo {
-  claimCheck: string;
-  expectedSeconds: number;
-}
-
 // Poll a companion fetch tool for an already-issued claim until it reaches a
 // terminal state. Shared by the initial start-and-poll and by a resumed claim
 // (a reload / reconnect), so both settle identically. `firstWaitSeconds` is the
@@ -501,7 +492,6 @@ async function startAndPoll<T>(
   startTool: string,
   fetchTool: string,
   args: Record<string, unknown>,
-  onStart?: (info: ClaimStartInfo) => void,
 ): Promise<T> {
   const start = await callTool<ClaimCheckStart<T>>(startTool, args);
   // A synchronous terminal result (deterministic replay, degenerate-input nudge,
@@ -518,7 +508,6 @@ async function startAndPoll<T>(
     );
   }
   debugPush("info", `${startTool}: claim ${claim.slice(0, 8)} accepted — polling for result`);
-  onStart?.({ claimCheck: claim, expectedSeconds: start.expected_seconds ?? 0 });
   // Probe EARLY on the first poll. The backend's budget-sized first wait
   // (~75% of the job's runtime) is right for a job that runs the full budget —
   // but a job that fails fast (the operator's AI provider is unfunded, surfaced
@@ -563,13 +552,55 @@ export interface DealScenarioResult {
   error?: string;
 }
 
+// A deal in flight: the accepted claim plus the operator's honest time budget.
+export interface DealStart {
+  claim: string;
+  expectedSeconds: number;
+}
+
+// Start a deal but DON'T poll it to completion — return the claim so the caller
+// can queue it as a "Scenario in Preparation" and let a background poller settle
+// it. This is what lets a patron fire several deals at once and wander off; each
+// claim is polled independently (see resumeDealClaim) and settles into its own
+// `open` journal entry. Throws ProofRequiredError / ClaimCheckError like any
+// tool call; a fresh (non-replay) deal is never synchronously terminal.
+export async function startDeal(
+  mode: string,
+  difficulty: string,
+  maxLossUsd?: number,
+  sector?: string,
+): Promise<DealStart> {
+  const args: Record<string, unknown> = { mode, difficulty };
+  if (typeof maxLossUsd === "number" && maxLossUsd > 0) {
+    args.max_loss_usd = maxLossUsd;
+  }
+  const sectorClean = (sector ?? "").trim();
+  if (sectorClean) {
+    args.sector = sectorClean;
+  }
+  const start = await callTool<ClaimCheckStart<DealScenarioResult>>("deal_scenario", args);
+  // Surfaces a pre-flight rejection (provider unfunded, bad input) as a thrown,
+  // already-refunded ClaimCheckError instead of a silent hang.
+  const outcome = claimTerminalOutcome<DealScenarioResult>(start);
+  if (outcome !== "pending") {
+    throw new Error(start.error ?? "deal_scenario returned no claim to prepare");
+  }
+  if (!start.claim_check) {
+    debugPush("error", `deal_scenario: no claim check returned — ${start.error ?? "unknown"}`);
+    throw new Error(start.error ?? "optionality_deal_scenario: no claim check returned");
+  }
+  debugPush("info", `deal_scenario: claim ${start.claim_check.slice(0, 8)} queued for preparation`);
+  return { claim: start.claim_check, expectedSeconds: start.expected_seconds ?? 0 };
+}
+
+// A deterministic replay (mulligan) — no LLM, so it settles synchronously and is
+// still fine to await start-to-finish. Fresh async deals go through startDeal.
 export async function dealScenario(
   mode: string,
   difficulty: string,
   maxLossUsd?: number,
   replayEntryId?: string,
   sector?: string,
-  onStart?: (info: ClaimStartInfo) => void,
 ): Promise<DealScenarioResult> {
   const args: Record<string, unknown> = { mode, difficulty };
   if (typeof maxLossUsd === "number" && maxLossUsd > 0) {
@@ -588,7 +619,6 @@ export async function dealScenario(
     "deal_scenario",
     "fetch_scenario",
     args,
-    onStart,
   );
 }
 

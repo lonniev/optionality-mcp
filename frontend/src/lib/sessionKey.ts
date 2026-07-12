@@ -15,13 +15,6 @@ export function sessionKey(npub: string): string {
   return SESSION_KEY_PREFIX + (npub || "_guest");
 }
 
-// Per-npub key for a PAID scenario still being composed (a claim check in
-// flight). Separate slot from the settled-session key above: a pending deal has
-// no board yet, and it must be resumable on the next load so a reload / lost
-// connection still settles the job and journals its `open` entry. Same npub
-// scoping and "_guest" fallback so it can't leak across identities.
-export const PENDING_KEY_PREFIX = "optionality:pending:v1:";
-
-export function pendingDealKey(npub: string): string {
-  return PENDING_KEY_PREFIX + (npub || "_guest");
-}
+// The in-flight "Scenarios in Preparation" queue lives in ./pendingDeals
+// (per-npub LIST). It supersedes an earlier single-slot key kept here only
+// long enough to be cleared on load.

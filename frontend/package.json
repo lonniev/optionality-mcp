@@ -1,6 +1,6 @@
 {
   "name": "optionality-frontend",
-  "version": "0.6.4",
+  "version": "0.6.5",
   "private": true,
   "type": "module",
   "scripts": {
@@ -13,7 +13,8 @@
     "verify:claimcheck": "esbuild verify/claimCheck.smoke.ts --bundle --format=esm --platform=node | node --input-type=module",
     "verify:sessionkey": "esbuild verify/sessionKey.smoke.ts --bundle --format=esm --platform=node | node --input-type=module",
     "verify:dealclock": "esbuild verify/dealClock.smoke.ts --bundle --format=esm --platform=node | node --input-type=module",
-    "verify": "npm run verify:modeler && npm run verify:proof && npm run verify:claimcheck && npm run verify:sessionkey && npm run verify:dealclock"
+    "verify:pending": "esbuild verify/pendingDeals.smoke.ts --bundle --format=esm --platform=node | node --input-type=module",
+    "verify": "npm run verify:modeler && npm run verify:proof && npm run verify:claimcheck && npm run verify:sessionkey && npm run verify:dealclock && npm run verify:pending"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
