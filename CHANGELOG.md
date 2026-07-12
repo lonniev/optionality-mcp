@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.1] — 2026-07-11
+
+### Fixed — a scenario can no longer sit in The Pit without a journal entry
+
+- **The active-session cache is now scoped per-npub.** The Pit's in-progress scenario is cached in `localStorage` so a paid drill survives a reload — but the key was a single GLOBAL `optionality:session:v1`, not namespaced by npub (unlike the per-identity stats cache). So switching identities on one browser could seat the previous patron's scenario in the new patron's Pit; since a journal entry is npub-scoped, judging it failed with `journal_entry_not_found`. The key is now `optionality:session:v1:<npub>` (`lib/sessionKey.ts`), and the legacy global key is dropped on load. A legit in-progress drill survives as an `open` journal entry the patron can resume from the Journal — only unsaved draft text is lost.
+- **An orphaned scenario self-heals at pitch time instead of rejecting into a void.** If a deal never durably persisted (e.g. one caught mid-redeploy) the scenario can linger in localStorage with no matching entry. Submitting a pitch now detects the wheel's refundable `journal_entry_not_found` situation — the claim-check poller propagates the curated `error_code` on a new `ClaimCheckError` (`lib/claimCheck.ts`) — clears the dead board, and returns the patron to deal a fresh, properly-journaled scenario. The fare was already refunded server-side; no paid `get_journal` reconciliation is added (validating a cache must not cost sats).
+- New dep-free smoke tests `verify:sessionkey` and expanded `verify:claimcheck` lock the npub scoping and the `error_code` propagation.
+
 ## [0.6.0] — 2026-07-11
 
 ### Changed — SDK pin

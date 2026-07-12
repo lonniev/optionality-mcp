@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "optionality-mcp"
-version = "0.6.0"
+version = "0.6.1"
 description = "Optionality — AI-judged options trading drill, Tollbooth-monetized MCP server"
 readme = "README.md"
 license = "Apache-2.0"

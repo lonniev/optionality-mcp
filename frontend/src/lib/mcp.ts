@@ -19,10 +19,12 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 
 import { debugPush } from "./debugLog";
 import {
+  ClaimCheckError,
   claimTerminalOutcome,
   type ClaimCheckStart,
   type ClaimFetch,
 } from "./claimCheck";
+export { ClaimCheckError };
 import type { Evaluation, Scenario, TipExchange } from "../types";
 import { clearSessionNsec, hasSessionNsec, sessionNsecNpub } from "./sessionNsec";
 import { signInlineProof } from "./inlineProof";

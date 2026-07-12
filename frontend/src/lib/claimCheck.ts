@@ -12,6 +12,7 @@ export interface ClaimFetch<T> {
   status?: string; // running | done | error | expired
   result?: T;
   error?: string;
+  error_code?: string; // curated situation code, e.g. "journal_entry_not_found"
   next_steps?: string;
   poll_after_seconds?: number;
 }
@@ -21,10 +22,25 @@ export interface ClaimCheckStart<T> extends ClaimFetch<T> {
   claim_check?: string;
 }
 
+// Thrown when a claim-check settles to a terminal error/expired state. Carries
+// the curated situation `code` so callers can branch (e.g. an orphaned
+// "journal_entry_not_found" clears the stale Pit session) instead of parsing
+// the human message string.
+export class ClaimCheckError extends Error {
+  code?: string;
+  nextSteps?: string;
+  constructor(message: string, opts?: { code?: string; nextSteps?: string }) {
+    super(message);
+    this.name = "ClaimCheckError";
+    this.code = opts?.code;
+    this.nextSteps = opts?.nextSteps;
+  }
+}
+
 // Resolve a claim-check response if it has reached a terminal state: return the
-// result on "done", throw the curated situation (safe message + next steps; the
-// fare was already refunded server-side) on "error"/"expired", or signal
-// "pending" to keep polling.
+// result on "done", throw a `ClaimCheckError` (carrying the curated code + safe
+// message + next steps; the fare was already refunded server-side) on
+// "error"/"expired", or signal "pending" to keep polling.
 export function claimTerminalOutcome<T>(
   resp: ClaimFetch<T>,
 ): { value: T } | "pending" {
@@ -33,11 +49,15 @@ export function claimTerminalOutcome<T>(
   }
   if (resp.status === "error") {
     const base = resp.error ?? "The request failed; the fee was refunded.";
-    throw new Error(resp.next_steps ? `${base} ${resp.next_steps}` : base);
+    throw new ClaimCheckError(
+      resp.next_steps ? `${base} ${resp.next_steps}` : base,
+      { code: resp.error_code, nextSteps: resp.next_steps },
+    );
   }
   if (resp.status === "expired") {
-    throw new Error(
+    throw new ClaimCheckError(
       resp.next_steps ?? "The claim check expired — please retry.",
+      { code: "expired", nextSteps: resp.next_steps },
     );
   }
   return "pending";

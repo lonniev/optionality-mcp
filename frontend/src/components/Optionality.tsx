@@ -26,6 +26,7 @@ import {
   askTip,
   checkBalance,
   checkPrice,
+  ClaimCheckError,
   dealScenario,
   deleteJournal,
   getApiUsageStats,
@@ -43,6 +44,7 @@ import {
 } from "../lib/mcp";
 import type { SharedEntry } from "../types";
 import { useHashTab } from "../lib/hashTab";
+import { LEGACY_SESSION_KEY, sessionKey } from "../lib/sessionKey";
 
 /// Grid column template for the Journal table: caret · Symbol · Historicity
 /// · Difficulty · Created · Updated · Grade · Score · Status · Actions.
@@ -211,9 +213,10 @@ const STORAGE_KEY_PREFIX = "optionality:state:v1:";
 function storageKey(npub: string): string {
   return STORAGE_KEY_PREFIX + (npub || "_guest");
 }
-/// Separate from stats/history. The patron paid for this scenario; it
-/// must survive a page reload until they explicitly finish the round.
-const SESSION_KEY = "optionality:session:v1";
+/// Separate from stats/history. The patron paid for this scenario; it must
+/// survive a page reload until they explicitly finish the round. The key is
+/// npub-scoped (see ./lib/sessionKey) so an identity switch can't seat one
+/// patron's scenario in another's Pit.
 
 const DIFFICULTIES: DifficultyDef[] = [
   {
@@ -316,9 +319,14 @@ async function saveState(npub: string, state: PersistedState): Promise<void> {
   }
 }
 
-function loadSession(): ActiveSession | null {
+function loadSession(npub: string): ActiveSession | null {
   try {
-    const raw = window.localStorage.getItem(SESSION_KEY);
+    // One-time cleanup: the pre-scoping global key is unreliable (it could hold
+    // another identity's scenario), so drop it rather than migrate it — a legit
+    // in-progress drill survives as an `open` journal entry the patron can
+    // resume from the Journal tab; only the unsaved draft text is lost.
+    window.localStorage.removeItem(LEGACY_SESSION_KEY);
+    const raw = window.localStorage.getItem(sessionKey(npub));
     if (!raw) return null;
     return JSON.parse(raw) as ActiveSession;
   } catch {
@@ -326,17 +334,17 @@ function loadSession(): ActiveSession | null {
   }
 }
 
-function saveSession(s: ActiveSession): void {
+function saveSession(npub: string, s: ActiveSession): void {
   try {
-    window.localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    window.localStorage.setItem(sessionKey(npub), JSON.stringify(s));
   } catch (e) {
     console.error("session save failed", e);
   }
 }
 
-function clearSession(): void {
+function clearSession(npub: string): void {
   try {
-    window.localStorage.removeItem(SESSION_KEY);
+    window.localStorage.removeItem(sessionKey(npub));
   } catch {
     /* noop */
   }
@@ -946,7 +954,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       // Hydrate active session — the patron paid for this scenario; a
       // page reload must put them back on the same board with their
       // draft answer / evaluation intact.
-      const sess = loadSession();
+      const sess = loadSession(getStoredNpub());
       if (sess && sess.scenario) {
         setScenario(sess.scenario);
         setEntryId(sess.entryId);
@@ -969,7 +977,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   useEffect(() => {
     if (!scenario || !entryId) return;
     const parsedMaxLoss = parseInt(maxLossInput, 10);
-    saveSession({
+    saveSession(getStoredNpub(), {
       scenario,
       entryId,
       answer,
@@ -1068,6 +1076,19 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         onSignOut?.();
         return;
       }
+      // The scenario in The Pit has no journal entry for this npub — an orphan
+      // (e.g. a deal caught mid-redeploy that never persisted, or an entry since
+      // deleted). The wheel already refunded the fare; don't strand the patron
+      // pitching into a void. Drop the dead board (nextRound clears the session)
+      // and send them back to deal a fresh, properly-journaled scenario.
+      if (e instanceof ClaimCheckError && e.code === "journal_entry_not_found") {
+        nextRound();
+        setError(
+          "That scenario is no longer in your journal, so it can't be judged — " +
+            "deal a fresh one to pitch. No fare was charged.",
+        );
+        return;
+      }
       setError("Evaluation failed. " + (e as Error).message);
     } finally {
       setLoading(false);
@@ -1087,7 +1108,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     // User explicitly moved past this card — drop the paid-for session
     // so the next reload lands on the setup screen, not on this stale
     // board. (Pre-judge "Discard, deal another" also flows through here.)
-    clearSession();
+    clearSession(getStoredNpub());
   }
 
   async function handleSaveDraft(): Promise<void> {

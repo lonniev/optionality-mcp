@@ -3,7 +3,7 @@
 // or a degenerate-input nudge returns `done` with NO claim check, and a
 // pre-flight rejection returns `error` — so the poller must short-circuit
 // instead of throwing "no claim check returned". Run via `npm run verify`.
-import { claimTerminalOutcome } from "../src/lib/claimCheck";
+import { ClaimCheckError, claimTerminalOutcome } from "../src/lib/claimCheck";
 
 let failures = 0;
 function check(name: string, cond: boolean, detail?: unknown) {
@@ -56,6 +56,35 @@ throws(
   "expired → throws",
   () => claimTerminalOutcome({ status: "expired", next_steps: "Start a new request." }),
   "Start a new request.",
+);
+
+// The curated error_code must ride on the thrown ClaimCheckError — the Pit's
+// auto-heal branches on `code === "journal_entry_not_found"` to clear the stale
+// session, so losing the code would silently break that recovery.
+try {
+  claimTerminalOutcome({
+    status: "error",
+    error: "That scenario isn't in your journal anymore.",
+    error_code: "journal_entry_not_found",
+    next_steps: "Deal a fresh scenario.",
+  });
+  failures++;
+  console.log("  FAIL error_code rides on ClaimCheckError (did not throw)");
+} catch (e) {
+  const ok =
+    e instanceof ClaimCheckError && e.code === "journal_entry_not_found";
+  check("error_code rides on ClaimCheckError", ok, e);
+}
+check(
+  "expired sets code=expired",
+  (() => {
+    try {
+      claimTerminalOutcome({ status: "expired" });
+      return false;
+    } catch (e) {
+      return e instanceof ClaimCheckError && e.code === "expired";
+    }
+  })(),
 );
 
 console.log(failures === 0 ? "\nALL PASS" : `\n${failures} FAILURE(S)`);
