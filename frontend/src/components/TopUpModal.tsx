@@ -15,7 +15,7 @@ import {
 //   invoice ──Check Payment──▶ checking ─┬─ settled ──▶ paid (show new balance)
 //                                        └─ pending ──▶ back to invoice
 //
-// Mirrors AuthorityTopOffSheet's flow from the Pricing Studio iOS app.
+// Mirrors the Top-Up sheet flow from the Pricing Studio iOS app.
 
 type Stage =
   | { kind: "idle" }
@@ -32,7 +32,7 @@ interface Props {
   onBalanceUpdated?: (newBalance: number) => void;
 }
 
-export default function TopOffModal({ onClose, onBalanceUpdated }: Props) {
+export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
   const [amount, setAmount] = useState<string>("1000");
   const [stage, setStage] = useState<Stage>({ kind: "idle" });
 
@@ -145,7 +145,7 @@ export default function TopOffModal({ onClose, onBalanceUpdated }: Props) {
     <div style={STYLES.scrim} onClick={onClose}>
       <div style={STYLES.card} onClick={(e) => e.stopPropagation()}>
         <div style={STYLES.head}>
-          Top Off — Buy Sats
+          Top Up — Buy Sats
           {currentBalance !== null && (
             <span style={STYLES.balanceTag}>{currentBalance.toLocaleString()} sats</span>
           )}

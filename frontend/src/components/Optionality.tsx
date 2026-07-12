@@ -141,7 +141,7 @@ const TOOL_DISPLAY_NAMES: Record<string, string> = {
   optionality_judge_trade: "Pitch Review",
   optionality_ask_tip: "Clue Request",
   optionality_save_draft: "Save Draft",
-  optionality_purchase_credits: "Top Off",
+  optionality_purchase_credits: "Top Up",
   optionality_check_payment: "Payment Check",
   optionality_check_balance: "Balance Check",
   optionality_check_price: "Price Preview",
@@ -194,7 +194,7 @@ import DifficultyAvatar from "./DifficultyAvatar";
 import RiskProfileChart from "./RiskProfileChart";
 import FactsLedger from "./FactsLedger";
 import SampleAssessment from "./SampleAssessment";
-import TopOffModal from "./TopOffModal";
+import TopUpModal from "./TopUpModal";
 import Avatar, { shortNpub } from "./Avatar";
 import ProfileTab from "./Profile";
 import DMComposeModal from "./DMComposeModal";
@@ -740,10 +740,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Guest mode: came in via "Continue as Guest" on the gate. The scenario
   // chooser and briefing render, but every paid surface is suppressed.
   const guest = isGuestMode();
-  // Top Off modal — purchases sats from the operator via BTCPay Lightning.
+  // Top Up modal — purchases sats from the operator via BTCPay Lightning.
   // Open from the lower-left of the scenario chooser; closed in all other
   // app states so an in-progress scenario doesn't get covered.
-  const [topOffOpen, setTopOffOpen] = useState<boolean>(false);
+  const [topUpOpen, setTopUpOpen] = useState<boolean>(false);
   // DM Compose modal target — clicking an avatar on the leaderboard
   // populates this with that patron's identity; null hides the modal.
   const [dmTarget, setDmTarget] = useState<{
@@ -1879,7 +1879,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // per session. Fires for anyone "without money to play":
   //   - Guests (guest === true) — no proof, no sats, just looking
   //   - Signed-in patrons with currentBalance === 0
-  // After they navigate away (or top off), we don't force them back;
+  // After they navigate away (or top up), we don't force them back;
   // they can return via the Welcome tab button any time.
   useEffect(() => {
     if (welcomeAutoRouted || tab !== "play") return;
@@ -2014,7 +2014,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
           <div>Avg Score<b>{stats.avg}</b></div>
           <div>Best<b>{stats.best}</b></div>
           <div>Streak<b>{stats.streak}</b></div>
-          {/* Persistent balance + Top Off. Always reachable for signed-in
+          {/* Persistent balance + Top Up. Always reachable for signed-in
               patrons (mirrors eXcalibur's Nav wallet affordance) so a
               zero balance always has a one-click recovery path, not just
               the Welcome/Usage screens. Turns rust at zero to pull the eye. */}
@@ -2022,15 +2022,15 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             <button
               type="button"
               className={`balance-chip${currentBalance === 0 ? " zero" : ""}`}
-              onClick={() => setTopOffOpen(true)}
-              title="Top Off — buy sats over Bitcoin Lightning"
+              onClick={() => setTopUpOpen(true)}
+              title="Top Up — buy sats over Bitcoin Lightning"
             >
               Balance
               <b>
                 {currentBalance === null ? "—" : currentBalance.toLocaleString()}
                 <small> sats</small>
               </b>
-              <span className="balance-chip-cta">＋ Top Off</span>
+              <span className="balance-chip-cta">＋ Top Up</span>
             </button>
           )}
           {onSignOut && (
@@ -2070,7 +2070,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         {/* Sample Assessment tab — visible for guests AND for signed-in
             patrons who've run their balance to zero. Acts as both
             inspiration ("look what you could have judged") and a
-            soft nudge toward Top Off. Disappears as soon as the
+            soft nudge toward Top Up. Disappears as soon as the
             balance is positive again. */}
         {(guest || currentBalance === 0) && (
           <button className={`tab ${tab === "sample" ? "active" : ""}`} onClick={() => setTab("sample")}>
@@ -2109,7 +2109,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               The site is live but you only can use the free services until you buy some DPYC tokens.
               Visit the <b>Usage</b> tab to see your account and to buy tokens.
               Getting a Challenge, asking for clues, Getting Assessed — these all are paid services but the
-              fees are tiny: just a few sats each. Once you have your Nostr credentials, you can Top Off
+              fees are tiny: just a few sats each. Once you have your Nostr credentials, you can Top Up
               here and then work your challenges, save your work in progress, message peers on the
               Leaderboard — and hopefully become more proficient about pitching options trades to
               professional audiences. Welcome.
@@ -2337,11 +2337,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   {!guest && (
                     <button
                       className="btn btn-ghost"
-                      onClick={() => setTopOffOpen(true)}
+                      onClick={() => setTopUpOpen(true)}
                       style={{ marginRight: "auto" }}
                       title="Buy sats from the operator via Bitcoin Lightning"
                     >
-                      Top Off
+                      Top Up
                     </button>
                   )}
                   {dealPrice !== null && dealPrice > 0 && (
@@ -2852,7 +2852,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
         {tab === "welcome" && (
           <Welcome
-            onTopOff={() => (guest ? onSignOut?.() : setTopOffOpen(true))}
+            onTopUp={() => (guest ? onSignOut?.() : setTopUpOpen(true))}
             onSeeAssessment={() => setTab("sample")}
             isGuest={guest}
             npub={guest ? null : getStoredNpub()}
@@ -2919,9 +2919,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         {balance.toLocaleString()}
                         <button
                           className="icon-btn"
-                          onClick={() => setTopOffOpen(true)}
-                          title="Top off — buy sats from the operator via Bitcoin Lightning"
-                          aria-label="Top off sats"
+                          onClick={() => setTopUpOpen(true)}
+                          title="Top Up — buy sats from the operator via Bitcoin Lightning"
+                          aria-label="Top Up sats"
                           style={{ background: "transparent", border: "none", color: "var(--amber)", cursor: "pointer", padding: 2, display: "inline-flex" }}
                         >
                           <MaterialIcon path={MI_CART} size={30} />
@@ -3576,9 +3576,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         )}
       </div>
 
-      {topOffOpen && (
-        <TopOffModal
-          onClose={() => setTopOffOpen(false)}
+      {topUpOpen && (
+        <TopUpModal
+          onClose={() => setTopUpOpen(false)}
           onBalanceUpdated={(newBalance) => setCurrentBalance(newBalance)}
         />
       )}

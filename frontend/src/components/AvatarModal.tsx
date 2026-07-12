@@ -2,7 +2,7 @@
 // the patron is actually picking. "Change avatar" opens this popup frame; the
 // pick flows straight into the caller's state (reflected in its preview) and
 // closing applies it. Persisting (Save Changes / Publish to Nostr) stays the
-// caller's own explicit action, unchanged. Modal shell mirrors TopOffModal.
+// caller's own explicit action, unchanged. Modal shell mirrors TopUpModal.
 
 import React, { useEffect } from "react";
 import Avatar from "./Avatar";

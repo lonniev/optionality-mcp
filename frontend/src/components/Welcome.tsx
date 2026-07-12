@@ -1,6 +1,6 @@
 // Welcome panel — the first page every new arrival lands on,
 // authenticated or guest. Mission + how-it's-played + Tollbooth-DPYC
-// marketing in one scrollable page; primary CTA is Top Off for signed-in
+// marketing in one scrollable page; primary CTA is Top Up for signed-in
 // patrons or "Sign in to play" for guests. Stays in the tab strip
 // after the initial auto-route so seasoned patrons can find a refresher.
 //
@@ -18,7 +18,7 @@ import { checkPrice, getGuestId } from "../lib/mcp";
 import { shortNpub } from "./Avatar";
 
 interface Props {
-  onTopOff: () => void;
+  onTopUp: () => void;
   onSeeAssessment: () => void;
   isGuest: boolean;
   /// Patron's bech32 npub when signed in; null for guests.
@@ -49,7 +49,7 @@ function readCost(r: Awaited<ReturnType<typeof checkPrice>>): number | null {
   return null;
 }
 
-export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, displayName }: Props) {
+export default function Welcome({ onTopUp, onSeeAssessment, isGuest, npub, displayName }: Props) {
   // Live pricing from the BE — null until the lookup completes; -1
   // sentinel if the lookup failed and we should avoid quoting numbers.
   const [prices, setPrices] = useState<PriceQuote | null | -1>(null);
@@ -263,7 +263,7 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
               <p className="briefing-prose">
                 A session of ~30 graded rounds at mid-difficulty runs
                 roughly {startSats.toLocaleString()} sats — about{" "}
-                {startCents}¢ in BTC. Top Off buys sats via a Lightning
+                {startCents}¢ in BTC. Top Up buys sats via a Lightning
                 invoice; Wallet of Satoshi, Phoenix, Mutiny, or any
                 Lightning wallet works.
               </p>
@@ -274,7 +274,7 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
             Optionality™ uses fair usage-based pricing — don't use it and
             you pay nothing. Difficulty and mode scale the toll; you can
             inspect every multiplier on the <b>Usage</b> tab once you have
-            a balance. Top Off buys sats via a Lightning invoice — Wallet
+            a balance. Top Up buys sats via a Lightning invoice — Wallet
             of Satoshi, Phoenix, Mutiny, or any Lightning wallet works.{" "}
             {prices === -1 && (
               <span style={{ color: "var(--ink-faint)", fontStyle: "italic" }}>
@@ -342,7 +342,7 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
               Look around — the <b>See Assessment</b> tab shows a full graded round
               so you can see what the game ships before joining. When you want to
               start pitching trades for real, sign in with a Nostr identity
-              {startCents !== null ? <> and top off about {startCents}¢ in BTC.</> : "."}
+              {startCents !== null ? <> and top up about {startCents}¢ in BTC.</> : "."}
             </>
           ) : (
             <>
@@ -356,12 +356,12 @@ export default function Welcome({ onTopOff, onSeeAssessment, isGuest, npub, disp
           <button className="btn btn-ghost" onClick={onSeeAssessment}>
             See Assessment
           </button>
-          <button className="btn" onClick={onTopOff}>
+          <button className="btn" onClick={onTopUp}>
             {isGuest
               ? "Sign In to Play"
               : startCents !== null
-                ? `Top Off — ~${startCents}¢ to start`
-                : "Top Off"}
+                ? `Top Up — ~${startCents}¢ to start`
+                : "Top Up"}
           </button>
         </div>
       </div>

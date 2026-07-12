@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.11] — 2026-07-12
+
+### Changed — "Top Off" → "Top Up" (DPYC vocabulary)
+
+- Optionality used "Top Off" for the buy-sats action; the DPYC ecosystem term is **"Top Up"**. Corrected every user-facing string (buttons, titles, aria-labels, Welcome copy, the tool label) and, to avoid naming drift, renamed the internals to match: `TopOffModal.tsx` → `TopUpModal.tsx`, `topOffOpen`/`setTopOffOpen` → `topUpOpen`/`setTopUpOpen`, and the `onTopOff` prop → `onTopUp`.
+
 ## [0.6.10] — 2026-07-12
 
 ### Changed — faster LIVE deals: fewer web-search rounds
