@@ -183,6 +183,35 @@ async def test_deal_shape_result_opens_entry_once() -> None:
     open_e.assert_awaited_once()                          # exactly one journal entry
 
 
+async def test_prepare_deal_live_grounds_prompt_in_the_real_date() -> None:
+    """LIVE mode must assert the operator's real date so the model can't anchor
+    to its training cutoff and date a scenario a year in the past."""
+    from datetime import datetime, timezone
+
+    from tools import dealer
+
+    today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+
+    with patch("db.patrons.upsert_patron", AsyncMock()), patch(
+        "db.journal.recent_tickers", AsyncMock(return_value=[]),
+    ):
+        live = await dealer._prepare_deal("n", "live", "apprentice", None, "energy")
+
+    assert live["enable_web_search"] is True
+    assert today_iso in live["prompt"]                       # the real date is asserted
+    assert f"current as of {today_iso}" in live["prompt"]    # web_search anchored to it
+    assert "trust it over your training data" in live["prompt"]
+
+    with patch("db.patrons.upsert_patron", AsyncMock()), patch(
+        "db.journal.recent_tickers", AsyncMock(return_value=[]),
+    ):
+        hist = await dealer._prepare_deal("n", "historical", "adept", None, "")
+
+    assert hist["enable_web_search"] is False
+    assert today_iso in hist["prompt"]                       # date still provided…
+    assert "trust it over your training data" not in hist["prompt"]  # …but no live clause
+
+
 async def test_tip_shape_result_counts_clue() -> None:
     from tools import dealer
 

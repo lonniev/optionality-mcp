@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.8] — 2026-07-12
+
+### Fixed — LIVE scenarios are now grounded in the real current date
+
+- **The deal prompt asserts the operator's real date.** A LIVE drill was dating itself "TODAY, JUNE 23, 2025" — over a year stale — because the prompt told the model to use "the date you found via web search," and with no anchor the model fell back to its training cutoff. The server knows the date, so `_prepare_deal` now injects it ("The real current date is July 12, 2026 (2026-07-12)…") and, for LIVE mode, instructs the model to trust it over its priors, `web_search` for catalysts current as of that date, and set `date_context` / `today_date` to it (never an earlier year). `prompts.py` guidance updated to match. Historical/fiction are unaffected beyond also being told the real date.
+
 ## [0.6.7] — 2026-07-12
 
 ### Fixed — an impatient patron can no longer rack up duplicate paid deals

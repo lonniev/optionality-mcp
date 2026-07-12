@@ -20,6 +20,7 @@ of where the LLM actually ran.
 from __future__ import annotations
 
 import logging
+from datetime import datetime, timezone
 from typing import Any
 
 import prompts
@@ -37,6 +38,17 @@ from db import journal, patrons
 from tools.options_chain import build_option_chain
 
 logger = logging.getLogger(__name__)
+
+
+def _today_grounding() -> tuple[str, str]:
+    """Return ``(iso, long)`` for the operator's current UTC date.
+
+    The LLM has no reliable sense of "now" — left ungrounded it anchors to its
+    training cutoff and will label a year-old event "today". The server knows
+    the real date, so we assert it in the prompt (especially for LIVE mode).
+    """
+    now = datetime.now(timezone.utc)
+    return now.strftime("%Y-%m-%d"), f"{now:%B} {now.day}, {now.year}"
 
 _VALID_MODES = ("historical", "fiction", "live")
 # "mulligan" is the replay difficulty — when a patron picks a past
@@ -196,8 +208,25 @@ async def _prepare_deal(
             f"and the goal is broad coverage over the trainee's career, not "
             f"the same two or three favorites."
         )
+    # Ground the model's sense of "now" with the operator's real date. Without
+    # it, LIVE mode anchors to the model's training cutoff and dates a scenario
+    # a year in the past while calling it "today".
+    today_iso, today_long = _today_grounding()
+    now_clause = f"\n\nThe real current date is {today_long} ({today_iso})."
+    if mode == "live":
+        now_clause += (
+            f" This is genuinely NOW — trust it over your training data. Use "
+            f"web_search to find market conditions, news, and active catalysts "
+            f"current as of {today_iso} (or the most recent trading day on or "
+            f'before it). "date_context" must reference this date (e.g. "Today, '
+            f'{today_long}, …") and "today_date" MUST be {today_iso} or the '
+            f"latest trading day on/before it — never an earlier year. If a "
+            f"catalyst you recall feels recent, verify it is still current as of "
+            f"{today_iso} before building around it."
+        )
     prompt = (
-        f"{mode_instr}\n\n"
+        f"{mode_instr}"
+        f"{now_clause}\n\n"
         f'Generate ONE options drill scenario at difficulty level: "{difficulty}". '
         f'Set the "mode" field to "{mode}". Vary the asset class from any prior attempts. '
         f"Return JSON only."

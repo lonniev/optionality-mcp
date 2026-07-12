@@ -85,7 +85,7 @@ OPTION CHAIN — the trainee MUST be able to choose strikes and DTE from real nu
   - "today_date": ISO date string (YYYY-MM-DD), the notional "now" of the scenario. Per mode:
       • HISTORICAL — a real date consistent with the regime in date_context. e.g. "2023-03-15" for an SVB-week scenario.
       • FICTION — an ISO date matching the date_context framing. e.g. "2026-09-12" for a "Hypothetical: Q3 2026" scenario.
-      • LIVE — today's actual date (the date you found via web search).
+      • LIVE — the real current date supplied to you in the prompt (or the most recent trading day on/before it). Never an earlier year.
   - "expirations": exactly THREE ISO dates strictly after today_date. Recommended pattern:
       • One short-dated (5–15 DTE) — picks up the immediate catalyst window.
       • One near-month (25–45 DTE) — front-month vol exposure.
@@ -120,7 +120,7 @@ Anchor this scenario to a real, identifiable moment in market history — a spec
 This is pure invention. Construct a hypothetical scenario — near-future, counterfactual, or speculative regime. You have full creative license. Common fertile ground: a counterfactual debasement spiral, a sovereign debt event, a stablecoin de-peg cascade, a Bitcoin spot ETF gamma squeeze, a CBDC announcement, a regional currency crisis, an AI-capex bubble unwind, a geopolitical kinetic event. Mark date_context with phrases like 'Hypothetical: Q3 2026' or 'Counterfactual: a world where...' so the trainee knows this is not real. The macro/political logic must still be internally consistent.""",
 
     "live": """MODE: LIVE EVENTS.
-Use the web_search tool to find current market conditions, recent news, and active catalysts as of right now. Then build the scenario around a real ticker with real present-day setup. date_context should be 'Today, [actual date you found]' or similar. macro_backdrop must reflect what is actually happening in markets THIS WEEK. Cite specific recent events and include URLs or source names in the "sources" array. If exact IV numbers aren't findable, estimate from the regime and note that in skew_note.""",
+The prompt gives you the real current date — treat it as NOW and trust it over your own sense of the date. Use the web_search tool to find market conditions, recent news, and active catalysts current as of that date. Then build the scenario around a real ticker with real present-day setup. date_context should be 'Today, [the supplied date]' or similar, and must reference that date's year — never an earlier one. macro_backdrop must reflect what is actually happening in markets in the week of the supplied date. Cite specific recent events and include URLs or source names in the "sources" array. If exact IV numbers aren't findable, estimate from the regime and note that in skew_note.""",
 }
 
 
