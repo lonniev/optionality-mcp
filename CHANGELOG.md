@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.3] — 2026-07-12
+
+### Fixed — durable jobs actually reach Prefect now (the `[prefect]` extra was missing)
+
+- **Pinned `tollbooth-dpyc[nostr,prefect]==0.62.4`** — previously `[nostr]` only. The long-runner creds (`prefect_api_url`, `prefect_api_key`, `closure_seal_key`) were all vaulted and `service_status` reported the operator fully configured, but the `prefect` runtime that `PrefectClosureExecutor` needs was **never installed** in the operator image. So every drill's `_ensure_async_executor` probe failed to construct the executor and the job ran in-process → a container recycle mid-LLM-call left it stuck `running` → the FE gave up after 360s (`deal_scenario`/`judge_trade` "server never returned a terminal status", `recovered:true`). No flow run ever reached the `dpyc-job-flow/dpyc-jobs` deployment (last run predated every failed drill). Adding the `[prefect]` extra installs the runtime; the next drill installs the detached executor and settles durably. No optionality code change.
+- SDK 0.62.4 also hardens this failure mode so it degrades loudly (in-process + `service_status.durable_jobs.detached_executor_error`) instead of silently crashing the first drill on each container.
+
 ## [0.6.2] — 2026-07-11
 
 ### Fixed — the detached executor now activates reliably on cold containers
