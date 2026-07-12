@@ -367,12 +367,27 @@ function clearSession(npub: string): void {
 // next load. See PendingDeal and ../lib/pendingDeals.
 function loadPendingDeals(npub: string): PendingDeal[] {
   try {
-    // One-time cleanup of the superseded 0.6.4 single-slot key.
-    window.localStorage.removeItem(legacyPendingDealKey(npub));
     const raw = window.localStorage.getItem(pendingDealsKey(npub));
-    if (!raw) return [];
-    const list = JSON.parse(raw) as PendingDeal[];
-    return Array.isArray(list) ? list : [];
+    let list: PendingDeal[] = [];
+    if (raw) {
+      const parsed = JSON.parse(raw) as PendingDeal[];
+      if (Array.isArray(parsed)) list = parsed;
+    }
+    // MIGRATE the superseded 0.6.4 single-slot crumb into the v2 list rather
+    // than dropping it — an in-flight claim persisted under v1 is a paid deal
+    // still composing; discarding it orphans the job (nothing polls it to
+    // settle + journal it). Merge, then retire the old key.
+    const legacyRaw = window.localStorage.getItem(legacyPendingDealKey(npub));
+    if (legacyRaw) {
+      try {
+        const legacy = JSON.parse(legacyRaw) as PendingDeal;
+        if (legacy?.claimCheck) list = upsertPending(list, legacy);
+      } catch {
+        /* corrupt legacy crumb — nothing to migrate */
+      }
+      window.localStorage.removeItem(legacyPendingDealKey(npub));
+    }
+    return list;
   } catch {
     return [];
   }

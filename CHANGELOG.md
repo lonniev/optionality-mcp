@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.6] — 2026-07-12
+
+### Fixed — the 0.6.5 queue migration no longer orphans an in-flight scenario
+
+- **A 0.6.4 single-slot pending crumb is now MIGRATED into the v2 list, not dropped.** 0.6.5's `loadPendingDeals` removed the superseded `optionality:pending:v1:<npub>` key without reading it — so a scenario that was still composing when the 0.6.5 frontend first loaded lost its claim, and because a detached job only settles + journals when a client polls its claim, it never reached the Journal (a lost, paid deal). Load now merges the legacy crumb into the queue before retiring the key, so a reload resumes and settles it. (Recovery is still bounded by the job's result TTL — a claim whose result has already aged out server-side can't be revived.)
+
 ## [0.6.5] — 2026-07-12
 
 ### Added — "Scenarios in Preparation": fire off several deals, claim them later
