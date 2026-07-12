@@ -814,6 +814,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   focusedClaimRef.current = focusedClaim;
   // Claims with a live background poller — guards against double-spawning.
   const pollersRef = useRef<Set<string>>(new Set());
+  // Guards the wallet against an impatient patron: a re-entrancy lock so rapid
+  // clicks can't fire two paid deals before the first registers, and a confirm
+  // gate before starting an ADDITIONAL deal while others are still composing.
+  const startingRef = useRef<boolean>(false);
+  const [confirmDealAnother, setConfirmDealAnother] = useState<boolean>(false);
   const [error, setError] = useState<string>("");
   const [stats, setStats] = useState<Stats>({ played: 0, avg: 0, best: 0, streak: 0 });
   // Journal — server-authoritative, sorted + grouped + offset-paginated
@@ -1185,7 +1190,23 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     await saveState(getStoredNpub(), { stats: nextStats });
   }
 
+  // The "Be Challenged" button handler. Guards the patron's wallet: ignore a
+  // click while a start is already in flight (rapid double-taps), and require an
+  // explicit confirm before starting an ADDITIONAL paid deal while others are
+  // still composing — an impatient patron shouldn't rack up duplicate tolls.
+  function onBeChallenged(): void {
+    if (startingRef.current) return;
+    if (preparing.length > 0) {
+      setConfirmDealAnother(true);
+      return;
+    }
+    void generateScenario();
+  }
+
   async function generateScenario(): Promise<void> {
+    if (startingRef.current) return; // re-entrancy lock: one toll per intent
+    startingRef.current = true;
+    setConfirmDealAnother(false);
     setError("");
     // Clear the current board — the new deal becomes the focus. Any unpitched
     // scenario already survives as its own `open` journal entry to resume later.
@@ -1223,7 +1244,16 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         return;
       }
       setError("Could not start scenario. " + (e as Error).message);
+    } finally {
+      startingRef.current = false;
     }
+  }
+
+  /// Re-open the "Reading the tape" overlay for the most recently started
+  /// preparing scenario (the one an impatient patron most likely wants to see).
+  function watchLatestPreparing(): void {
+    const latest = [...preparing].sort((a, b) => b.startedAt - a.startedAt)[0];
+    if (latest) watchPreparing(latest);
   }
 
   // Leave the wait and let the assignment finish in the background. It keeps
@@ -2352,9 +2382,55 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       Sign In to Play
                     </button>
                   ) : (
-                    <button className="btn" onClick={generateScenario}>Be Challenged</button>
+                    <button className="btn" onClick={onBeChallenged}>
+                      {preparing.length > 0 ? "Deal Another" : "Be Challenged"}
+                    </button>
                   )}
                 </div>
+
+                {/* An impatient patron shouldn't rack up duplicate paid deals.
+                    Surface what's already cooking, and confirm before spending
+                    on another. */}
+                {!guest && preparing.length > 0 && (
+                  <div className="deal-guard">
+                    <button
+                      type="button"
+                      className="deal-guard-live"
+                      onClick={watchLatestPreparing}
+                      title="Return to the Reading-the-Tape screen for your latest scenario"
+                    >
+                      <span className="deal-guard-dot" aria-hidden="true" />
+                      {preparing.length} scenario{preparing.length === 1 ? "" : "s"} already being
+                      prepared — Watch ›
+                    </button>
+                    {confirmDealAnother && (
+                      <div className="deal-guard-confirm">
+                        <span>
+                          Deal another? Each scenario is a separate
+                          {dealPrice !== null && dealPrice > 0 ? ` ${dealPrice}-sat` : ""} toll.
+                        </span>
+                        <div className="deal-guard-actions">
+                          <button className="btn" onClick={() => void generateScenario()}>
+                            Yes, deal another
+                          </button>
+                          <button className="btn btn-ghost" onClick={() => setConfirmDealAnother(false)}>
+                            Not yet
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                    <style>{`
+                      .deal-guard { margin-top: 12px; }
+                      .deal-guard-live { display: inline-flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid var(--amber); border-radius: 8px; background: color-mix(in srgb, var(--amber) 8%, transparent); color: var(--amber); font: inherit; font-size: 13px; cursor: pointer; }
+                      .deal-guard-live:hover { background: color-mix(in srgb, var(--amber) 16%, transparent); }
+                      .deal-guard-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); animation: deal-guard-pulse 1.4s ease-in-out infinite; }
+                      @keyframes deal-guard-pulse { 0%,100% { opacity: 0.35; } 50% { opacity: 1; } }
+                      .deal-guard-confirm { margin-top: 10px; font-size: 13px; color: var(--ink-soft, var(--ink-faint)); }
+                      .deal-guard-actions { display: flex; gap: 8px; margin-top: 8px; }
+                    `}</style>
+                  </div>
+                )}
+
                 {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
               </div>
             )}

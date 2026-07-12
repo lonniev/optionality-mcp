@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.7] — 2026-07-12
+
+### Fixed — an impatient patron can no longer rack up duplicate paid deals
+
+- **A re-entrancy lock + a confirm gate protect the wallet.** With concurrent deals (0.6.5), nothing stopped a patron who tapped "Be Challenged" several times — while each scenario composes in the background for minutes — from paying a fresh toll each time (observed: four identical live deals queued in ~16s). Now a rapid double-tap can't fire two deals before the first registers, and once anything is already composing the primary button becomes **"Deal Another"** and requires an explicit confirm ("Each scenario is a separate N-sat toll") before spending again.
+- **The Pit's Briefing screen shows what's already cooking.** When deals are in preparation, a pulsing "N scenarios already being prepared — Watch ›" affordance sits under the deal button, so a patron who left the wait sees their in-flight work (and can jump back to it) instead of an idle screen that invites re-dealing. The first deal is still frictionless.
+
 ## [0.6.6] — 2026-07-12
 
 ### Fixed — the 0.6.5 queue migration no longer orphans an in-flight scenario
