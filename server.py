@@ -400,7 +400,10 @@ async def deal_scenario(
         return await replay_scenario(
             npub=npub, replay_entry_id=replay_entry_id, max_loss_usd=max_loss_usd
         )
-    return await runtime.start_async_job(
+    # Budget-aware poll cadence: live mode runs web_search and takes longer.
+    # Mirrors the LLM timeout the runner enforces (tools/dealer.py).
+    expected = 240 if mode == "live" else 120
+    resp = await runtime.start_async_job(
         "deal_scenario",
         npub,
         {
@@ -413,10 +416,14 @@ async def deal_scenario(
         tool_id=DEAL_SCENARIO_UUID,
         max_runtime_seconds=300,
         result_ttl_seconds=900,
-        # Budget-aware poll cadence: live mode runs web_search and takes longer.
-        # Mirrors the LLM timeout the runner enforces (tools/dealer.py).
-        expected_seconds=(240 if mode == "live" else 120),
+        expected_seconds=expected,
     )
+    # Echo the time budget to the client only while there's a claim to wait on,
+    # so the waiting UI can show an honest ETA countdown (the Firm's estimate,
+    # not a ceiling). A synchronous terminal response has nothing to wait for.
+    if resp.get("status") == "pending":
+        resp.setdefault("expected_seconds", expected)
+    return resp
 
 
 @tool

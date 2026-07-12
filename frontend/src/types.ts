@@ -258,6 +258,26 @@ export interface ActiveSession {
   draftSavedAt?: number;
 }
 
+/// A scenario the patron has PAID for and the Firm is still composing — a
+/// claim check in flight, not yet a settled board. Persisted per-npub so a
+/// reload, a lost connection, or wandering off doesn't abandon the paid work:
+/// on next load the app resumes polling this claim, which is also what SETTLES
+/// the job server-side and writes its `open` journal entry. Cleared the moment
+/// the claim reaches a terminal state (done / error / expired).
+export interface PendingDeal {
+  claimCheck: string;
+  mode: Mode;
+  difficulty: Difficulty;
+  /// ms epoch of the patron's click — drives the elapsed clock and lets a
+  /// resume discard a claim so old its result has surely aged out.
+  startedAt: number;
+  /// The Firm's honest time budget for this drill (seconds), echoed by the
+  /// operator. Drives the ETA countdown; 0 when unknown.
+  expectedSeconds: number;
+  maxLossUsd?: number;
+  sector?: string;
+}
+
 /// One Q&A round in the inline "Ask a Tip" panel on the scenario card.
 /// The tip itself comes from the wheel's `ask_tip` tool — a Socratic,
 /// non-spoiler nudge the LLM produces given the open journal entry.

@@ -20,6 +20,10 @@ export interface ClaimFetch<T> {
 export interface ClaimCheckStart<T> extends ClaimFetch<T> {
   success?: boolean;
   claim_check?: string;
+  // The operator's honest time budget for this job (seconds). Echoed by the
+  // start tool so the waiting UI can show an ETA countdown; absent on fast
+  // tools. Not a ceiling — a real prediction (see poll_backoff_seconds).
+  expected_seconds?: number;
 }
 
 // Thrown when a claim-check settles to a terminal error/expired state. Carries

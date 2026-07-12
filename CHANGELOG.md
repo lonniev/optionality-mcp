@@ -5,6 +5,14 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.4] — 2026-07-12
+
+### Added — a walk-away-safe waiting card for the (multi-minute) deal
+
+- **The deal-wait scene now shows a live status card** — what the Firm is preparing (mode · difficulty), the claim id, an elapsed clock, and an ETA countdown — instead of an open-ended spinner. A live-mode scenario runs web search and can take a few minutes; the card makes that wait legible. The old "expect 15–30s" footer (long untrue) is gone.
+- **A deal in flight is now durable: you can leave the page and claim it later.** The claim check is persisted per-npub the instant it's accepted (`optionality:pending:v1:<npub>`), and on the next load the app resumes polling it — which is also what *settles* the detached job and writes its `open` journal entry. So a reload, a dropped connection, or closing the tab mid-compose no longer abandons the paid scenario: it lands in the Journal, ready to pitch. A "Claim in Journal" button on the card takes you straight there while the deal finishes composing in the background (never cancels, never re-charges). The crumb is cleared the moment the claim reaches a terminal state; a claim that aged out surfaces the refunded "deal a fresh one" nudge.
+- The operator now echoes its honest time budget (`expected_seconds`) on the `deal_scenario` claim-check response so the card's ETA is the Firm's real estimate, not a client guess. Pure clock/ETA logic lives in `lib/dealClock.ts` with a dep-free `verify:dealclock` smoke test (mm:ss, a countdown that says "wrapping up…" past the estimate rather than going negative, and npub-scoped pending keys).
+
 ## [0.6.3] — 2026-07-12
 
 ### Fixed — durable jobs actually reach Prefect now (the `[prefect]` extra was missing)

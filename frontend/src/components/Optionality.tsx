@@ -15,6 +15,7 @@ import type {
   ModeDef,
   ModelUsage,
   OptionChainRow,
+  PendingDeal,
   PersistedState,
   ProposedLeg,
   Scenario,
@@ -26,6 +27,7 @@ import {
   askTip,
   checkBalance,
   checkPrice,
+  type ClaimStartInfo,
   ClaimCheckError,
   dealScenario,
   deleteJournal,
@@ -38,13 +40,14 @@ import {
   judgeTrade,
   listJournal,
   ProofRequiredError,
+  resumeDealClaim,
   saveDraft,
   shareEntry,
   type CheckBalanceResult,
 } from "../lib/mcp";
 import type { SharedEntry } from "../types";
 import { useHashTab } from "../lib/hashTab";
-import { LEGACY_SESSION_KEY, sessionKey } from "../lib/sessionKey";
+import { LEGACY_SESSION_KEY, pendingDealKey, sessionKey } from "../lib/sessionKey";
 
 /// Grid column template for the Journal table: caret · Symbol · Historicity
 /// · Difficulty · Created · Updated · Grade · Score · Status · Actions.
@@ -345,6 +348,35 @@ function saveSession(npub: string, s: ActiveSession): void {
 function clearSession(npub: string): void {
   try {
     window.localStorage.removeItem(sessionKey(npub));
+  } catch {
+    /* noop */
+  }
+}
+
+// A paid deal still composing, persisted per-npub so a reload / dropped
+// connection resumes the claim (which is what settles the job and journals it)
+// rather than abandoning the fare. See PendingDeal.
+function loadPendingDeal(npub: string): PendingDeal | null {
+  try {
+    const raw = window.localStorage.getItem(pendingDealKey(npub));
+    if (!raw) return null;
+    return JSON.parse(raw) as PendingDeal;
+  } catch {
+    return null;
+  }
+}
+
+function savePendingDeal(npub: string, d: PendingDeal): void {
+  try {
+    window.localStorage.setItem(pendingDealKey(npub), JSON.stringify(d));
+  } catch (e) {
+    console.error("pending-deal save failed", e);
+  }
+}
+
+function clearPendingDeal(npub: string): void {
+  try {
+    window.localStorage.removeItem(pendingDealKey(npub));
   } catch {
     /* noop */
   }
@@ -749,6 +781,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
   const [loadingMsg, setLoadingMsg] = useState<string>("");
+  // Live claim details while a deal composes — drives the waiting status card
+  // (claim id, elapsed, ETA). Null until the claim is accepted (or for a
+  // synchronous replay), and cleared the moment the deal settles or fails.
+  const [dealProgress, setDealProgress] = useState<
+    { claimCheck: string; startedAt: number; expectedSeconds: number } | null
+  >(null);
   const [error, setError] = useState<string>("");
   const [stats, setStats] = useState<Stats>({ played: 0, avg: 0, best: 0, streak: 0 });
   // Journal — server-authoritative, sorted + grouped + offset-paginated
@@ -971,6 +1009,80 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     })();
   }, []);
 
+  // Resume a deal left composing on a PRIOR load. This is what makes "you can
+  // wander off" true: the claim is polled to a terminal state here, which is
+  // also what settles the detached job and writes its `open` journal entry. A
+  // patron who reloaded, lost their connection, or closed the tab mid-wait comes
+  // back to their finished assignment instead of a lost fare.
+  useEffect(() => {
+    const me = getStoredNpub();
+    if (guest || !me || me === "_guest") return;
+    // A settled board already restored above wins — a pending claim and an
+    // active session are mutually exclusive in normal flow.
+    if (loadSession(me)?.scenario) return;
+    const pending = loadPendingDeal(me);
+    if (!pending?.claimCheck) return;
+    // Defensive: discard an absurdly old crumb (corrupt store / prior day). A
+    // merely stale-but-recent claim is left to the server to call "expired".
+    if (Date.now() - pending.startedAt > 24 * 60 * 60 * 1000) {
+      clearPendingDeal(me);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setMode(pending.mode);
+      setDifficulty(pending.difficulty);
+      if (typeof pending.maxLossUsd === "number") setMaxLossInput(String(pending.maxLossUsd));
+      if (typeof pending.sector === "string") setSector(pending.sector);
+      setLoadingMsg("Reading the tape");
+      setDealProgress({
+        claimCheck: pending.claimCheck,
+        startedAt: pending.startedAt,
+        expectedSeconds: pending.expectedSeconds,
+      });
+      setLoading(true);
+      try {
+        const result = await resumeDealClaim(pending.claimCheck, pending.startedAt);
+        if (cancelled) return;
+        if (result.error) throw new Error(result.error);
+        const json = result.scenario;
+        json.mode = pending.mode;
+        setScenario(json);
+        setEntryId(result.entry_id);
+        setJournalEntries([]);
+        setJournalPage(0);
+        void refreshBalance();
+        clearPendingDeal(me); // settled — the assignment is now seated + journaled
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof ProofRequiredError) {
+          // Proof lapsed — KEEP the pending crumb so a later load (post
+          // re-auth) can still resume and settle. Just drop the overlay.
+          return;
+        }
+        // Expired / not-found / genuine failure: the fare was refunded
+        // server-side. Clear the crumb and nudge back to a fresh deal.
+        clearPendingDeal(me);
+        setError(
+          e instanceof ClaimCheckError && e.code === "expired"
+            ? "Your last assignment aged out before you returned — no fare was charged. Deal a fresh one."
+            : "Couldn't recover your last assignment. " + (e as Error).message,
+        );
+      } finally {
+        // UI reset only — crumb lifetime is decided in the branches above so the
+        // proof-lapsed case can preserve it for a later resume.
+        if (!cancelled) {
+          setDealProgress(null);
+          setLoading(false);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Persist active session whenever the play state changes. The clear
   // path is `nextRound()`, which removes the row; otherwise this keeps
   // the patron's paid-for scenario alive across reloads.
@@ -1006,12 +1118,35 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     setScenario(null);
     setEntryId(null);
     setLoading(true);
+    setDealProgress(null);
     setLoadingMsg(mode === "live" ? "Reading the tape" : "Tapping the wire");
+    const startedAt = Date.now();
+    const me = getStoredNpub();
     try {
       const parsedMaxLoss = parseInt(maxLossInput, 10);
       const maxLossArg = Number.isFinite(parsedMaxLoss) && parsedMaxLoss > 0 ? parsedMaxLoss : undefined;
       const sectorArg = sector.trim() || undefined;
-      const result = await dealScenario(mode, difficulty, maxLossArg, undefined, sectorArg);
+      // The instant the claim is accepted, persist it and light up the status
+      // card. Persisting BEFORE the poll returns is the whole point: a reload or
+      // dropped connection during the (minutes-long) live composition resumes
+      // this claim on next load, which is what settles the job and journals it.
+      const onStart = (info: ClaimStartInfo) => {
+        savePendingDeal(me, {
+          claimCheck: info.claimCheck,
+          mode,
+          difficulty,
+          startedAt,
+          expectedSeconds: info.expectedSeconds,
+          maxLossUsd: maxLossArg,
+          sector: sectorArg,
+        });
+        setDealProgress({
+          claimCheck: info.claimCheck,
+          startedAt,
+          expectedSeconds: info.expectedSeconds,
+        });
+      };
+      const result = await dealScenario(mode, difficulty, maxLossArg, undefined, sectorArg, onStart);
       if (result.error) throw new Error(result.error);
       const json = result.scenario;
       json.mode = mode;
@@ -1022,6 +1157,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       // chip current and let the Sample-Assessment-at-zero affordance
       // appear or disappear as appropriate.
       void refreshBalance();
+      // The wheel just journaled this scenario as an `open` entry — invalidate
+      // the cached Journal page so it shows up if the patron opens the tab.
+      setJournalEntries([]);
+      setJournalPage(0);
     } catch (e) {
       if (e instanceof ProofRequiredError) {
         onSignOut?.();
@@ -1029,8 +1168,22 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       }
       setError("Could not generate scenario. " + (e as Error).message);
     } finally {
+      // Terminal, whichever way it went — drop the in-flight claim and card.
+      clearPendingDeal(me);
+      setDealProgress(null);
       setLoading(false);
     }
+  }
+
+  // Leave the wait and go claim the assignment from the Journal. The deal keeps
+  // composing in the background (this component stays mounted across tabs, so
+  // the poll — and its eventual settle — survives); we never cancel or re-charge.
+  // The Journal cache is already invalidated on settle, so the newly-journaled
+  // `open` entry shows when the tab loads.
+  function claimInJournal(): void {
+    setJournalEntries([]);
+    setJournalPage(0);
+    setTab("journal");
   }
 
   async function submitTrade(): Promise<void> {
@@ -2149,8 +2302,28 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               ) : (
                 // Deal / mulligan scene — full-viewport overlay using
                 // the login backdrop so the trainee waits inside the
-                // institutional setting the Firm is pretending to be.
-                <DealAnimation loadingMsg={loadingMsg} mode={mode} />
+                // institutional setting the Firm is pretending to be. Once a
+                // claim is in flight, the status card (claim id, elapsed, ETA,
+                // "Claim in Journal") makes the multi-minute wait bearable and
+                // walk-away-safe. A synchronous replay never sets dealProgress,
+                // so it keeps the plain animation.
+                <DealAnimation
+                  loadingMsg={loadingMsg}
+                  mode={mode}
+                  status={
+                    dealProgress
+                      ? {
+                          claimId: dealProgress.claimCheck,
+                          startedAt: dealProgress.startedAt,
+                          expectedSeconds: dealProgress.expectedSeconds,
+                          assignmentName: `${MODES.find((m) => m.id === mode)?.label ?? mode} · ${
+                            DIFFICULTIES.find((d) => d.id === difficulty)?.label ?? difficulty
+                          }`,
+                          onClaimInJournal: claimInJournal,
+                        }
+                      : undefined
+                  }
+                />
               ))}
 
             {scenario && !loading && (

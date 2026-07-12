@@ -453,10 +453,55 @@ async function callTool<T = unknown>(
 // while staying far below the old 600s that let a stall spin ten minutes.
 const CLAIM_MAX_WAIT_MS = 360_000;
 
+// Details a caller learns the instant a claim is accepted — before the first
+// poll — so a slow-tool UI can show a live status card (claim id, ETA) and
+// persist the claim for durable resume. Fired only for the async (claim-check)
+// path; a synchronous terminal result never calls it.
+export interface ClaimStartInfo {
+  claimCheck: string;
+  expectedSeconds: number;
+}
+
+// Poll a companion fetch tool for an already-issued claim until it reaches a
+// terminal state. Shared by the initial start-and-poll and by a resumed claim
+// (a reload / reconnect), so both settle identically. `firstWaitSeconds` is the
+// backend's advised first sleep; `deadlineMs` is the absolute client ceiling.
+async function pollClaimToTerminal<T>(
+  fetchTool: string,
+  claim: string,
+  firstWaitSeconds: number,
+  deadlineMs: number,
+  logLabel: string,
+): Promise<T> {
+  let waitSeconds = firstWaitSeconds;
+  for (;;) {
+    await new Promise((r) => setTimeout(r, waitSeconds * 1000));
+    const fetched = await callTool<ClaimFetch<T>>(fetchTool, {
+      claim_check: claim,
+    });
+    const outcome = claimTerminalOutcome<T>(fetched);
+    if (outcome !== "pending") {
+      return outcome.value;
+    }
+    if (Date.now() > deadlineMs) {
+      debugPush(
+        "error",
+        `${logLabel}: client gave up after ${Math.round(CLAIM_MAX_WAIT_MS / 1000)}s — server never returned a terminal status`,
+      );
+      throw new Error(
+        `optionality_${logLabel}: timed out waiting for the result.`,
+      );
+    }
+    // Honor the backend's next-poll advice (its countdown tightens toward done).
+    waitSeconds = fetched.poll_after_seconds ?? 3;
+  }
+}
+
 async function startAndPoll<T>(
   startTool: string,
   fetchTool: string,
   args: Record<string, unknown>,
+  onStart?: (info: ClaimStartInfo) => void,
 ): Promise<T> {
   const start = await callTool<ClaimCheckStart<T>>(startTool, args);
   // A synchronous terminal result (deterministic replay, degenerate-input nudge,
@@ -473,35 +518,41 @@ async function startAndPoll<T>(
     );
   }
   debugPush("info", `${startTool}: claim ${claim.slice(0, 8)} accepted — polling for result`);
-  const deadline = Date.now() + CLAIM_MAX_WAIT_MS;
+  onStart?.({ claimCheck: claim, expectedSeconds: start.expected_seconds ?? 0 });
   // Probe EARLY on the first poll. The backend's budget-sized first wait
   // (~75% of the job's runtime) is right for a job that runs the full budget —
   // but a job that fails fast (the operator's AI provider is unfunded, surfaced
   // only once the job starts) would otherwise sit "loading…" for that whole
   // first wait before the refundable error shows. One quick probe surfaces
   // early failures in seconds; after it we honor the backend's countdown.
-  let waitSeconds = Math.min(start.poll_after_seconds ?? 3, 8);
-  for (;;) {
-    await new Promise((r) => setTimeout(r, waitSeconds * 1000));
-    const fetched = await callTool<ClaimFetch<T>>(fetchTool, {
-      claim_check: claim,
-    });
-    const outcome = claimTerminalOutcome<T>(fetched);
-    if (outcome !== "pending") {
-      return outcome.value;
-    }
-    if (Date.now() > deadline) {
-      debugPush(
-        "error",
-        `${startTool}: client gave up after ${Math.round(CLAIM_MAX_WAIT_MS / 1000)}s — server never returned a terminal status`,
-      );
-      throw new Error(
-        `optionality_${startTool}: timed out waiting for the result.`,
-      );
-    }
-    // Honor the backend's next-poll advice (its countdown tightens toward done).
-    waitSeconds = fetched.poll_after_seconds ?? 3;
-  }
+  const firstWait = Math.min(start.poll_after_seconds ?? 3, 8);
+  return pollClaimToTerminal<T>(
+    fetchTool,
+    claim,
+    firstWait,
+    Date.now() + CLAIM_MAX_WAIT_MS,
+    startTool,
+  );
+}
+
+// Resume polling a claim issued on a PRIOR page load (persisted across a reload
+// or a dropped connection). `startedAtMs` anchors the same client ceiling the
+// original attempt used, so a claim that has already outlived the window fails
+// fast to "expired" here rather than polling pointlessly. This is also what
+// settles the job server-side and writes its `open` journal entry — the durable
+// backing for "you can wander off and claim it later".
+export async function resumeDealClaim(
+  claim: string,
+  startedAtMs: number,
+): Promise<DealScenarioResult> {
+  debugPush("info", `deal_scenario: resuming claim ${claim.slice(0, 8)} after reload`);
+  return pollClaimToTerminal<DealScenarioResult>(
+    "fetch_scenario",
+    claim,
+    2,
+    startedAtMs + CLAIM_MAX_WAIT_MS,
+    "deal_scenario",
+  );
 }
 
 // ─── Domain calls ──────────────────────────────────────────────────────────
@@ -518,6 +569,7 @@ export async function dealScenario(
   maxLossUsd?: number,
   replayEntryId?: string,
   sector?: string,
+  onStart?: (info: ClaimStartInfo) => void,
 ): Promise<DealScenarioResult> {
   const args: Record<string, unknown> = { mode, difficulty };
   if (typeof maxLossUsd === "number" && maxLossUsd > 0) {
@@ -536,6 +588,7 @@ export async function dealScenario(
     "deal_scenario",
     "fetch_scenario",
     args,
+    onStart,
   );
 }
 
