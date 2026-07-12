@@ -5,6 +5,12 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.6.9] — 2026-07-12
+
+### Fixed — LIVE deals no longer time out before they finish composing
+
+- **Widened the timeout budget end-to-end for live + web_search.** A detached LIVE deal has to absorb a Prefect Managed worker cold-start (~40-50s) BEFORE the LLM even runs, then a multi-round web_search generation — which was blowing past the 360s client ceiling (and the 240s HTTP read timeout was cutting real calls short → Prefect flow `ReadTimeout`). Raised: the per-attempt LLM HTTP timeout 240→**360s**, the job `max_runtime` 300→**420s**, the result TTL 900→**1200s** (more time to come back and claim), the declared `expected_seconds` 240→**300s**, and the frontend poll ceiling 360→**600s**. A long ceiling is safe now that "Scenarios in Preparation" lets a patron wander off — nobody's blocked watching a spinner. Also trimmed a per-catalyst "verify via search" nudge from the 0.6.8 date grounding that could multiply search rounds; the date is still firmly asserted.
+
 ## [0.6.8] — 2026-07-12
 
 ### Fixed — LIVE scenarios are now grounded in the real current date

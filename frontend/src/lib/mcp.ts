@@ -444,14 +444,16 @@ async function callTool<T = unknown>(
 // done; every poll is a fast call, so the per-call MCP timeout never
 // comes into play. Terminal resolution lives in ./claimCheck (imported above).
 
-// Client-side poll ceiling. Must sit ABOVE the backend's terminal-state time,
-// not just its max_runtime: a job's started_at is offset from the patron's
-// click (a cold-Neon claim can lag ~40s), so the wheel's 300s cap can fire
-// ~340s after the click. At 330s the browser gave up ~15s before the
-// job_timed_out refund was written — the patron saw a silent stall instead of
-// the refund message. 360s covers max_runtime (300) + claim offset + margin,
-// while staying far below the old 600s that let a stall spin ten minutes.
-const CLAIM_MAX_WAIT_MS = 360_000;
+// Client-side poll ceiling. Must sit ABOVE the backend's terminal-state time
+// on the SLOWEST path — a detached LIVE deal: the Prefect Managed pool
+// cold-starts a worker (~40-50s) BEFORE the flow runs, then the web_search LLM
+// call takes up to its HTTP timeout (~360s), plus claim offset + state
+// propagation. 360s gave up while genuinely-live deals were still composing.
+// 600s covers cold-start + a full web_search generation + margin. A long
+// ceiling is safe now: the patron isn't blocked — "Scenarios in Preparation"
+// lets them wander off, and a settle happens whenever any poll observes
+// completion (this one, or a later resume within the result TTL).
+const CLAIM_MAX_WAIT_MS = 600_000;
 
 // Poll a companion fetch tool for an already-issued claim until it reaches a
 // terminal state. Shared by the initial start-and-poll and by a resumed claim

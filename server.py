@@ -402,7 +402,7 @@ async def deal_scenario(
         )
     # Budget-aware poll cadence: live mode runs web_search and takes longer.
     # Mirrors the LLM timeout the runner enforces (tools/dealer.py).
-    expected = 240 if mode == "live" else 120
+    expected = 300 if mode == "live" else 120
     resp = await runtime.start_async_job(
         "deal_scenario",
         npub,
@@ -414,8 +414,12 @@ async def deal_scenario(
             "sector": sector,
         },
         tool_id=DEAL_SCENARIO_UUID,
-        max_runtime_seconds=300,
-        result_ttl_seconds=900,
+        # Live + web_search on a cold Prefect Managed worker (~40-50s spin-up)
+        # legitimately runs several minutes; give the job room to finish before
+        # the watchdog reclaims it, and keep a finished result claimable long
+        # enough for a patron who wandered off to come back for it.
+        max_runtime_seconds=420,
+        result_ttl_seconds=1200,
         expected_seconds=expected,
     )
     # Echo the time budget to the client only while there's a claim to wait on,

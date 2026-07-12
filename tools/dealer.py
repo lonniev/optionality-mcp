@@ -220,9 +220,7 @@ async def _prepare_deal(
             f"current as of {today_iso} (or the most recent trading day on or "
             f'before it). "date_context" must reference this date (e.g. "Today, '
             f'{today_long}, …") and "today_date" MUST be {today_iso} or the '
-            f"latest trading day on/before it — never an earlier year. If a "
-            f"catalyst you recall feels recent, verify it is still current as of "
-            f"{today_iso} before building around it."
+            f"latest trading day on/before it — never an earlier year."
         )
     prompt = (
         f"{mode_instr}"
@@ -243,7 +241,11 @@ async def _prepare_deal(
         "system": prompts.SCENARIO_SYSTEM,
         "max_tokens": 4000 if enable_web_search else 2500,
         "enable_web_search": enable_web_search,
-        "timeout_seconds": 240 if enable_web_search else 120,
+        # The per-attempt HTTP read timeout for the LLM call. Live+web_search can
+        # run several minutes; 240s was cutting genuine calls short (Prefect flow
+        # ReadTimeout). Sits under max_runtime (420s) so a real stall still fails
+        # fast into a refundable situation rather than riding to the FE ceiling.
+        "timeout_seconds": 360 if enable_web_search else 120,
     }
 
 
