@@ -1,0 +1,50 @@
+# Canonical DPYC commit-phase CI — lint + tests. Job `test` + matrix ["3.12"] posts the
+# fleet-canonical status context `test (3.12)`, which branch protection requires. ruff skips
+# node_modules by default, so `ruff check .` covers the Python (server/tools/db/claude) without
+# touching the frontend/. The tests are mock-based (unittest.mock), so no secrets are needed.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Wait for tollbooth-dpyc on PyPI
+        run: |
+          REQUIRED=$(grep 'tollbooth-dpyc' pyproject.toml | grep -oP '==\K[0-9.]+')
+          if [ -n "$REQUIRED" ]; then
+            echo "Waiting for tollbooth-dpyc==$REQUIRED on PyPI..."
+            for i in $(seq 1 30); do
+              if pip index versions tollbooth-dpyc 2>/dev/null | grep -q "$REQUIRED"; then
+                echo "Found tollbooth-dpyc==$REQUIRED on PyPI"
+                break
+              fi
+              echo "Attempt $i/30 — not yet available, waiting 10s..."
+              sleep 10
+            done
+          fi
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Run tests
+        run: pytest tests/ -v
