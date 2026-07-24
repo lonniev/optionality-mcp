@@ -25,7 +25,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import httpx
 from tollbooth import AsyncJobSituation

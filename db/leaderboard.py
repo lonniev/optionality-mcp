@@ -34,8 +34,9 @@ async def _live_weight(mode: str | None, difficulty: str | None) -> float:
     if not mode or not difficulty:
         return 1.0
     try:
-        from server import runtime
         from tollbooth.tool_identity import capability_uuid
+
+        from server import runtime
         resolver = await runtime.pricing_resolver()
         if resolver is None:
             return 1.0

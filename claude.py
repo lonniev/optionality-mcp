@@ -50,7 +50,7 @@ WEB_SEARCH_TOOL = {"type": "web_search_20260209", "name": "web_search", "max_use
 _DEFAULT_TIMEOUT = 210.0
 
 
-def clamp_timeout(seconds: float | int | None) -> float:
+def clamp_timeout(seconds: float | None) -> float:
     """Bound the LLM request timeout to a sane range (the job budget drives it)."""
     if not seconds or seconds <= 0:
         return _DEFAULT_TIMEOUT
@@ -187,7 +187,7 @@ async def _alert_operator_provider_down(situation: AsyncJobSituation) -> None:
     def _run() -> None:
         try:
             exchange.send_dm(operator_npub, message)
-        except Exception:  # noqa: BLE001 — courtesy DM, non-blocking
+        except Exception:
             logger.debug("operator provider-down DM failed (courtesy)", exc_info=True)
 
     threading.Thread(target=_run, daemon=True).start()
@@ -239,7 +239,7 @@ async def call_claude(
     model: str = DEFAULT_MODEL,
     npub: str = "",
     tool: str = "",
-    timeout_seconds: float | int | None = None,
+    timeout_seconds: float | None = None,
 ) -> str:
     """Call Claude with one user message and a system prompt; return the text.
 
@@ -337,7 +337,7 @@ def build_anthropic_request(
     max_tokens: int,
     enable_web_search: bool = False,
     model: str = DEFAULT_MODEL,
-    timeout_seconds: float | int | None = None,
+    timeout_seconds: float | None = None,
 ) -> dict[str, Any]:
     """Build the fully-formed Anthropic messages request for the detached path.
 

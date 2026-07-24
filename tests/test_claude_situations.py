@@ -16,10 +16,10 @@ from tollbooth import AsyncJobSituation
 
 import claude
 from claude import (
+    _provider_situation,
     call_claude,
     clamp_timeout,
     empty_output_situation,
-    _provider_situation,
 )
 
 
@@ -102,9 +102,8 @@ async def test_call_claude_provider_error_raises_situation_and_disables_retries(
 
     with patch.object(claude, "_get_api_key", AsyncMock(return_value="k")), patch.object(
         anthropic, "AsyncAnthropic", _FakeClient
-    ):
-        with pytest.raises(AsyncJobSituation) as ei:
-            await call_claude("p", "s", timeout_seconds=120)
+    ), pytest.raises(AsyncJobSituation) as ei:
+        await call_claude("p", "s", timeout_seconds=120)
 
     # A stalled/failing provider must not be multiplied by SDK retries, and the
     # per-request timeout must be the caller's clamped job budget.
@@ -132,7 +131,6 @@ async def test_call_claude_empty_output_raises_situation() -> None:
 
     with patch.object(claude, "_get_api_key", AsyncMock(return_value="k")), patch.object(
         anthropic, "AsyncAnthropic", _FakeClient
-    ):
-        with pytest.raises(AsyncJobSituation) as ei:
-            await call_claude("p", "s")
+    ), pytest.raises(AsyncJobSituation) as ei:
+        await call_claude("p", "s")
     assert ei.value.error_code == "llm_empty"

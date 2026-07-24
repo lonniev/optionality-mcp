@@ -122,7 +122,7 @@ async def withdraw_nsec(npub: str, acknowledgment: str) -> dict[str, Any]:
     # scope here. Best-effort: shadow with a same-length placeholder
     # before returning so any lingering reference is poisoned.
     response = {"success": True, "nsec": nsec_plain, "escrowed": False}
-    nsec_plain = "\x00" * len(nsec_plain)  # noqa: F841 (intentional shadow)
+    nsec_plain = "\x00" * len(nsec_plain)
     return response
 
 
@@ -171,7 +171,7 @@ async def send_patron_dm(
         return {"success": False, "error": f"escrowed nsec parse failed: {e}"}
     finally:
         # Drop the plaintext string as soon as PrivateKey owns it.
-        nsec_plain = "\x00" * len(nsec_plain)  # noqa: F841 (shadow)
+        nsec_plain = "\x00" * len(nsec_plain)
 
     # Use the wheel's existing dual-protocol sender (NIP-17 + NIP-04).
     # The _send_dm_as helper accepts an explicit PrivateKey, signs the

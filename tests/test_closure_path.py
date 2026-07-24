@@ -9,6 +9,7 @@ live Prefect executor — the wheel's own suite covers the SDK wiring.
 
 from __future__ import annotations
 
+from datetime import UTC
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -22,7 +23,6 @@ from claude import (
     shape_llm_text,
     situation_from_status,
 )
-
 
 # ── request builder ──────────────────────────────────────────────────────────
 
@@ -186,11 +186,11 @@ async def test_deal_shape_result_opens_entry_once() -> None:
 async def test_prepare_deal_live_grounds_prompt_in_the_real_date() -> None:
     """LIVE mode must assert the operator's real date so the model can't anchor
     to its training cutoff and date a scenario a year in the past."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from tools import dealer
 
-    today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_iso = datetime.now(UTC).strftime("%Y-%m-%d")
 
     with patch("db.patrons.upsert_patron", AsyncMock()), patch(
         "db.journal.recent_tickers", AsyncMock(return_value=[]),
@@ -225,7 +225,7 @@ async def test_tip_shape_result_counts_clue() -> None:
 
 
 def test_precheck_tip_question_guards_degenerate_input() -> None:
-    from tools.dealer import precheck_tip_question, MAX_TIP_QUESTION_CHARS
+    from tools.dealer import MAX_TIP_QUESTION_CHARS, precheck_tip_question
 
     assert precheck_tip_question("")["tip"]                       # empty → nudge
     assert precheck_tip_question("   ")["tip"]
