@@ -36,7 +36,7 @@ async def record_call(
             int(input_tokens),
             int(output_tokens),
         )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         # Don't let usage-tracking failures bubble up. The patron's
         # tool call already succeeded; the wheel's own debit already
         # ran. This is journaling only.

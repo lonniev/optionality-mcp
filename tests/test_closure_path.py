@@ -118,9 +118,11 @@ async def test_shape_llm_text_non_2xx_curates_situation() -> None:
 
 async def test_shape_llm_text_unfunded_alerts_operator() -> None:
     raw = {"status": 400, "json": {"error": {"message": "credit balance too low"}}}
-    with patch.object(claude, "_alert_operator_provider_down", AsyncMock()) as alert:
-        with pytest.raises(AsyncJobSituation) as ei:
-            await shape_llm_text(raw, npub="n", tool="t")
+    with (
+        patch.object(claude, "_alert_operator_provider_down", AsyncMock()) as alert,
+        pytest.raises(AsyncJobSituation) as ei,
+    ):
+        await shape_llm_text(raw, npub="n", tool="t")
     assert ei.value.error_code == "operator_llm_unfunded"
     alert.assert_awaited_once()   # non-transient provider-down DMs the operator
 
@@ -159,9 +161,11 @@ async def test_judge_build_closure_bakes_request_and_shape_finalizes() -> None:
 async def test_judge_build_closure_missing_entry_raises_situation() -> None:
     from tools import judge
 
-    with patch("db.journal.get_entry", AsyncMock(return_value=None)):
-        with pytest.raises(AsyncJobSituation) as ei:
-            await judge.build_closure(npub="n", entry_id="gone", trade_proposal="x")
+    with (
+        patch("db.journal.get_entry", AsyncMock(return_value=None)),
+        pytest.raises(AsyncJobSituation) as ei,
+    ):
+        await judge.build_closure(npub="n", entry_id="gone", trade_proposal="x")
     assert ei.value.error_code == "journal_entry_not_found"
 
 

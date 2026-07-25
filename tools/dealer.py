@@ -482,7 +482,7 @@ async def _finalize_tip(npub: str, entry_id: str, text: str) -> dict[str, Any]:
     try:
         from db import journal as journal_db
         await journal_db.increment_tips_count(npub, entry_id)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
     return {"tip": text}
 

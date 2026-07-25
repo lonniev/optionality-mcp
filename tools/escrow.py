@@ -44,7 +44,7 @@ def _verify_nsec_matches_npub(nsec_bech32: str, claimed_npub: str) -> tuple[bool
         pk = PrivateKey.from_nsec(nsec_bech32)
         derived = pk.public_key.bech32()
         return (derived == claimed_npub, derived)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return (False, f"nsec parse failed: {e}")
 
 
@@ -167,7 +167,7 @@ async def send_patron_dm(
     try:
         from pynostr.key import PrivateKey  # type: ignore[import-untyped]
         patron_key = PrivateKey.from_nsec(nsec_plain)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return {"success": False, "error": f"escrowed nsec parse failed: {e}"}
     finally:
         # Drop the plaintext string as soon as PrivateKey owns it.
@@ -181,7 +181,7 @@ async def send_patron_dm(
         return {"success": False, "error": "Secure Courier not ready (operator nsec or relays missing)."}
     try:
         courier._exchange._send_dm_as(patron_key, target_npub, message)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return {"success": False, "error": f"DM send failed: {e}"}
 
     logger.info(

@@ -81,9 +81,11 @@ def test_empty_output_situation_is_refundable() -> None:
 
 
 async def test_call_claude_unconfigured_key_raises_situation() -> None:
-    with patch.object(claude, "_get_api_key", AsyncMock(return_value=None)):
-        with pytest.raises(AsyncJobSituation) as ei:
-            await call_claude("p", "s")
+    with (
+        patch.object(claude, "_get_api_key", AsyncMock(return_value=None)),
+        pytest.raises(AsyncJobSituation) as ei,
+    ):
+        await call_claude("p", "s")
     assert ei.value.error_code == "operator_llm_unconfigured"
     assert ei.value.transient is False
 
@@ -117,7 +119,7 @@ async def test_call_claude_empty_output_raises_situation() -> None:
         text = "   "
 
     class _Msg:
-        content = [_Block()]
+        content = [_Block()]  # noqa: RUF012 — test mock, not a real mutable class default
         usage = None
         stop_reason = "end_turn"
 

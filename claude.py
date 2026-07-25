@@ -204,7 +204,7 @@ async def _get_api_key() -> str | None:
 
     try:
         creds = await runtime.load_credentials(["anthropic_api_key"])
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         logger.warning("Could not load operator credentials: %s", e)
         return None
     key = creds.get("anthropic_api_key") if isinstance(creds, dict) else None
@@ -313,7 +313,7 @@ async def call_claude(
                 input_tokens=in_tok,
                 output_tokens=out_tok,
             )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
     parts: list[str] = []
@@ -405,7 +405,7 @@ async def _record_usage_from_json(
                 npub=npub, tool=tool, model=model,
                 input_tokens=in_tok, output_tokens=out_tok,
             )
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
 
 
