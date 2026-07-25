@@ -9,6 +9,7 @@ live Prefect executor — the wheel's own suite covers the SDK wiring.
 
 from __future__ import annotations
 
+from datetime import UTC
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -22,7 +23,6 @@ from claude import (
     shape_llm_text,
     situation_from_status,
 )
-
 
 # ── request builder ──────────────────────────────────────────────────────────
 
@@ -118,9 +118,11 @@ async def test_shape_llm_text_non_2xx_curates_situation() -> None:
 
 async def test_shape_llm_text_unfunded_alerts_operator() -> None:
     raw = {"status": 400, "json": {"error": {"message": "credit balance too low"}}}
-    with patch.object(claude, "_alert_operator_provider_down", AsyncMock()) as alert:
-        with pytest.raises(AsyncJobSituation) as ei:
-            await shape_llm_text(raw, npub="n", tool="t")
+    with (
+        patch.object(claude, "_alert_operator_provider_down", AsyncMock()) as alert,
+        pytest.raises(AsyncJobSituation) as ei,
+    ):
+        await shape_llm_text(raw, npub="n", tool="t")
     assert ei.value.error_code == "operator_llm_unfunded"
     alert.assert_awaited_once()   # non-transient provider-down DMs the operator
 
@@ -159,9 +161,11 @@ async def test_judge_build_closure_bakes_request_and_shape_finalizes() -> None:
 async def test_judge_build_closure_missing_entry_raises_situation() -> None:
     from tools import judge
 
-    with patch("db.journal.get_entry", AsyncMock(return_value=None)):
-        with pytest.raises(AsyncJobSituation) as ei:
-            await judge.build_closure(npub="n", entry_id="gone", trade_proposal="x")
+    with (
+        patch("db.journal.get_entry", AsyncMock(return_value=None)),
+        pytest.raises(AsyncJobSituation) as ei,
+    ):
+        await judge.build_closure(npub="n", entry_id="gone", trade_proposal="x")
     assert ei.value.error_code == "journal_entry_not_found"
 
 
@@ -186,11 +190,11 @@ async def test_deal_shape_result_opens_entry_once() -> None:
 async def test_prepare_deal_live_grounds_prompt_in_the_real_date() -> None:
     """LIVE mode must assert the operator's real date so the model can't anchor
     to its training cutoff and date a scenario a year in the past."""
-    from datetime import datetime, timezone
+    from datetime import datetime
 
     from tools import dealer
 
-    today_iso = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    today_iso = datetime.now(UTC).strftime("%Y-%m-%d")
 
     with patch("db.patrons.upsert_patron", AsyncMock()), patch(
         "db.journal.recent_tickers", AsyncMock(return_value=[]),
@@ -225,7 +229,7 @@ async def test_tip_shape_result_counts_clue() -> None:
 
 
 def test_precheck_tip_question_guards_degenerate_input() -> None:
-    from tools.dealer import precheck_tip_question, MAX_TIP_QUESTION_CHARS
+    from tools.dealer import MAX_TIP_QUESTION_CHARS, precheck_tip_question
 
     assert precheck_tip_question("")["tip"]                       # empty → nudge
     assert precheck_tip_question("   ")["tip"]

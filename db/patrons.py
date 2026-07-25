@@ -89,16 +89,16 @@ def normalize_relays(relays: list[Any] | str) -> list[str]:
         except json.JSONDecodeError as e:
             raise ValueError(f"relays JSON parse failed: {e}") from e
     if not isinstance(relays, list):
-        raise ValueError("relays must be a list of relay URLs")
+        raise TypeError("relays must be a list of relay URLs")
     cleaned: list[str] = []
     seen: set[str] = set()
     for r in relays:
         if not isinstance(r, str):
-            raise ValueError(f"relay entries must be strings; got {type(r).__name__}")
+            raise TypeError(f"relay entries must be strings; got {type(r).__name__}")
         url = r.strip()
         if not url:
             continue
-        if not (url.startswith("wss://") or url.startswith("ws://")):
+        if not (url.startswith(("wss://", "ws://"))):
             raise ValueError(f"relay URL must start with wss:// or ws://; got {url!r}")
         if len(url) > _MAX_RELAY_URL_LEN:
             raise ValueError(f"relay URL too long (max {_MAX_RELAY_URL_LEN} chars)")

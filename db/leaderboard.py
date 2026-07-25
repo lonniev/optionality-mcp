@@ -34,8 +34,9 @@ async def _live_weight(mode: str | None, difficulty: str | None) -> float:
     if not mode or not difficulty:
         return 1.0
     try:
-        from server import runtime
         from tollbooth.tool_identity import capability_uuid
+
+        from server import runtime
         resolver = await runtime.pricing_resolver()
         if resolver is None:
             return 1.0
@@ -44,7 +45,7 @@ async def _live_weight(mode: str | None, difficulty: str | None) -> float:
             return 1.0
         cost = pricing.compute(mode=mode, difficulty=difficulty)
         return float(cost) if isinstance(cost, (int, float)) and cost > 0 else 1.0
-    except Exception as exc:
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Leaderboard weight lookup failed for (mode=%r, difficulty=%r): %s",
             mode, difficulty, exc,

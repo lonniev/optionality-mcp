@@ -25,7 +25,8 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 import httpx
 from tollbooth import AsyncJobSituation
@@ -116,7 +117,7 @@ async def _get_vault() -> Any:
         try:
             await _ensure_domain_schema(_vault)
             logger.info("Optionality domain schema ensured")
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Domain schema init failed: %s", e)
             _schema_done = False
     return _vault
@@ -138,13 +139,13 @@ async def _ensure_domain_schema(vault: Any) -> None:
     t = vault._t
 
     stmts = [
-        f"CREATE TABLE IF NOT EXISTS {t('optionality_patrons')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('optionality_patrons')} ("
         "npub TEXT PRIMARY KEY, "
         "display_name TEXT, "
         "avatar TEXT, "
         "bio TEXT, "
         "relays JSONB, "
-        "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"),
 
         # Idempotent ALTERs for existing deployments — patrons created
         # before the profile columns existed get NULLs which the FE
@@ -160,7 +161,7 @@ async def _ensure_domain_schema(vault: Any) -> None:
         # NULL = patron is self-custodied (default).
         f"ALTER TABLE {t('optionality_patrons')} ADD COLUMN IF NOT EXISTS escrowed_nsec_b64 TEXT",
 
-        f"CREATE TABLE IF NOT EXISTS {t('optionality_journal_entries')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('optionality_journal_entries')} ("
         "id UUID PRIMARY KEY DEFAULT gen_random_uuid(), "
         f"npub TEXT NOT NULL REFERENCES {t('optionality_patrons')}(npub) ON DELETE CASCADE, "
         "status TEXT NOT NULL, "
@@ -174,28 +175,28 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "letter_grade TEXT, "
         "ticker TEXT, "
         "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), "
-        "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+        "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"),
 
-        f"CREATE INDEX IF NOT EXISTS idx_journal_npub_created "
-        f"ON {t('optionality_journal_entries')}(npub, created_at DESC)",
+        (f"CREATE INDEX IF NOT EXISTS idx_journal_npub_created "
+        f"ON {t('optionality_journal_entries')}(npub, created_at DESC)"),
 
-        f"CREATE INDEX IF NOT EXISTS idx_journal_npub_status "
-        f"ON {t('optionality_journal_entries')}(npub, status)",
+        (f"CREATE INDEX IF NOT EXISTS idx_journal_npub_status "
+        f"ON {t('optionality_journal_entries')}(npub, status)"),
 
         # is_shared: patron opts in per-entry to expose that pitch +
         # evaluation under their leaderboard row, so peers can compare.
-        f"ALTER TABLE {t('optionality_journal_entries')} "
-        f"ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE",
+        (f"ALTER TABLE {t('optionality_journal_entries')} "
+        f"ADD COLUMN IF NOT EXISTS is_shared BOOLEAN NOT NULL DEFAULT FALSE"),
 
         # tips_count: number of ask_tip calls the trainee made on this
         # entry. Surfaced to the judge so it can apply a score penalty
         # ("paid for clues" → small ding on overall_score).
-        f"ALTER TABLE {t('optionality_journal_entries')} "
-        f"ADD COLUMN IF NOT EXISTS tips_count INT NOT NULL DEFAULT 0",
+        (f"ALTER TABLE {t('optionality_journal_entries')} "
+        f"ADD COLUMN IF NOT EXISTS tips_count INT NOT NULL DEFAULT 0"),
 
-        f"CREATE INDEX IF NOT EXISTS idx_journal_shared "
+        (f"CREATE INDEX IF NOT EXISTS idx_journal_shared "
         f"ON {t('optionality_journal_entries')}(npub, is_shared) "
-        f"WHERE is_shared = TRUE",
+        f"WHERE is_shared = TRUE"),
 
         # NOTE: effective_price_sats column was added briefly in 0.1.8
         # but is no longer used — the leaderboard now queries the live
@@ -203,7 +204,7 @@ async def _ensure_domain_schema(vault: Any) -> None:
         # entry. The column lingers harmlessly in deploys that ran the
         # 0.1.8 migration; we just stopped reading and writing it.
 
-        f"CREATE TABLE IF NOT EXISTS {t('optionality_leaderboard_stats')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('optionality_leaderboard_stats')} ("
         f"npub TEXT PRIMARY KEY REFERENCES {t('optionality_patrons')}(npub) ON DELETE CASCADE, "
         "display_name TEXT, "
         "avatar TEXT, "
@@ -215,13 +216,13 @@ async def _ensure_domain_schema(vault: Any) -> None:
         "last_played_at TIMESTAMPTZ, "
         "by_mode JSONB NOT NULL DEFAULT '{}'::JSONB, "
         "by_difficulty JSONB NOT NULL DEFAULT '{}'::JSONB, "
-        "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+        "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"),
 
-        f"CREATE INDEX IF NOT EXISTS idx_leaderboard_avg "
-        f"ON {t('optionality_leaderboard_stats')}(avg_score DESC)",
+        (f"CREATE INDEX IF NOT EXISTS idx_leaderboard_avg "
+        f"ON {t('optionality_leaderboard_stats')}(avg_score DESC)"),
 
-        f"CREATE INDEX IF NOT EXISTS idx_leaderboard_best "
-        f"ON {t('optionality_leaderboard_stats')}(best_score DESC)",
+        (f"CREATE INDEX IF NOT EXISTS idx_leaderboard_best "
+        f"ON {t('optionality_leaderboard_stats')}(best_score DESC)"),
 
         # Idempotent backfill for the avatar column on existing
         # deployments — leaderboard read picks it up automatically.
@@ -235,32 +236,32 @@ async def _ensure_domain_schema(vault: Any) -> None:
         # an easy one scored well.
         f"ALTER TABLE {t('optionality_leaderboard_stats')} ADD COLUMN IF NOT EXISTS weighted_avg NUMERIC(8,2) NOT NULL DEFAULT 0",
         f"ALTER TABLE {t('optionality_leaderboard_stats')} ADD COLUMN IF NOT EXISTS weighted_best NUMERIC(8,2) NOT NULL DEFAULT 0",
-        f"CREATE INDEX IF NOT EXISTS idx_leaderboard_weighted_avg "
-        f"ON {t('optionality_leaderboard_stats')}(weighted_avg DESC)",
-        f"CREATE INDEX IF NOT EXISTS idx_leaderboard_weighted_best "
-        f"ON {t('optionality_leaderboard_stats')}(weighted_best DESC)",
+        (f"CREATE INDEX IF NOT EXISTS idx_leaderboard_weighted_avg "
+        f"ON {t('optionality_leaderboard_stats')}(weighted_avg DESC)"),
+        (f"CREATE INDEX IF NOT EXISTS idx_leaderboard_weighted_best "
+        f"ON {t('optionality_leaderboard_stats')}(weighted_best DESC)"),
 
         # Per-patron Claude API usage. One row per outbound `messages.create`,
         # written by `claude.complete_text` after the response lands. Surfaces
         # in the FE's Profile/Usage view so the patron sees exactly what their
         # sats bought — same transparency principle as taxsort-mcp's
         # `tax_api_usage` table.
-        f"CREATE TABLE IF NOT EXISTS {t('optionality_api_usage')} ("
+        (f"CREATE TABLE IF NOT EXISTS {t('optionality_api_usage')} ("
         "id BIGSERIAL PRIMARY KEY, "
         "npub TEXT, "
         "tool TEXT, "
         "model TEXT NOT NULL, "
         "input_tokens INT NOT NULL DEFAULT 0, "
         "output_tokens INT NOT NULL DEFAULT 0, "
-        "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())",
+        "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"),
 
-        f"CREATE INDEX IF NOT EXISTS idx_api_usage_npub_created "
-        f"ON {t('optionality_api_usage')}(npub, created_at DESC)",
+        (f"CREATE INDEX IF NOT EXISTS idx_api_usage_npub_created "
+        f"ON {t('optionality_api_usage')}(npub, created_at DESC)"),
     ]
     for stmt in stmts:
         try:
             await vault._execute(stmt)
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error("Schema DDL failed: %s\nSQL: %s", e, stmt[:200])
 
 

@@ -16,6 +16,8 @@ import json
 import logging
 from typing import Any
 
+from tollbooth import AsyncJobSituation
+
 import prompts
 from claude import (
     ClaudeError,
@@ -26,7 +28,6 @@ from claude import (
     require_api_key,
     shape_llm_text,
 )
-from tollbooth import AsyncJobSituation
 from db import journal, leaderboard
 
 logger = logging.getLogger(__name__)

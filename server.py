@@ -20,7 +20,6 @@ from typing import Annotated, Any
 
 from fastmcp import FastMCP
 from pydantic import Field
-
 from tollbooth.credential_templates import (
     LONGRUNNER_CREDENTIAL_FIELDS,
     CredentialTemplate,
@@ -864,8 +863,8 @@ async def get_api_usage_stats(
 # lets a fresh container resume a job orphaned by a serverless recycle.
 # ---------------------------------------------------------------------------
 
-from tools import dealer as _dealer  # noqa: E402
-from tools import judge as _judge  # noqa: E402
+from tools import dealer as _dealer
+from tools import judge as _judge
 
 # In-process runners resume a job orphaned by a serverless recycle only when a
 # fresh container next polls it — fragile. The closure specs register the

@@ -71,7 +71,7 @@ async def test_execute_rides_out_cold_vault(monkeypatch) -> None:
         def __init__(self) -> None:
             self.n = 0
 
-        async def _execute(self, q, params):  # noqa: ANN001
+        async def _execute(self, q, params):
             self.n += 1
             if self.n == 1:
                 raise httpx.ConnectTimeout("neon cold")

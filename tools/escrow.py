@@ -44,7 +44,7 @@ def _verify_nsec_matches_npub(nsec_bech32: str, claimed_npub: str) -> tuple[bool
         pk = PrivateKey.from_nsec(nsec_bech32)
         derived = pk.public_key.bech32()
         return (derived == claimed_npub, derived)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return (False, f"nsec parse failed: {e}")
 
 
@@ -122,7 +122,7 @@ async def withdraw_nsec(npub: str, acknowledgment: str) -> dict[str, Any]:
     # scope here. Best-effort: shadow with a same-length placeholder
     # before returning so any lingering reference is poisoned.
     response = {"success": True, "nsec": nsec_plain, "escrowed": False}
-    nsec_plain = "\x00" * len(nsec_plain)  # noqa: F841 (intentional shadow)
+    nsec_plain = "\x00" * len(nsec_plain)
     return response
 
 
@@ -167,11 +167,11 @@ async def send_patron_dm(
     try:
         from pynostr.key import PrivateKey  # type: ignore[import-untyped]
         patron_key = PrivateKey.from_nsec(nsec_plain)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return {"success": False, "error": f"escrowed nsec parse failed: {e}"}
     finally:
         # Drop the plaintext string as soon as PrivateKey owns it.
-        nsec_plain = "\x00" * len(nsec_plain)  # noqa: F841 (shadow)
+        nsec_plain = "\x00" * len(nsec_plain)
 
     # Use the wheel's existing dual-protocol sender (NIP-17 + NIP-04).
     # The _send_dm_as helper accepts an explicit PrivateKey, signs the
@@ -181,7 +181,7 @@ async def send_patron_dm(
         return {"success": False, "error": "Secure Courier not ready (operator nsec or relays missing)."}
     try:
         courier._exchange._send_dm_as(patron_key, target_npub, message)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         return {"success": False, "error": f"DM send failed: {e}"}
 
     logger.info(

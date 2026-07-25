@@ -20,8 +20,10 @@ of where the LLM actually ran.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
+
+from tollbooth import AsyncJobSituation
 
 import prompts
 from claude import (
@@ -33,7 +35,6 @@ from claude import (
     require_api_key,
     shape_llm_text,
 )
-from tollbooth import AsyncJobSituation
 from db import journal, patrons
 from tools.options_chain import build_option_chain
 
@@ -47,7 +48,7 @@ def _today_grounding() -> tuple[str, str]:
     training cutoff and will label a year-old event "today". The server knows
     the real date, so we assert it in the prompt (especially for LIVE mode).
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return now.strftime("%Y-%m-%d"), f"{now:%B} {now.day}, {now.year}"
 
 _VALID_MODES = ("historical", "fiction", "live")
@@ -481,7 +482,7 @@ async def _finalize_tip(npub: str, entry_id: str, text: str) -> dict[str, Any]:
     try:
         from db import journal as journal_db
         await journal_db.increment_tips_count(npub, entry_id)
-    except Exception:
+    except Exception:  # noqa: BLE001, S110
         pass
     return {"tip": text}
 
