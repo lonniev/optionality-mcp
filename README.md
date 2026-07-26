@@ -43,7 +43,7 @@ Mid-scenario, ask anything. Educational questions get direct, formula-backed ans
 ## Journal, Leaderboard & Peer Learning
 
 - **Journal** &mdash; every round persisted: open drafts, submitted pitches, full evaluations with leg tables and charts
-- **Leaderboard** &mdash; five sort orders (average, best, streak, played, recent), filterable by mode and difficulty
+- **Leaderboard** &mdash; six sort orders (weighted average, weighted best, raw average, raw best, streak, played), filterable by mode and difficulty
 - **Streaks** &mdash; consecutive scores of 70+, current and all-time
 - **Shared entries** &mdash; opt in to share an evaluated round so others can study the pitch, the grade, and the ledger
 - **Profile** &mdash; display name, avatar, bio
