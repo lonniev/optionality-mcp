@@ -9,7 +9,7 @@ come from the wheel via ``register_standard_tools`` and ``@runtime.paid_tool``.
 Run locally:
     python -m server
 
-Deploy on FastMCP Cloud:
+Deploy on Horizon:
     See ./fastmcp.json at the repo root.
 """
 
@@ -134,7 +134,7 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         tool_id=JUDGE_TRADE_UUID,
         capability="judge_trade",
         category="heavy",
-        intent="Evaluate the trainee's trade across five dimensions and parse trade legs",
+        intent="Evaluate the trainee's trade across six dimensions and parse trade legs",
     ),
     # ---- Claim-check companions. The three LLM tools above return a
     # claim check instead of the end item (the LLM round-trip outlives

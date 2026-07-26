@@ -2,7 +2,7 @@
 
 > An AI-judged options trading practice drill. The Firm deals an options
 > trading scenario; the trainee writes a free-text trade pitch; an AI judge
-> scores it across five dimensions, parses the trade legs, and shows how well
+> scores it across six dimensions, parses the trade legs, and shows how well
 > the pitch separated signal from noise. Identity is a Nostr keypair (npub);
 > usage is metered in Bitcoin Lightning satoshis — no account, no email, no
 > subscription, no KYC.
