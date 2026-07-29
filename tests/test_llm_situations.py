@@ -270,3 +270,63 @@ async def test_usage_is_journalled_against_the_model_that_answered() -> None:
     assert recorded["tool"] == "judge_trade"
     assert recorded["npub"] == "npub1x"
     assert recorded["model"] == expected_model
+
+
+# -- provider-reported cost --------------------------------------------------
+
+def test_reported_cost_reads_the_providers_own_figure() -> None:
+    """Recorded, not derived. Tokens from two models are not comparable money, so
+    a local rate table goes wrong the moment the route changes model."""
+    assert llm._reported_cost({"cost": 0.1345452}) == 0.1345452
+    assert llm._reported_cost({"cost": "0.02"}) == 0.02
+
+
+def test_absent_cost_is_unknown_never_free() -> None:
+    """None and 0.0 are different claims. A provider that reports no cost must
+    not be recorded as having served the call for nothing."""
+    assert llm._reported_cost({}) is None
+    assert llm._reported_cost({"cost": None}) is None
+    assert llm._reported_cost({"cost": "not-a-number"}) is None
+
+
+async def test_cost_is_journalled_with_the_call() -> None:
+    body = {
+        "content": [{"type": "text", "text": "ok"}],
+        "usage": {"input_tokens": 35542, "output_tokens": 776, "cost": 0.1474},
+    }
+    client, _ = _fake_client(_FakeResponse(200, body))
+    recorded: dict[str, Any] = {}
+
+    async def _record(**kwargs: Any) -> None:
+        recorded.update(kwargs)
+
+    with (
+        patch.object(llm, "_get_api_key", AsyncMock(return_value="k")),
+        patch.object(httpx, "AsyncClient", client),
+        patch("db.usage.record_call", AsyncMock(side_effect=_record)),
+    ):
+        await call_llm("p", "s", npub="npub1x", tool="deal_scenario")
+
+    assert recorded["cost_usd"] == 0.1474
+    assert recorded["input_tokens"] == 35542
+
+
+async def test_shape_llm_text_journals_cost_on_the_detached_path_too() -> None:
+    """Both execution paths must record the same things, or the Usage view
+    silently under-reports whichever path the operator happens to be on."""
+    raw = {"status": 200, "json": {
+        "model": "x-ai/grok-4.5",
+        "content": [{"type": "text", "text": "the answer"}],
+        "usage": {"input_tokens": 11, "output_tokens": 22, "cost": 0.003},
+    }}
+    recorded: dict[str, Any] = {}
+
+    async def _record(**kwargs: Any) -> None:
+        recorded.update(kwargs)
+
+    with patch("db.usage.record_call", AsyncMock(side_effect=_record)):
+        text = await llm.shape_llm_text(raw, npub="npub1", tool="judge_trade")
+
+    assert text == "the answer"
+    assert recorded["cost_usd"] == 0.003
+    assert recorded["model"] == "x-ai/grok-4.5"

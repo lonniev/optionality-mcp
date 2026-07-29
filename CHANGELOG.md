@@ -11,6 +11,57 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Fixed — a live sovereign deal could not finish inside its own budget
+
+A live deal's LLM budget was 360s, sized when `max_uses: 3` bounded the scenario to three
+web searches. **Measured 2026-07-28: a model router silently drops that cap.** A request
+declaring `max_uses: 1` ran *eight* searches; one declaring 3 ran *eleven* — on an xAI
+model and on an Anthropic model alike. The declaration is forwarded, the bound is not.
+
+So a live sovereign deal ran past 360s, the read timed out, and the patron watched the
+poll ceiling instead of getting a scenario.
+
+Budgets are resized against the real distribution rather than the old cap: the LLM read
+timeout goes 360s → **600s**, `max_runtime_seconds` 420 → **700** (it must stay above the
+read timeout, or a slow-but-alive call is reclaimed mid-flight instead of failing into a
+refundable situation), and the live poll cadence 300s → 480s. `llm.py` now says plainly
+that `max_uses` is decorative on this route, so nobody sizes anything against it again.
+
+**Capping the search count was tried and rejected.** The model obeys a prompt-level "at
+most twice" where it ignores `max_uses` — and then answers the rest from training data,
+emitting a scenario dated a year in the past with no signal it had done so. For a trading
+drill that is worse than failing.
+
+### Changed — LIVE mode hunts a shopping list instead of browsing
+
+The old instruction ("find market conditions, recent news, and active catalysts") named no
+finish line, so every answer invited another query — eleven searches and ~35k input tokens
+for one scenario, since it is search *results*, not the prompt, that fill the context.
+
+`SCENARIO_LIVE` now names the six facts a live scenario actually needs, the order to get
+them (broad once → narrow to one ticker → stop), and what needs no research at all (option
+chains, analyst targets, red-herring material). It stops the model answering from memory,
+and tells it what to do when a fact won't come: estimate from the regime and say so in
+`skew_note`, rather than substituting a remembered price or searching forever.
+
+### Added — the Usage view reports what the provider actually billed
+
+`optionality_api_usage` gains a `cost_usd` column, written from the provider's own
+per-call figure. The browser previously reconstructed cost from a bundled rate table; that
+was fine while one model was hardwired, and wrong the moment the route can change model,
+because tokens from two models are not comparable money.
+
+Rows predating the column carry NULL and are rendered as estimates, explicitly labelled —
+never silently blended with measured figures. `null` means unknown, never free.
+
+`get_api_usage_stats` gains a `totals` block including **`avg_cost_usd`** — what one
+scenario, clue or verdict costs to serve, which is the figure that says whether a tool's
+sats price covers its own compute. The Usage page surfaces it as a "Cost per call" tile
+and a per-model "Per call" figure.
+
+The sats-equivalent tile's $100K/BTC constant is now labelled as the fixed reference rate
+it has always been, rather than reading as today's spot.
+
 ### Changed — LLM calls route through a model router, and the wheel decides which
 
 `claude.py` is now `llm.py`. Its docstring recorded that it had been *"Modeled after

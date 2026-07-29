@@ -245,9 +245,16 @@ async def _prepare_deal(
         "enable_web_search": enable_web_search,
         # The per-attempt HTTP read timeout for the LLM call. Live+web_search can
         # run several minutes; 240s was cutting genuine calls short (Prefect flow
-        # ReadTimeout). Sits under max_runtime (420s) so a real stall still fails
-        # fast into a refundable situation rather than riding to the FE ceiling.
-        "timeout_seconds": 360 if enable_web_search else 120,
+        # ReadTimeout). Sits under max_runtime so a real stall still fails fast
+        # into a refundable situation rather than riding to the FE ceiling.
+        #
+        # 360s was sized when `max_uses` bounded the search to 3 rounds. Measured
+        # 2026-07-28: a model router DROPS that cap — a request declaring
+        # `max_uses: 1` still ran EIGHT searches, and one declaring 3 ran eleven.
+        # The fan-out is not waste (see prompts.SCENARIO_LIVE: two searches
+        # returned a scenario dated a year stale), but it is unbounded, so the
+        # budget must cover the tail rather than the median.
+        "timeout_seconds": 600 if enable_web_search else 120,
     }
 
 

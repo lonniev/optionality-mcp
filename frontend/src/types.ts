@@ -332,19 +332,39 @@ export interface LeaderboardResult {
   count: number;
 }
 
-/// One row of the Claude API usage view, grouped by model. Mirrors the
-/// shape taxsort-mcp's `get_api_usage_stats` returns so the FE-side
-/// math (per-model cost + sats equivalent) is identical.
+/// One row of the LLM usage view, grouped by model.
+///
+/// `total_cost_usd` is what the PROVIDER reported for these calls — not a figure
+/// the browser reconstructs from a rate table. Tokens from two models are not
+/// comparable money, so any local table goes wrong the moment the route changes
+/// model. `null` means no call in this group reported a cost (rows written before
+/// the column existed): render it as unknown, never as free. `priced_runs` says
+/// how many of `runs` carried one.
 export interface ModelUsage {
   model: string;
   runs: number;
   total_calls: number;
   total_input_tokens: number;
   total_output_tokens: number;
+  total_cost_usd: number | null;
+  priced_runs: number;
+}
+
+/// Fleet-wide rollup across every model. `avg_cost_usd` is what one call costs
+/// to serve — the figure that says whether a tool's sats price covers its own
+/// compute.
+export interface UsageTotals {
+  runs: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cost_usd: number | null;
+  priced_runs: number;
+  avg_cost_usd: number | null;
 }
 
 export interface ApiUsageResult {
   models: ModelUsage[];
+  totals?: UsageTotals;
 }
 
 /// Lifetime per-tool entry from the wheel's account_statement. The

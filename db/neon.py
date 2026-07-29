@@ -257,6 +257,15 @@ async def _ensure_domain_schema(vault: Any) -> None:
 
         (f"CREATE INDEX IF NOT EXISTS idx_api_usage_npub_created "
         f"ON {t('optionality_api_usage')}(npub, created_at DESC)"),
+
+        # What the provider said this call cost, in USD. NULL for rows written
+        # before this column existed and for any provider that reports no cost —
+        # unknown and free are different claims, so it is never defaulted to 0.
+        # Recorded rather than derived: tokens from two different models are not
+        # comparable money, so a local price table would go wrong the moment the
+        # route changes model.
+        (f"ALTER TABLE {t('optionality_api_usage')} "
+        "ADD COLUMN IF NOT EXISTS cost_usd DOUBLE PRECISION"),
     ]
     for stmt in stmts:
         try:
