@@ -148,7 +148,7 @@ async def _alert_operator_provider_down(situation: AsyncJobSituation) -> None:
     def _run() -> None:
         try:
             exchange.send_dm(operator_npub, message)
-        except Exception:  # noqa: BLE001 — courtesy DM, non-blocking
+        except Exception:  # courtesy DM — never breaks the caller
             logger.debug("operator provider-down DM failed (courtesy)", exc_info=True)
 
     threading.Thread(target=_run, daemon=True).start()
@@ -326,7 +326,7 @@ async def call_llm(
             next_steps="Please try again.",
             transient=True,
         ) from e
-    except Exception as e:  # noqa: BLE001 — transport, DNS, TLS
+    except Exception as e:  # transport, DNS, TLS
         raise AsyncJobSituation(
             error_code="llm_transport",
             message="The AI provider couldn't be reached, so your request "

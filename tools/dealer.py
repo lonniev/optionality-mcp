@@ -26,6 +26,7 @@ from typing import Any
 from tollbooth import AsyncJobSituation
 
 import prompts
+from db import journal, patrons
 from llm import (
     TIER_TIP,
     LlmError,
@@ -36,7 +37,6 @@ from llm import (
     require_api_key,
     shape_llm_text,
 )
-from db import journal, patrons
 from tools.options_chain import build_option_chain
 
 logger = logging.getLogger(__name__)
@@ -235,7 +235,7 @@ async def _prepare_deal(
         f"{avoid_clause}"
     )
     enable_web_search = mode == "live"
-    # Bound the LLM call by the job budget: live mode runs Anthropic web_search
+    # Bound the LLM call by the job budget: live mode runs server-side web_search
     # and legitimately takes longer; a plain generation should finish well
     # inside two minutes. A stall past this raises a refundable situation.
     return {
@@ -361,7 +361,7 @@ async def deal_shape_result(
 
 # A clue question is a sentence or two. Anything much longer is either
 # noise or an attempt to smuggle a bulk prompt onto the operator's
-# Anthropic account behind the small clue fee — cap it before we ever
+# provider account behind the small clue fee — cap it before we ever
 # pay for input tokens. The TIP_SYSTEM prompt is the second line of
 # defense for off-topic (but short) questions.
 MAX_TIP_QUESTION_CHARS = 500

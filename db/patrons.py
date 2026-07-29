@@ -192,7 +192,7 @@ async def escrow_nsec_set(npub: str, nsec_bech32: str, operator_nsec_hex: str) -
     The caller is responsible for verifying that nsec_bech32 derives to
     the same npub passed in — this function trusts that check has run.
     Encryption uses the operator's nsec-derived AES key (the same key
-    that protects the Anthropic api_key and other vaulted credentials).
+    that protects the llm_api_key and other vaulted credentials).
     AAD binds to the patron's npub so cross-row decryption fails.
     """
     from tollbooth.vault_encryption import VaultCipher

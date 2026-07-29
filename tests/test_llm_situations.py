@@ -20,7 +20,6 @@ from unittest.mock import AsyncMock, patch
 import httpx
 import pytest
 from tollbooth import AsyncJobSituation
-
 from tollbooth.llm_route import clamp_timeout
 
 import llm

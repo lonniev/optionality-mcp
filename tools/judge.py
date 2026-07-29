@@ -19,6 +19,7 @@ from typing import Any
 from tollbooth import AsyncJobSituation
 
 import prompts
+from db import journal, leaderboard
 from llm import (
     LlmError,
     build_llm_request,
@@ -28,7 +29,6 @@ from llm import (
     require_api_key,
     shape_llm_text,
 )
-from db import journal, leaderboard
 
 logger = logging.getLogger(__name__)
 

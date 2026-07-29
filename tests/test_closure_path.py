@@ -14,6 +14,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from tollbooth import AsyncJobSituation
+from tollbooth.llm_route import error_message
 
 import llm
 from llm import (
@@ -22,7 +23,6 @@ from llm import (
     shape_llm_text,
     situation_from_status,
 )
-from tollbooth.llm_route import error_message
 
 # ── request builder ──────────────────────────────────────────────────────────
 
