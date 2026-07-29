@@ -3012,22 +3012,39 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
         {tab === "usage" && (() => {
           const models: ModelUsage[] = apiUsage?.models ?? [];
+          // Prefer what the provider billed. Only fall back to the local rate
+          // table for rows written before the cost column existed — and say so,
+          // rather than blending a measured number with a guessed one silently.
+          const costOf = (m: ModelUsage): { usd: number; reported: boolean } => {
+            if (m.total_cost_usd !== null && m.total_cost_usd !== undefined) {
+              return { usd: m.total_cost_usd, reported: true };
+            }
+            const p = priceFor(m.model);
+            return {
+              usd:
+                (m.total_input_tokens / 1_000_000) * p.input +
+                (m.total_output_tokens / 1_000_000) * p.output,
+              reported: false,
+            };
+          };
+
           let totalInputTokens = 0;
           let totalOutputTokens = 0;
           let totalRuns = 0;
-          let estimatedCostUsd = 0;
+          let totalCostUsd = 0;
+          let anyEstimated = false;
           for (const m of models) {
             totalInputTokens += m.total_input_tokens;
             totalOutputTokens += m.total_output_tokens;
             totalRuns += m.runs;
-            const p = priceFor(m.model);
-            estimatedCostUsd +=
-              (m.total_input_tokens / 1_000_000) * p.input +
-              (m.total_output_tokens / 1_000_000) * p.output;
+            const c = costOf(m);
+            totalCostUsd += c.usd;
+            if (!c.reported) anyEstimated = true;
           }
           const totalTokens = totalInputTokens + totalOutputTokens;
+          const avgCostUsd = totalRuns > 0 ? totalCostUsd / totalRuns : 0;
           const btcPriceUsd = 100_000;
-          const estimatedSats = Math.round((estimatedCostUsd / btcPriceUsd) * 100_000_000);
+          const estimatedSats = Math.round((totalCostUsd / btcPriceUsd) * 100_000_000);
 
           return (
             <div className="panel" style={{ position: "relative" }}>
@@ -3042,15 +3059,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <MaterialIcon path={MI_REFRESH} size={30} />
               </button>
               <span className="panel-label">Usage</span>
-              <h2 className="serif">Claude API usage & estimated cost</h2>
+              <h2 className="serif">AI usage & what it cost</h2>
               <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
-                Optionality calls Anthropic's Claude for every scenario, clue, and verdict.
-                {" "}This is what your tool calls have spent in tokens — and what those tokens
-                {" "}cost the operator at Anthropic's published rates. Your toll covers this plus operator overhead.
+                Optionality calls a model for every scenario, clue, and verdict. This is what
+                {" "}your tool calls have spent in tokens — and what the provider actually billed
+                {" "}the operator for them. Your toll covers this plus operator overhead.
                 {" "}No hidden margin.
               </p>
               <p style={{ color: "var(--ink-faint)", fontSize: 10, marginTop: -10, marginBottom: 16 }}>
-                Rates via OpenRouter pass-through, fetched {PRICING_FETCHED_AT.slice(0, 10)}.
+                {anyEstimated
+                  ? `Figures marked "est." predate per-call cost reporting and are inferred from published rates (fetched ${PRICING_FETCHED_AT.slice(0, 10)}); the rest are what the provider billed.`
+                  : "Costs are the provider's own per-call figures, not an estimate."}
               </p>
 
               {apiUsageLoading && apiUsage === null && (
@@ -3065,10 +3084,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <>
                   {/* Per-model breakdown */}
                   {models.map((m, i) => {
-                    const p = priceFor(m.model);
-                    const cost =
-                      (m.total_input_tokens / 1_000_000) * p.input +
-                      (m.total_output_tokens / 1_000_000) * p.output;
+                    const c = costOf(m);
+                    const cost = c.usd;
+                    const perRun = m.runs > 0 ? cost / m.runs : 0;
                     return (
                       <div key={i} style={{ background: "var(--bg-soft)", border: "1px solid var(--panel-edge)", padding: "12px 14px", marginBottom: 8 }}>
                         <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
@@ -3078,7 +3096,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           <div><span style={{ color: "var(--ink-faint)" }}>Runs:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.runs}</span></div>
                           <div><span style={{ color: "var(--ink-faint)" }}>Input:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.total_input_tokens.toLocaleString()}</span></div>
                           <div><span style={{ color: "var(--ink-faint)" }}>Output:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.total_output_tokens.toLocaleString()}</span></div>
-                          <div><span style={{ color: "var(--ink-faint)" }}>Cost:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>${fmt$(cost)}</span></div>
+                          <div><span style={{ color: "var(--ink-faint)" }}>Cost{c.reported ? "" : " (est.)"}:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>${fmt$(cost)}</span></div>
+                          <div><span style={{ color: "var(--ink-faint)" }}>Per call:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>${fmt$(perRun)}</span></div>
                         </div>
                       </div>
                     );
@@ -3088,13 +3107,24 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 18 }}>
                     <div style={{ background: "rgba(212,163,91,0.06)", border: "1px solid var(--amber)", padding: 16 }}>
                       <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
-                        Estimated Anthropic cost
+                        {anyEstimated ? "AI cost (part est.)" : "AI cost billed"}
                       </div>
                       <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500 }}>
-                        ${fmt$(estimatedCostUsd)}
+                        ${fmt$(totalCostUsd)}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
                         {totalTokens.toLocaleString()} tokens across {totalRuns} model calls
+                      </div>
+                    </div>
+                    <div style={{ background: "rgba(212,163,91,0.06)", border: "1px solid var(--amber)", padding: 16 }}>
+                      <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
+                        Cost per call
+                      </div>
+                      <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500 }}>
+                        ${fmt$(avgCostUsd)}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
+                        averaged over every scenario, clue and verdict
                       </div>
                     </div>
                     <div style={{ background: "rgba(107,142,107,0.06)", border: "1px solid var(--jade)", padding: 16 }}>
@@ -3113,7 +3143,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 18, fontStyle: "italic", lineHeight: 1.6 }}>
                     Operator passes the AI cost through to patrons via Lightning micropayments.
                     {" "}This view is the raw transparency — you see what each scenario, tip, and
-                    {" "}verdict cost in real tokens, plus a sats estimate at a $100K/BTC reference.
+                    {" "}verdict actually cost, plus a sats equivalent at a fixed ${btcPriceUsd.toLocaleString()}/BTC
+                    {" "}reference rate (a yardstick for comparison, not today's spot).
                   </div>
                 </>
               )}

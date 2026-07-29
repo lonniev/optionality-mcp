@@ -112,6 +112,40 @@ CAMOUFLAGE — how to embed them:
 - DO weave it inline: it should be its own clean sentence within the paragraph, OR a clause integrated grammatically into a relevant sentence at the same level of importance, with no marker distinguishing it from genuinely material context."""
 
 
+# LIVE mode is the only path that reaches the web, and search results — not this
+# text — are what fill the context window. A measured live deal spent ~35k input
+# tokens across ELEVEN searches, because the old instruction ("find market
+# conditions, recent news, and active catalysts") named no finish line: every
+# answer invited another query.
+#
+# So this version names the FACTS and the ORDER, not a number of searches. A hard
+# count cap was tried and rejected — the model obeys it, then answers the rest from
+# training data and dates the scenario a year stale without saying so. Naming the
+# shopping list lets it stop because it is done, not because it ran out of budget.
+SCENARIO_LIVE = """MODE: LIVE EVENTS.
+
+The prompt gives you the real current date. Treat it as NOW and trust it over your own sense of the date — your training cutoff is older than this date, so anything you "remember" about current prices is stale and must not be used.
+
+You are shopping for exactly SIX facts. Nothing else needs research:
+  1. The market regime this week — what the Fed / Treasury / tape is actually doing.
+  2. ONE ticker with a real catalyst inside the next ~2 weeks (earnings, FDA, macro print, deal, expiry event).
+  3. That ticker's current spot price.
+  4. That ticker's 30-day ATM implied volatility (and the 25-delta put/call wings if the source gives them).
+  5. Whether the catalyst is already priced in — the expected move, or recent skew commentary.
+  6. ONE source URL you actually read, for the "sources" array.
+
+SEARCH ORDER — go broad once, then narrow, then stop:
+  • First search: this week's market regime and notable upcoming catalysts. Pick your ticker from what comes back. Do NOT pick the ticker first and then go looking for a reason.
+  • Then search that ONE ticker for spot, IV, and expected move. Name the ticker in the query — do not search generically again.
+  • STOP when you hold facts 1–6. You have enough. Additional searching does not improve the drill and costs the trainee money.
+
+DO NOT search for: option chains or strike ladders (the server builds the chain from your scaffolds), historical background on the company, analyst price targets, or material for red_herrings — invent those from the context you already have.
+
+IF A FACT WON'T COME: do not substitute a remembered number and do not keep searching for it. Estimate spot/IV from the regime, say so plainly in skew_note, and move on. A scenario honestly marked "IV estimated from regime" is useful; a confidently wrong price is not.
+
+date_context should read 'Today, [the supplied date]' or similar and MUST reference that date's year — never an earlier one. macro_backdrop must reflect what is actually happening in the week of the supplied date. today_date MUST be the supplied date (or the most recent trading day on or before it)."""
+
+
 MODE_INSTRUCTIONS: dict[str, str] = {
     "historical": """MODE: HISTORICAL FICTION.
 Anchor this scenario to a real, identifiable moment in market history — a specific week or named event. The macro_backdrop and catalyst must reflect what actually happened politically, monetarily, and economically in that period. Spot price, IV 30d, IV rank, and skew are plausible reconstructions consistent with the regime (not pulled from a historical option chain feed). Include the year in date_context. Examples of fertile ground: Aug 2015 China devaluation, Feb 2018 Volmageddon, March 2020 COVID, Jan-Feb 2021 retail squeeze, Nov 2021 hawkish pivot, May-June 2022 vol regime, Sep-Oct 2022 BoE/gilt crisis, March 2023 SVB, Aug 2024 yen carry unwind, post-election volatility windows, debt-ceiling standoffs, tariff shocks.""",
@@ -119,8 +153,7 @@ Anchor this scenario to a real, identifiable moment in market history — a spec
     "fiction": """MODE: FICTION.
 This is pure invention. Construct a hypothetical scenario — near-future, counterfactual, or speculative regime. You have full creative license. Common fertile ground: a counterfactual debasement spiral, a sovereign debt event, a stablecoin de-peg cascade, a Bitcoin spot ETF gamma squeeze, a CBDC announcement, a regional currency crisis, an AI-capex bubble unwind, a geopolitical kinetic event. Mark date_context with phrases like 'Hypothetical: Q3 2026' or 'Counterfactual: a world where...' so the trainee knows this is not real. The macro/political logic must still be internally consistent.""",
 
-    "live": """MODE: LIVE EVENTS.
-The prompt gives you the real current date — treat it as NOW and trust it over your own sense of the date. Use the web_search tool to find market conditions, recent news, and active catalysts current as of that date. Then build the scenario around a real ticker with real present-day setup. date_context should be 'Today, [the supplied date]' or similar, and must reference that date's year — never an earlier one. macro_backdrop must reflect what is actually happening in markets in the week of the supplied date. Cite specific recent events and include URLs or source names in the "sources" array. If exact IV numbers aren't findable, estimate from the regime and note that in skew_note.""",
+    "live": SCENARIO_LIVE,
 }
 
 

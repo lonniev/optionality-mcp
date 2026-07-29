@@ -49,14 +49,21 @@ logger = logging.getLogger(__name__)
 TIER_DRILL = TIER_WRITER
 TIER_TIP = TIER_READER
 
-# Server-side web search, in its dynamic-filtering variant: the provider filters
-# results server side, so a "live" scenario resolves far faster than the basic
-# variant did. ``max_uses`` bounds the search ROUNDS — the dominant latency cost of
-# a live deal: the model writes a query, the provider runs the search AND spins up
-# a code-execution sandbox to dynamic-filter the results, then the model reads and
-# may search again. Three rounds cover a live scenario (ticker + catalyst +
-# price/IV); five just added minutes. (Do NOT also declare code_execution:
-# dynamic filtering runs it under the hood.)
+# Server-side web search, in its dynamic-filtering variant.
+#
+# ``max_uses`` IS DECORATIVE ON THIS ROUTE — do not size any budget against it.
+# Measured 2026-07-28 against OpenRouter: a request declaring `max_uses: 1` ran
+# EIGHT searches; one declaring 3 ran eleven. The cap is dropped in translation,
+# on both an xAI and an Anthropic model. It is kept here because it costs nothing
+# and is honoured if the endpoint is ever pointed back at a lab directly.
+#
+# The fan-out is not waste. Capping it from the prompt side DOES work — the model
+# obeys "at most twice" where it ignores `max_uses` — but two searches were not
+# enough to reach current tape, and the model then answered from training data and
+# emitted a scenario dated a year stale, with no signal it had. For a trading
+# drill that is worse than failing. So the search runs until the model is
+# satisfied, and prompts.SCENARIO_LIVE focuses WHAT it hunts for instead of how
+# often. What bounds the call is the caller's timeout, not this number.
 _WEB_SEARCH_ROUNDS = 3
 WEB_SEARCH_TOOL = web_search_tool(_WEB_SEARCH_ROUNDS)
 
@@ -245,10 +252,28 @@ def response_text_from_json(raw_json: dict[str, Any] | None) -> str:
     return "\n".join(parts).strip()
 
 
+def _reported_cost(usage_obj: dict[str, Any]) -> float | None:
+    """The provider's own USD cost for a call, when it reports one.
+
+    A model router returns this alongside the token counts, which makes it the
+    honest figure to journal: token counts from two models are not comparable
+    money, so anything reconstructed from a local price table goes wrong the
+    moment the route changes model. Returns ``None`` — never 0.0 — when absent,
+    because unknown and free are different claims.
+    """
+    raw = usage_obj.get("cost")
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 async def _record_usage_from_json(
     raw_json: dict[str, Any] | None, *, npub: str, tool: str, model: str
 ) -> None:
-    """Journal token usage from a raw response for the Profile/Usage view.
+    """Journal token usage and provider cost for the Profile/Usage view.
 
     Best-effort; a usage-write failure never affects the shaped result.
     """
@@ -261,6 +286,7 @@ async def _record_usage_from_json(
             await _usage.record_call(
                 npub=npub, tool=tool, model=model,
                 input_tokens=in_tok, output_tokens=out_tok,
+                cost_usd=_reported_cost(usage_obj),
             )
     except Exception:  # noqa: BLE001, S110
         pass

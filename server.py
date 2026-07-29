@@ -404,7 +404,7 @@ async def deal_scenario(
         )
     # Budget-aware poll cadence: live mode runs web_search and takes longer.
     # Mirrors the LLM timeout the runner enforces (tools/dealer.py).
-    expected = 300 if mode == "live" else 120
+    expected = 480 if mode == "live" else 120
     resp = await runtime.start_async_job(
         "deal_scenario",
         npub,
@@ -419,8 +419,10 @@ async def deal_scenario(
         # Live + web_search on a cold Prefect Managed worker (~40-50s spin-up)
         # legitimately runs several minutes; give the job room to finish before
         # the watchdog reclaims it, and keep a finished result claimable long
-        # enough for a patron who wandered off to come back for it.
-        max_runtime_seconds=420,
+        # enough for a patron who wandered off to come back for it. Must stay
+        # ABOVE the runner's own 600s LLM read timeout so a slow-but-alive call
+        # fails as a curated situation rather than being reclaimed mid-flight.
+        max_runtime_seconds=700,
         result_ttl_seconds=1200,
         expected_seconds=expected,
     )
@@ -848,13 +850,19 @@ async def get_api_usage_stats(
     npub: NpubField = "",
     dpop_token: str = "",
 ) -> dict[str, Any]:
-    """Aggregated LLM token usage for this patron's calls.
+    """Aggregated LLM usage and cost for this patron's calls.
 
-    Returns ``{"models": [{"model", "runs", "total_calls",
-    "total_input_tokens", "total_output_tokens"}, ...]}``. One row per
-    distinct model the patron's tool calls have invoked. The FE multiplies
-    by published per-million pricing to show estimated USD
-    cost and the sats equivalent — same transparency view as taxsort-mcp.
+    Returns ``{"models": [{"model", "runs", "total_calls", "total_input_tokens",
+    "total_output_tokens", "total_cost_usd", "priced_runs"}, ...], "totals": {...}}``.
+    One row per distinct model the patron's tool calls have invoked.
+
+    ``total_cost_usd`` is what the PROVIDER reported for those calls, not a figure
+    reconstructed from a price table — tokens from two models are not comparable
+    money, so a local table goes wrong the moment the route changes model.
+    ``priced_runs`` says how many of ``runs`` carried a reported cost, so a caller
+    can render "$0.42 across 3 of 5 runs" rather than implying the rest were free.
+    ``totals.avg_cost_usd`` is what one call actually costs to serve — the number
+    that says whether a tool's sats price covers its own compute.
     """
     from db.usage import get_usage_stats
     return await get_usage_stats(npub=npub)

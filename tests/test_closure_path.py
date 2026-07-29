@@ -240,3 +240,49 @@ def test_precheck_tip_question_guards_degenerate_input() -> None:
     assert precheck_tip_question("   ")["tip"]
     assert precheck_tip_question("x" * (MAX_TIP_QUESTION_CHARS + 1))["tip"]
     assert precheck_tip_question("What's the catalyst?") is None  # real → to LLM
+
+
+# ── live-mode budget: sized against an UNBOUNDED search fan-out ──────────────
+
+async def test_live_budget_covers_the_search_tail_not_the_median() -> None:
+    """`max_uses` is dropped by the model router (measured 2026-07-28: a request
+    declaring 1 ran eight searches). The 360s budget was sized when that cap held,
+    and a live sovereign deal timed out against it. The budget must now cover the
+    tail, and must stay under the job's max_runtime so a genuine stall still fails
+    into a refundable situation rather than being reclaimed mid-flight."""
+    from unittest.mock import AsyncMock, patch
+
+    from tools import dealer
+
+    with patch("db.patrons.upsert_patron", AsyncMock()), patch(
+        "db.journal.recent_tickers", AsyncMock(return_value=[])
+    ):
+        live = await dealer._prepare_deal(
+            npub="n", mode="live", difficulty="sovereign", max_loss_usd=None, sector="",
+        )
+        dry = await dealer._prepare_deal(
+            npub="n", mode="historical", difficulty="sovereign", max_loss_usd=None, sector="",
+        )
+
+    assert live["enable_web_search"] is True
+    assert dry["enable_web_search"] is False
+    # Longer than the observed tail, and well past the old 360s that timed out.
+    assert live["timeout_seconds"] >= 600
+    # A dry generation does no searching and must not inherit the grounded budget.
+    assert dry["timeout_seconds"] <= 180
+
+
+def test_live_prompt_names_the_facts_and_forbids_answering_from_memory() -> None:
+    """Capping the search COUNT was tried and rejected — the model obeys, then
+    fills the gaps from training data and dates the scenario a year stale without
+    saying so. The instruction must instead name what to find and when to stop."""
+    import prompts
+
+    live = prompts.MODE_INSTRUCTIONS["live"]
+    assert live is prompts.SCENARIO_LIVE
+    low = live.lower()
+    assert "stop" in low                      # an explicit finish line
+    assert "stale" in low                     # names the failure it is preventing
+    assert "do not search for" in low         # excludes what needs no research
+    # An honest gap beats a confident wrong number.
+    assert "skew_note" in live
