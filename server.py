@@ -294,13 +294,13 @@ runtime = OperatorRuntime(
         ),
         fields={
             **LONGRUNNER_CREDENTIAL_FIELDS,
-            "anthropic_api_key": FieldSpec(
+            "llm_api_key": FieldSpec(
                 required=True,
                 sensitive=True,
                 description=(
-                    "Operator's Anthropic API key. Used for server-side "
-                    "Claude calls when patrons invoke `deal_scenario`, "
-                    "`judge_trade`, or `ask_tip`."
+                    "Operator's model-router API key (OpenRouter by default). "
+                    "Used for server-side LLM calls when patrons invoke "
+                    "`deal_scenario`, `judge_trade`, or `ask_tip`."
                 ),
             ),
             "btcpay_host": FieldSpec(
@@ -863,8 +863,11 @@ async def get_api_usage_stats(
 # lets a fresh container resume a job orphaned by a serverless recycle.
 # ---------------------------------------------------------------------------
 
-from tools import dealer as _dealer
-from tools import judge as _judge
+# Imported HERE, below the tool definitions, and not at the top of the module:
+# `tools.dealer` and `tools.judge` reach back into `server` for the runtime, so a
+# top-of-file import closes the cycle and fails at load. Deliberate, not drift.
+from tools import dealer as _dealer  # noqa: E402
+from tools import judge as _judge  # noqa: E402
 
 # In-process runners resume a job orphaned by a serverless recycle only when a
 # fresh container next polls it — fragile. The closure specs register the

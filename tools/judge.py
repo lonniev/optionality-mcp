@@ -19,10 +19,10 @@ from typing import Any
 from tollbooth import AsyncJobSituation
 
 import prompts
-from claude import (
-    ClaudeError,
-    build_anthropic_request,
-    call_claude,
+from llm import (
+    LlmError,
+    build_llm_request,
+    call_llm,
     empty_output_situation,
     extract_json,
     require_api_key,
@@ -77,7 +77,7 @@ async def _finalize(
     """Parse the evaluation, persist it, recompute the leaderboard."""
     try:
         evaluation = extract_json(text)
-    except ClaudeError as e:
+    except LlmError as e:
         raise empty_output_situation() from e
 
     await journal.record_evaluation(
@@ -93,7 +93,7 @@ async def _finalize(
 async def judge_trade(npub: str, entry_id: str, trade_proposal: str) -> dict[str, Any]:
     """In-process runner: prepare → call the judge LLM → finalize."""
     prompt = await _prepare(npub, entry_id, trade_proposal)
-    raw = await call_claude(
+    raw = await call_llm(
         prompt,
         prompts.EVAL_SYSTEM,
         max_tokens=_MAX_TOKENS,
@@ -112,7 +112,7 @@ async def build_closure(
     api_key = await require_api_key()
     return {
         "op": "http_request",
-        "request": build_anthropic_request(
+        "request": build_llm_request(
             api_key=api_key,
             prompt=prompt,
             system=prompts.EVAL_SYSTEM,

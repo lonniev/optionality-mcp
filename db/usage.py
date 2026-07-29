@@ -21,7 +21,7 @@ async def record_call(
 
     Best-effort — if the insert fails (vault hiccup, schema not yet
     provisioned, etc.) the caller's response is not affected. Same
-    pattern as `claude.complete_text`'s error tolerance — usage stats
+    pattern as `llm.call_llm`'s error tolerance — usage stats
     are a transparency feature, not a billing source of truth (the
     Tollbooth wheel handles the actual debit).
     """

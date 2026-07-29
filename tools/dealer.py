@@ -26,10 +26,11 @@ from typing import Any
 from tollbooth import AsyncJobSituation
 
 import prompts
-from claude import (
-    ClaudeError,
-    build_anthropic_request,
-    call_claude,
+from llm import (
+    TIER_TIP,
+    LlmError,
+    build_llm_request,
+    call_llm,
     empty_output_situation,
     extract_json,
     require_api_key,
@@ -261,7 +262,7 @@ async def _finalize_deal(
     """Parse the scenario, build the chain, open the journal entry."""
     try:
         scenario = extract_json(text)
-    except ClaudeError as e:
+    except LlmError as e:
         raise empty_output_situation() from e
 
     scenario["mode"] = mode  # belt-and-suspenders: ensure mode round-trips
@@ -305,7 +306,7 @@ async def deal_scenario(
     synchronously via ``replay_scenario``.
     """
     parts = await _prepare_deal(npub, mode, difficulty, max_loss_usd, sector)
-    raw = await call_claude(
+    raw = await call_llm(
         parts["prompt"],
         parts["system"],
         max_tokens=parts["max_tokens"],
@@ -330,7 +331,7 @@ async def deal_build_closure(
     api_key = await require_api_key()
     return {
         "op": "http_request",
-        "request": build_anthropic_request(
+        "request": build_llm_request(
             api_key=api_key,
             prompt=parts["prompt"],
             system=parts["system"],
@@ -498,9 +499,10 @@ async def ask_tip(
     # Web search is available so a genuinely curious question can be answered
     # against a current, authoritative source, and the desk can recommend a real
     # link it actually found. A stall past the budget raises a refundable situation.
-    text = await call_claude(
+    text = await call_llm(
         prompt, prompts.TIP_SYSTEM, max_tokens=1500,
         enable_web_search=True,
+        tier=TIER_TIP,
         npub=npub, tool="ask_tip",
         timeout_seconds=120,
     )
@@ -519,12 +521,13 @@ async def tip_build_closure(
     api_key = await require_api_key()
     return {
         "op": "http_request",
-        "request": build_anthropic_request(
+        "request": build_llm_request(
             api_key=api_key,
             prompt=prompt,
             system=prompts.TIP_SYSTEM,
             max_tokens=1500,
             enable_web_search=True,
+            tier=TIER_TIP,
             timeout_seconds=120,
         ),
     }

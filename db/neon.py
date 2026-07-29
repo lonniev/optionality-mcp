@@ -241,8 +241,8 @@ async def _ensure_domain_schema(vault: Any) -> None:
         (f"CREATE INDEX IF NOT EXISTS idx_leaderboard_weighted_best "
         f"ON {t('optionality_leaderboard_stats')}(weighted_best DESC)"),
 
-        # Per-patron Claude API usage. One row per outbound `messages.create`,
-        # written by `claude.complete_text` after the response lands. Surfaces
+        # Per-patron LLM usage. One row per outbound messages call, written
+        # by `llm.call_llm` after the response lands. Surfaces
         # in the FE's Profile/Usage view so the patron sees exactly what their
         # sats bought — same transparency principle as taxsort-mcp's
         # `tax_api_usage` table.
