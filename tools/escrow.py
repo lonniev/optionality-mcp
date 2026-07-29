@@ -5,7 +5,7 @@ operator so the operator can sign Nostr DMs on their behalf — useful
 for platforms (iPadOS, etc.) where a NIP-07 browser-extension signer
 isn't practical. The trade is sovereignty for UX: the operator
 becomes a custodian of the patron's game-scoped Nostr identity, with
-the same security posture as the Anthropic api_key (AES-256-GCM at
+the same security posture as the llm_api_key (AES-256-GCM at
 rest, decrypted only in-process during signing).
 
 Architectural notes:

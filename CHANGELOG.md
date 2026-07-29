@@ -11,6 +11,56 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed — LLM calls route through a model router, and the wheel decides which
+
+`claude.py` is now `llm.py`. Its docstring recorded that it had been *"Modeled after
+`taxsort-mcp/tools/advisors.py`"* — one of three near-identical copies of the same
+provider plumbing across the estate, each pinning `api.anthropic.com`, each declaring its
+own web-search tool, two carrying a byte-identical `clamp_timeout`. That is a wheel
+concern and now lives in `tollbooth.llm_route` (SDK 0.74.0). What stays here is what makes
+a *drill* good: the prompts, the usage journal, and the JSON coercion they depend on.
+
+Dealing and judging draw the **writer** tier — both compose reasoned prose the patron is
+asked to trust, and a live deal grounds itself with web search. Tips draw the **reader**
+tier: a hint alongside a scenario already in front of the patron. Changing either model is
+an environment variable and a restart, not a release.
+
+**One request shape, one execution path.** The in-process path used the `anthropic` SDK
+client while the detached closure path built a raw HTTP envelope, so every provider
+behaviour had to be understood — and every provider failure classified — twice, by
+`_provider_situation` and `situation_from_status`. Both now build the same envelope and
+read the same reply, and `_provider_situation` is gone. The `anthropic` package is no
+longer a dependency.
+
+**The vaulted credential is renamed `anthropic_api_key` → `llm_api_key`, with no
+compatibility shim.** The operator must redeliver it via Secure Courier — already required
+to change providers, so the rename costs nothing extra.
+
+### Fixed — an exhausted AI account was reported as a passing blip
+
+Both classifiers decided the provider had run out of money by matching one lab's wording
+(`credit balance`, `purchase credits`, `plans & billing`), because that lab reports an
+empty account as a **400**. A model router reports the same condition as a **402** reading
+*"Insufficient credits"* — matching none of those needles.
+
+So an exhausted account was curated as `llm_unavailable`, `transient: True`: the
+operator's "feed me" DM never fired, and patrons were told to retry a drill that could
+never succeed until someone noticed the balance. The wheel's classifier now reads both
+providers' wording and treats a bare 402 from a metered LLM provider as unfunded. A model
+slug the provider no longer offers is newly distinguished as permanent rather than
+retryable — the signature of a marketplace retiring a model under a running deployment.
+
+The operator DM was also telling them to add credit at `console.anthropic.com` whatever
+provider the key belonged to. It now points at the account behind `llm_api_key` without
+naming a vendor console the operator may not have.
+
+### Changed — usage is journalled against the model that actually answered
+
+`record_call` was passed the module's default model rather than the model named in the
+reply. That was harmless while one model was hardwired; with the model now configurable it
+would have mis-attributed every row after a change, and the Profile/Usage view compares
+token counts across models. Both paths now read the model from the response.
+
 ## [0.6.11] — 2026-07-12
 
 ### Changed — "Top Off" → "Top Up" (DPYC vocabulary)

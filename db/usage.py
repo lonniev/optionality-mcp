@@ -1,4 +1,4 @@
-"""Claude API usage tracking — recorded per `messages.create` call.
+"""LLM usage tracking — recorded per messages call.
 
 One row per outbound model invocation. Aggregations are computed at read
 time so we don't double-write. Same transparency principle as taxsort's
@@ -17,11 +17,11 @@ async def record_call(
     input_tokens: int,
     output_tokens: int,
 ) -> None:
-    """Record one Claude `messages.create` call.
+    """Record one LLM messages call.
 
     Best-effort — if the insert fails (vault hiccup, schema not yet
     provisioned, etc.) the caller's response is not affected. Same
-    pattern as `claude.complete_text`'s error tolerance — usage stats
+    pattern as `llm.call_llm`'s error tolerance — usage stats
     are a transparency feature, not a billing source of truth (the
     Tollbooth wheel handles the actual debit).
     """
@@ -44,7 +44,7 @@ async def record_call(
 
 
 async def get_usage_stats(npub: str = "") -> dict[str, Any]:
-    """Aggregated all-time Claude API usage per model. Scoped to `npub`
+    """Aggregated all-time LLM usage per model. Scoped to `npub`
     when provided.
 
     Returns:
@@ -53,7 +53,7 @@ async def get_usage_stats(npub: str = "") -> dict[str, Any]:
 
     For sats-per-tool lifetime spend, the FE calls the wheel's
     ``account_statement`` (authoritative — includes every paid tool,
-    not just Claude-burning ones).
+    not just LLM-burning ones).
     """
     if npub:
         rows = await fetch(

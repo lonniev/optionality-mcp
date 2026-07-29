@@ -14,11 +14,11 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 from tollbooth import AsyncJobSituation
+from tollbooth.llm_route import error_message
 
-import claude
-from claude import (
-    anthropic_error_message,
-    build_anthropic_request,
+import llm
+from llm import (
+    build_llm_request,
     response_text_from_json,
     shape_llm_text,
     situation_from_status,
@@ -26,16 +26,18 @@ from claude import (
 
 # ── request builder ──────────────────────────────────────────────────────────
 
-def test_build_anthropic_request_shape_and_bounds() -> None:
-    req = build_anthropic_request(
+def test_build_llm_request_shape_and_bounds() -> None:
+    from tollbooth.llm_route import model_for, resolve_route
+
+    req = build_llm_request(
         api_key="sk-test", prompt="hello", system="SYS",
         max_tokens=1234, timeout_seconds=90,
     )
     assert req["method"] == "POST"
-    assert req["url"] == claude._ANTHROPIC_ENDPOINT
+    assert req["url"] == resolve_route(api_key="x").endpoint
     assert req["headers"]["x-api-key"] == "sk-test"
     assert req["headers"]["anthropic-version"] == "2023-06-01"
-    assert req["json"]["model"] == claude.DEFAULT_MODEL
+    assert req["json"]["model"] == model_for(llm.TIER_DRILL)
     assert req["json"]["max_tokens"] == 1234
     assert req["json"]["system"] == "SYS"
     assert req["json"]["messages"] == [{"role": "user", "content": "hello"}]
@@ -43,13 +45,13 @@ def test_build_anthropic_request_shape_and_bounds() -> None:
     assert req["timeout"] == 90.0                  # clamped job budget
 
 
-def test_build_anthropic_request_web_search_and_empty_prompt() -> None:
-    req = build_anthropic_request(
+def test_build_llm_request_web_search_and_empty_prompt() -> None:
+    req = build_llm_request(
         api_key="k", prompt="q", system="s", max_tokens=100, enable_web_search=True,
     )
-    assert req["json"]["tools"] == [claude.WEB_SEARCH_TOOL]
+    assert req["json"]["tools"] == [llm.WEB_SEARCH_TOOL]
     with pytest.raises(ValueError):
-        build_anthropic_request(api_key="k", prompt="   ", system="s", max_tokens=10)
+        build_llm_request(api_key="k", prompt="   ", system="s", max_tokens=10)
 
 
 # ── raw-response parsing ─────────────────────────────────────────────────────
@@ -65,18 +67,21 @@ def test_response_text_from_json_joins_text_blocks() -> None:
     assert response_text_from_json(None) == ""
 
 
-def test_anthropic_error_message_extraction() -> None:
-    assert anthropic_error_message(
+def test_error_message_extraction() -> None:
+    assert error_message(
         {"error": {"message": "credit balance too low"}}
     ) == "credit balance too low"
-    assert anthropic_error_message({"nope": 1}) == ""
-    assert anthropic_error_message("string body") == ""
+    assert error_message({"nope": 1}) == ""
+    assert error_message("string body") == ""
 
 
 # ── situation mapping (shared by both paths) ─────────────────────────────────
 
-def test_situation_from_status_matches_provider_situation() -> None:
-    # billing exhaustion is a 400 with a message match, non-transient + alertable
+def test_situation_from_status_reads_either_providers_wording() -> None:
+    # One lab reports an empty account as a 400 naming the credit balance; a model
+    # router reports it as a 402 saying "Insufficient credits". Both are the same
+    # condition, and both must be non-transient + alertable.
+    assert situation_from_status(402, "Insufficient credits").error_code == "operator_llm_unfunded"
     unfunded = situation_from_status(400, "Your credit balance is too low")
     assert unfunded.error_code == "operator_llm_unfunded"
     assert unfunded.transient is False
@@ -119,7 +124,7 @@ async def test_shape_llm_text_non_2xx_curates_situation() -> None:
 async def test_shape_llm_text_unfunded_alerts_operator() -> None:
     raw = {"status": 400, "json": {"error": {"message": "credit balance too low"}}}
     with (
-        patch.object(claude, "_alert_operator_provider_down", AsyncMock()) as alert,
+        patch.object(llm, "_alert_operator_provider_down", AsyncMock()) as alert,
         pytest.raises(AsyncJobSituation) as ei,
     ):
         await shape_llm_text(raw, npub="n", tool="t")
@@ -134,7 +139,7 @@ async def test_judge_build_closure_bakes_request_and_shape_finalizes() -> None:
 
     entry = {"scenario": {"asset": {"ticker": "MARA"}}, "tips_count": 2}
     with patch("db.journal.get_entry", AsyncMock(return_value=entry)), patch.object(
-        claude, "_get_api_key", AsyncMock(return_value="sk-op")
+        llm, "_get_api_key", AsyncMock(return_value="sk-op")
     ):
         spec = await judge.build_closure(
             npub="npub1", entry_id="e1", trade_proposal="SELL PUT SPREAD",

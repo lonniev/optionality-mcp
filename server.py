@@ -52,7 +52,7 @@ mcp = FastMCP(
         "(historical, fiction, live) and four difficulty personas.\n\n"
         "## Onboarding\n"
         "Call optionality_get_operator_onboarding_status to check operator "
-        "readiness. Operator credentials (Anthropic API key + BTCPay) are "
+        "readiness. Operator credentials (model-router API key + BTCPay) are "
         "delivered via Secure Courier — call "
         "optionality_request_credential_channel to start.\n\n"
         "## Pricing\n"
@@ -94,7 +94,7 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     # ---- Dealer (heavy LLM)
     # Pricing: base 1 sat × difficulty × historicity. Apprentice/Fiction
     # = 1 sat (cheapest dry-run); Sovereign/Live = 1 × 4 × 10 = 40 sats
-    # (real-tape regime-change drill, expensive Anthropic web_search call).
+    # (real-tape regime-change drill, expensive grounded web_search call).
     # The FE renders the effective price via check_price(tool_kwargs) so
     # the patron sees what their selections cost before committing.
     ToolIdentity(
@@ -238,7 +238,7 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     # ---- Opt-in nsec escrow + operator-signed DMs. Lets patrons who
     # generate a fresh game-persona keypair hand the nsec to Optionality
     # so the operator can sign Nostr DMs on their behalf (iPad-friendly,
-    # no signer-extension required). Same custody posture as Anthropic
+    # no signer-extension required). Same custody posture as the LLM
     # api_key — AES-256-GCM at rest, decrypted only in-process during
     # signing. See tools/escrow.py for the full trade-off discussion.
     ToolIdentity(
@@ -274,7 +274,7 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
         tool_id=GET_API_USAGE_STATS_UUID,
         capability="get_api_usage_stats",
         category="free",
-        intent="Aggregated Claude API token usage per model, scoped to the caller",
+        intent="Aggregated LLM token usage per model, scoped to the caller",
     ),
 ]
 
@@ -285,22 +285,25 @@ runtime = OperatorRuntime(
     tool_registry={**STANDARD_IDENTITIES, **TOOL_REGISTRY},
     operator_credential_template=CredentialTemplate(
         service="optionality-mcp-operator",
-        version=3,
+        # v4 renamed anthropic_api_key -> llm_api_key. A required field changing
+        # name changes the shape a delivery must satisfy, so the version moves
+        # with it — an operator sending a v3 set gets told what is missing.
+        version=4,
         description=(
-            "Operator credentials for Anthropic Claude (dealer + judge LLM "
-            "calls) and BTCPay Lightning (patron credit purchases). Optional "
+            "Operator credentials for the model router (dealer + judge + tip "
+            "LLM calls) and BTCPay Lightning (patron credit purchases). Optional "
             "dpyc-longrunner fields enable durable detached execution of the "
             "LLM jobs (survives a container recycle)."
         ),
         fields={
             **LONGRUNNER_CREDENTIAL_FIELDS,
-            "anthropic_api_key": FieldSpec(
+            "llm_api_key": FieldSpec(
                 required=True,
                 sensitive=True,
                 description=(
-                    "Operator's Anthropic API key. Used for server-side "
-                    "Claude calls when patrons invoke `deal_scenario`, "
-                    "`judge_trade`, or `ask_tip`."
+                    "Operator's model-router API key (OpenRouter by default). "
+                    "Used for server-side LLM calls when patrons invoke "
+                    "`deal_scenario`, `judge_trade`, or `ask_tip`."
                 ),
             ),
             "btcpay_host": FieldSpec(
@@ -364,7 +367,7 @@ async def deal_scenario(
 
     Args:
         mode: ``historical`` | ``fiction`` | ``live`` — controls how the
-            Firm grounds the scenario. ``live`` uses Anthropic's web_search
+            Firm grounds the scenario. ``live`` uses the provider's web_search
             tool and costs more tokens.
         difficulty: ``apprentice`` | ``journeyman`` | ``adept`` | ``sovereign``
             for a fresh opportunity; ``mulligan`` only paired with replay_entry_id.
@@ -845,12 +848,12 @@ async def get_api_usage_stats(
     npub: NpubField = "",
     dpop_token: str = "",
 ) -> dict[str, Any]:
-    """Aggregated Claude API token usage for this patron's calls.
+    """Aggregated LLM token usage for this patron's calls.
 
     Returns ``{"models": [{"model", "runs", "total_calls",
     "total_input_tokens", "total_output_tokens"}, ...]}``. One row per
     distinct model the patron's tool calls have invoked. The FE multiplies
-    by Anthropic's published per-million pricing to show estimated USD
+    by published per-million pricing to show estimated USD
     cost and the sats equivalent — same transparency view as taxsort-mcp.
     """
     from db.usage import get_usage_stats
@@ -863,6 +866,11 @@ async def get_api_usage_stats(
 # lets a fresh container resume a job orphaned by a serverless recycle.
 # ---------------------------------------------------------------------------
 
+# Imported HERE, below the tool definitions, and not at the top of the module:
+# `tools.dealer` and `tools.judge` reach back into `server` for the runtime, so a
+# top-of-file import closes the cycle and fails at load. Deliberate, not drift.
+# (ruff 0.16 dropped E402 from its defaults, so no noqa is needed to say so —
+# but the reason outlives whichever linter is asking.)
 from tools import dealer as _dealer
 from tools import judge as _judge
 
