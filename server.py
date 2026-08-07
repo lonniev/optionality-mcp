@@ -1,7 +1,7 @@
 """Optionality MCP — server entry point.
 
 A FastMCP SSE server that backs the Optionality options-trading drill UI.
-Deploy marker: nudge Horizon past stale 6bbcd100 → land a9c0bce / tollbooth 0.82.0 (2026-08-06).
+Deploy marker: nudge Horizon past stale 6bbcd100 → land 7c434d9 / tollbooth 0.83.0 (2026-08-07).
 All eleven domain tools are registered below; per-tool logic lives in
 ``tools.*``. Auth, balance, pricing, and proof verification
 come from the wheel via ``register_standard_tools`` and ``@runtime.paid_tool``.
