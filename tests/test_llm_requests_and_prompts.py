@@ -1,10 +1,15 @@
-"""Tests for the durable detached (closure) path of the LLM jobs.
+"""Tests for the LLM request builder, error curation, and prompt preparation.
 
-These lock in the fix for "judge_trade never returned a terminal status": a
-container recycle no longer orphans a job because the LLM call runs off a sealed
-``http_request`` spec in a detached flow, and the result is settled back in the
-MCP by each job's ``shape_result``. Both halves are unit-tested here without a
-live Prefect executor — the wheel's own suite covers the SDK wiring.
+These once covered a second, detached execution path: the LLM call ran off a
+sealed ``http_request`` spec in a generic Prefect flow, and the result was
+settled back by each job's ``shape_result``. That apparatus existed only because
+the flow could not run this module's code. tollbooth-dpyc 0.82.0 deleted it when
+detached compute moved to Modal, which spawns the runner itself, so the tests
+for the sealed spec and its settling half went with it.
+
+What remains is the machinery both paths always shared and the single path still
+uses: building a well-formed provider request, curating an upstream failure into
+a refundable situation, and preparing prompts.
 """
 
 from __future__ import annotations
@@ -13,14 +18,12 @@ from datetime import UTC
 from unittest.mock import AsyncMock, patch
 
 import pytest
-from tollbooth import AsyncJobSituation
 from tollbooth.llm_route import error_message
 
 import llm
 from llm import (
     build_llm_request,
     response_text_from_json,
-    shape_llm_text,
     situation_from_status,
 )
 
@@ -92,106 +95,6 @@ def test_situation_from_status_reads_either_providers_wording() -> None:
     assert generic.error_code == "llm_unavailable" and generic.transient is True
 
 
-# ── shape_llm_text: settle a detached result ─────────────────────────────────
-
-async def test_shape_llm_text_success_extracts_and_records_usage() -> None:
-    raw = {"status": 200, "json": {
-        "content": [{"type": "text", "text": "the answer"}],
-        "usage": {"input_tokens": 11, "output_tokens": 22},
-    }}
-    with patch("db.usage.record_call", AsyncMock()) as rec:
-        text = await shape_llm_text(raw, npub="npub1", tool="judge_trade")
-    assert text == "the answer"
-    rec.assert_awaited_once()
-    assert rec.await_args.kwargs["input_tokens"] == 11
-    assert rec.await_args.kwargs["output_tokens"] == 22
-
-
-async def test_shape_llm_text_empty_2xx_raises_refundable() -> None:
-    raw = {"status": 200, "json": {"content": [{"type": "text", "text": "  "}]}}
-    with pytest.raises(AsyncJobSituation) as ei:
-        await shape_llm_text(raw, npub="n", tool="t")
-    assert ei.value.error_code == "llm_empty"
-
-
-async def test_shape_llm_text_non_2xx_curates_situation() -> None:
-    raw = {"status": 429, "json": {"error": {"message": "rate limited"}}}
-    with pytest.raises(AsyncJobSituation) as ei:
-        await shape_llm_text(raw, npub="n", tool="t")
-    assert ei.value.error_code == "upstream_rate_limited"
-
-
-async def test_shape_llm_text_unfunded_alerts_operator() -> None:
-    raw = {"status": 400, "json": {"error": {"message": "credit balance too low"}}}
-    with (
-        patch.object(llm, "_alert_operator_provider_down", AsyncMock()) as alert,
-        pytest.raises(AsyncJobSituation) as ei,
-    ):
-        await shape_llm_text(raw, npub="n", tool="t")
-    assert ei.value.error_code == "operator_llm_unfunded"
-    alert.assert_awaited_once()   # non-transient provider-down DMs the operator
-
-
-# ── per-job build_closure + shape_result ─────────────────────────────────────
-
-async def test_judge_build_closure_bakes_request_and_shape_finalizes() -> None:
-    from tools import judge
-
-    entry = {"scenario": {"asset": {"ticker": "MARA"}}, "tips_count": 2}
-    with patch("db.journal.get_entry", AsyncMock(return_value=entry)), patch.object(
-        llm, "_get_api_key", AsyncMock(return_value="sk-op")
-    ):
-        spec = await judge.build_closure(
-            npub="npub1", entry_id="e1", trade_proposal="SELL PUT SPREAD",
-        )
-    assert spec["op"] == "http_request"
-    assert spec["request"]["headers"]["x-api-key"] == "sk-op"
-    assert "SELL PUT SPREAD" in spec["request"]["json"]["messages"][0]["content"]
-
-    # shape settles a completed run: parse eval JSON + persist + recompute
-    raw = {"status": 200, "json": {"content": [
-        {"type": "text", "text": '{"grade": "A", "score": 91}'}
-    ]}}
-    with patch("db.journal.record_evaluation", AsyncMock()) as rec, patch(
-        "db.leaderboard.recompute_leaderboard", AsyncMock()
-    ) as recomp, patch("db.usage.record_call", AsyncMock()):
-        out = await judge.shape_result(
-            raw, {"npub": "npub1", "entry_id": "e1", "trade_proposal": "SELL PUT SPREAD"},
-        )
-    assert out == {"entry_id": "e1", "evaluation": {"grade": "A", "score": 91}}
-    rec.assert_awaited_once()
-    recomp.assert_awaited_once()
-
-
-async def test_judge_build_closure_missing_entry_raises_situation() -> None:
-    from tools import judge
-
-    with (
-        patch("db.journal.get_entry", AsyncMock(return_value=None)),
-        pytest.raises(AsyncJobSituation) as ei,
-    ):
-        await judge.build_closure(npub="n", entry_id="gone", trade_proposal="x")
-    assert ei.value.error_code == "journal_entry_not_found"
-
-
-async def test_deal_shape_result_opens_entry_once() -> None:
-    from tools import dealer
-
-    raw = {"status": 200, "json": {"content": [
-        {"type": "text", "text": '{"asset": {"ticker": "NVDA"}, "the_question": "?"}'}
-    ]}}
-    with patch("db.journal.open_entry", AsyncMock(return_value="new-entry")) as open_e, patch(
-        "tools.dealer.build_option_chain", return_value=None
-    ), patch("db.usage.record_call", AsyncMock()):
-        out = await dealer.deal_shape_result(
-            raw, {"npub": "n", "mode": "historical", "difficulty": "adept",
-                  "max_loss_usd": None, "sector": ""},
-        )
-    assert out["entry_id"] == "new-entry"
-    assert out["scenario"]["mode"] == "historical"      # echoed
-    open_e.assert_awaited_once()                          # exactly one journal entry
-
-
 async def test_prepare_deal_live_grounds_prompt_in_the_real_date() -> None:
     """LIVE mode must assert the operator's real date so the model can't anchor
     to its training cutoff and date a scenario a year in the past."""
@@ -219,18 +122,6 @@ async def test_prepare_deal_live_grounds_prompt_in_the_real_date() -> None:
     assert hist["enable_web_search"] is False
     assert today_iso in hist["prompt"]                       # date still provided…
     assert "trust it over your training data" not in hist["prompt"]  # …but no live clause
-
-
-async def test_tip_shape_result_counts_clue() -> None:
-    from tools import dealer
-
-    raw = {"status": 200, "json": {"content": [{"type": "text", "text": "think theta"}]}}
-    with patch("db.journal.increment_tips_count", AsyncMock()) as inc, patch(
-        "db.usage.record_call", AsyncMock()
-    ):
-        out = await dealer.tip_shape_result(raw, {"npub": "n", "entry_id": "e1"})
-    assert out == {"tip": "think theta"}
-    inc.assert_awaited_once()
 
 
 def test_precheck_tip_question_guards_degenerate_input() -> None:

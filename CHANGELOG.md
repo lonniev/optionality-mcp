@@ -3,6 +3,62 @@
 All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.6.13 — 2026-08-09
+
+### Fixed — the service had not deployed since 2026-08-05
+
+`server.py` called `runtime.register_job_spec(...)` at module scope. tollbooth-dpyc
+**0.82.0** deleted that method along with the whole closure apparatus. Horizon builds by
+running `fastmcp inspect server.py:mcp`, which imports the module — so every build since
+that pin landed died with `AttributeError: 'OperatorRuntime' object has no attribute
+'register_job_spec'`, and the deployment went on serving the last image that had built:
+commit `6bbcd100`, SDK 0.81.0, eighteen commits and four days behind `main`.
+
+Nothing about this was visible from the repository. The commit-phase suite was green
+throughout, because **no test imported `server`** — the suite could not fail for the reason
+production was broken. The deploy-verify role saw only that the served sha had not moved
+and filed "Deploy did not land"; it never reads the build log, which is the one artifact
+naming the cause. Handed that symptom, Engineering matched it to the known stale-wheel-layer
+gotcha and wrote a deploy-marker nudge. Fifteen of those merged, green, between Aug 6 and
+Aug 9. None could have worked: the module could not be imported, so no marker could change
+the outcome.
+
+### Removed — the closure apparatus, in full
+
+The detached path is gone from this repo as it is from the SDK:
+`deal_build_closure`/`deal_shape_result`, `tip_build_closure`/`tip_shape_result`,
+`judge.build_closure`/`judge.shape_result`, and `llm.shape_llm_text`, which existed only to
+settle their results.
+
+That pair existed because a generic Prefect flow could not run this module's code, so a
+request had to be sealed into data and the answer re-interpreted afterwards — two
+implementations of one job, kept in step by hand. Detached compute now spawns the runner
+itself, so `register_job_runner` is the entire registration and each job has one
+implementation and one path through its side effects. `_prepare_*` and `_finalize_*` remain
+as names for the steps either side of the model call, no longer as a seam between two paths.
+
+Also removed: the deploy-marker line and `tests/test_deploy_marker.py`. That test asserted
+the marker string contained sha prefixes hardcoded in the test itself — both edited in the
+same commit — so it could only ever confirm a docstring had been rewritten. It was green for
+every one of the fifteen nudges.
+
+### Added — the entrypoint is now imported at commit time
+
+`tests/test_entrypoint_imports.py` imports `server` exactly as `fastmcp inspect` does, and
+asserts the three job runners are registered and callable. A bare import is most of the
+value: anything registered at module scope is checked the moment it is written, rather than
+at build time on a machine whose logs no workflow reads. Verified by reverting `server.py`
+alone — both tests fail with the original `AttributeError` at line 897.
+
+Also added `.github/workflows/release.yml`, absent until now, which is why twelve tags
+produced zero GitHub Releases; and `doctrine-lint.yml`, so the doctrine tripwires run on
+this repo's pull requests as they do across the fleet.
+
+### Changed — track tollbooth-dpyc 0.84.1
+
+Picks up the fix for `check_authority_balance`, which signed its proof for one tool name
+while calling another and so failed for every operator.
+
 ## 0.6.12 — 2026-07-16
 
 ### Changed — track tollbooth-dpyc 0.63.3

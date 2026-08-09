@@ -4,17 +4,19 @@ The dealer LLM emits scenarios that embed the red-herring mechanic. The
 ``deal_scenario`` tool also opens a journal entry so the trainee can save
 drafts against it before the judge runs.
 
-Each LLM tool is split into halves shared by both execution paths — an
-in-process runner (survives nothing worse than the process) and a detached
-closure (survives a container recycle):
+Each LLM tool reads as three steps, and the split is kept because it names them:
 
 * ``_prepare_*`` — validation + fetch + build the prompt (and, for the dealer,
-  the mode-dependent LLM bounds). Runs in the runner AND in ``build_closure``.
+  the mode-dependent LLM bounds).
+* the runner itself — one ``call_llm`` between the two halves.
 * ``_finalize_*`` — parse the output + param-dependent DB side effects (open a
-  journal entry, count a clue). Runs in the runner AND in ``shape_result``.
+  journal entry, count a clue).
 
-Each path runs each half exactly once, so a side effect fires once regardless
-of where the LLM actually ran.
+There is one path, so each half runs exactly once by construction. The halves
+were once shared with a detached ``build_closure``/``shape_result`` pair, which
+had to seal the request into data because a generic flow could not run this
+module's code; detached compute now spawns the runner itself, and that pair was
+deleted with the apparatus in tollbooth-dpyc 0.82.0.
 """
 
 from __future__ import annotations
@@ -30,12 +32,9 @@ from db import journal, patrons
 from llm import (
     TIER_TIP,
     LlmError,
-    build_llm_request,
     call_llm,
     empty_output_situation,
     extract_json,
-    require_api_key,
-    shape_llm_text,
 )
 from tools.options_chain import build_option_chain
 
@@ -325,45 +324,6 @@ async def deal_scenario(
     return await _finalize_deal(npub, mode, difficulty, max_loss_usd, sector, raw)
 
 
-async def deal_build_closure(
-    npub: str = "",
-    mode: str = "",
-    difficulty: str = "",
-    max_loss_usd: int | None = None,
-    sector: str = "",
-    **_: Any,
-) -> dict[str, Any]:
-    """Detached path: bake the fresh-deal request into a sealed spec."""
-    parts = await _prepare_deal(npub, mode, difficulty, max_loss_usd, sector)
-    api_key = await require_api_key()
-    return {
-        "op": "http_request",
-        "request": build_llm_request(
-            api_key=api_key,
-            prompt=parts["prompt"],
-            system=parts["system"],
-            max_tokens=parts["max_tokens"],
-            enable_web_search=parts["enable_web_search"],
-            timeout_seconds=parts["timeout_seconds"],
-        ),
-    }
-
-
-async def deal_shape_result(
-    raw: dict[str, Any] | None, params: dict[str, Any]
-) -> dict[str, Any]:
-    """Detached path: settle a completed run — extract the scenario, then finalize."""
-    text = await shape_llm_text(raw, npub=params.get("npub", ""), tool="deal_scenario")
-    return await _finalize_deal(
-        params.get("npub", ""),
-        params.get("mode", ""),
-        params.get("difficulty", ""),
-        params.get("max_loss_usd"),
-        params.get("sector", "") or "",
-        text,
-    )
-
-
 # ── ask_tip ──────────────────────────────────────────────────────────────────
 
 # A clue question is a sentence or two. Anything much longer is either
@@ -516,35 +476,3 @@ async def ask_tip(
     return await _finalize_tip(npub, entry_id, text)
 
 
-async def tip_build_closure(
-    npub: str = "",
-    entry_id: str = "",
-    question: str = "",
-    history: Any = None,
-    **_: Any,
-) -> dict[str, Any]:
-    """Detached path: bake the clue request into a sealed spec."""
-    prompt = await _prepare_tip(npub, entry_id, question, history)
-    api_key = await require_api_key()
-    return {
-        "op": "http_request",
-        "request": build_llm_request(
-            api_key=api_key,
-            prompt=prompt,
-            system=prompts.TIP_SYSTEM,
-            max_tokens=1500,
-            enable_web_search=True,
-            tier=TIER_TIP,
-            timeout_seconds=120,
-        ),
-    }
-
-
-async def tip_shape_result(
-    raw: dict[str, Any] | None, params: dict[str, Any]
-) -> dict[str, Any]:
-    """Detached path: settle a completed run — extract the clue, then finalize."""
-    text = await shape_llm_text(raw, npub=params.get("npub", ""), tool="ask_tip")
-    return await _finalize_tip(
-        params.get("npub", ""), params.get("entry_id", ""), text
-    )

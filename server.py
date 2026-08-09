@@ -1,7 +1,6 @@
 """Optionality MCP — server entry point.
 
 A FastMCP SSE server that backs the Optionality options-trading drill UI.
-Deploy marker: nudge Horizon past stale 6bbcd100 → land 6061556c / tollbooth 0.84.0 (2026-08-09 #88).
 All eleven domain tools are registered below; per-tool logic lives in
 ``tools.*``. Auth, balance, pricing, and proof verification
 come from the wheel via ``register_standard_tools`` and ``@runtime.paid_tool``.
@@ -882,27 +881,21 @@ async def get_api_usage_stats(
 from tools import dealer as _dealer
 from tools import judge as _judge
 
-# In-process runners resume a job orphaned by a serverless recycle only when a
-# fresh container next polls it — fragile. The closure specs register the
-# durable detached path for the SAME kind: once the operator couriers the
-# dpyc-longrunner creds, the wheel auto-installs the Prefect executor and the
-# LLM call runs OUTSIDE the request container, so a recycle can't orphan it.
-# Until then the in-process runner serves (no regression). Each job's side
-# effects live in a shared _finalize half, so they fire exactly once on
-# whichever path runs — never both.
+# A registered runner is the whole story. The executor spawns THIS module's
+# code, whether the job runs in-process or on detached compute, so each job has
+# one implementation and one path through its side effects.
+#
+# There used to be a second registration here — `register_job_spec`, pairing a
+# `build_closure` that baked a fully-formed provider request with a
+# `shape_result` that interpreted the raw HTTP answer back into a domain result.
+# Both existed only because a generic Prefect flow could not run this module's
+# code, so the work had to be sealed into data and re-interpreted afterwards.
+# tollbooth-dpyc 0.82.0 deleted that apparatus when detached jobs moved to
+# Modal; there is nothing left to seal, nothing to shape, and no second code
+# path to keep in step with the first.
 runtime.register_job_runner("deal_scenario", _dealer.deal_scenario)
 runtime.register_job_runner("ask_tip", _dealer.ask_tip)
 runtime.register_job_runner("judge_trade", _judge.judge_trade)
-
-runtime.register_job_spec(
-    "deal_scenario", _dealer.deal_build_closure, _dealer.deal_shape_result
-)
-runtime.register_job_spec(
-    "ask_tip", _dealer.tip_build_closure, _dealer.tip_shape_result
-)
-runtime.register_job_spec(
-    "judge_trade", _judge.build_closure, _judge.shape_result
-)
 
 
 def main() -> None:
