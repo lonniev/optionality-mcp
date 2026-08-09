@@ -311,22 +311,9 @@ async def test_cost_is_journalled_with_the_call() -> None:
     assert recorded["input_tokens"] == 35542
 
 
-async def test_shape_llm_text_journals_cost_on_the_detached_path_too() -> None:
-    """Both execution paths must record the same things, or the Usage view
-    silently under-reports whichever path the operator happens to be on."""
-    raw = {"status": 200, "json": {
-        "model": "x-ai/grok-4.5",
-        "content": [{"type": "text", "text": "the answer"}],
-        "usage": {"input_tokens": 11, "output_tokens": 22, "cost": 0.003},
-    }}
-    recorded: dict[str, Any] = {}
-
-    async def _record(**kwargs: Any) -> None:
-        recorded.update(kwargs)
-
-    with patch("db.usage.record_call", AsyncMock(side_effect=_record)):
-        text = await llm.shape_llm_text(raw, npub="npub1", tool="judge_trade")
-
-    assert text == "the answer"
-    assert recorded["cost_usd"] == 0.003
-    assert recorded["model"] == "x-ai/grok-4.5"
+# There was a companion test here asserting that the DETACHED path journalled
+# cost identically — "both execution paths must record the same things, or the
+# Usage view silently under-reports whichever path the operator happens to be
+# on". There is only one path now (tollbooth-dpyc 0.82.0 deleted the closure
+# apparatus), so the asymmetry it guarded against cannot arise, and the test
+# above already covers cost journalling for the path that remains.

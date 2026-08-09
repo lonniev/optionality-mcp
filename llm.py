@@ -384,40 +384,6 @@ async def call_llm(
     return out
 
 
-async def shape_llm_text(
-    raw: dict[str, Any] | None, *, npub: str = "", tool: str = "", model: str = "",
-) -> str:
-    """Turn a detached long-runner result into the model's text, or raise.
-
-    ``raw`` is the generic flow's return: ``{"status": <http_code>, "json": <body>}``.
-    On 2xx, extract the text (and journal usage); on a 2xx with no usable text,
-    raise the empty-output situation; on non-2xx, curate the upstream error into a
-    refundable ``AsyncJobSituation`` — the raw status/body stay operator-side
-    (Prefect logs). Symmetric with ``call_llm``.
-    """
-    raw = raw or {}
-    status = raw.get("status")
-    body = raw.get("json")
-    if status == 200:
-        text = response_text_from_json(body if isinstance(body, dict) else {})
-        if not text:
-            raise empty_output_situation()
-        await _record_usage_from_json(
-            body, npub=npub, tool=tool,
-            # The detached reply names the model that answered; falling back to the
-            # caller's hint keeps the journal honest if it ever doesn't.
-            model=str((body or {}).get("model") or model or "unknown"),
-        )
-        return text
-    situation = situation_from_status(
-        status if isinstance(status, int) else None,
-        error_message(body),
-    )
-    if not situation.transient:
-        await _alert_operator_provider_down(situation)
-    raise situation
-
-
 def extract_json(text: str) -> dict[str, Any]:
     """Pull the first top-level JSON object out of an LLM response.
 

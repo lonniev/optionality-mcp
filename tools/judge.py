@@ -1,13 +1,16 @@
 """Judge tool — evaluates a trainee's trade and updates the leaderboard cache.
 
-The work is split into two halves shared by both execution paths:
+The work is split into two named halves either side of the LLM call:
 
 * ``_prepare(...)`` — validation + fetch the entry + build the judge prompt.
-  Runs in the in-process runner AND in ``build_closure`` (the detached path).
 * ``_finalize(...)`` — parse the evaluation, persist it, recompute the
-  leaderboard, return the result. Runs in the in-process runner AND in
-  ``shape_result`` (settling a detached run). Each path runs each half exactly
-  once, so the DB side effects fire once regardless of where the LLM ran.
+  leaderboard, return the result.
+
+There is one execution path, so the DB side effects fire exactly once by
+construction. The halves were once shared with a detached
+``build_closure``/``shape_result`` pair; detached compute now spawns this
+runner directly, and that pair went with the closure apparatus deleted in
+tollbooth-dpyc 0.82.0.
 """
 
 from __future__ import annotations
@@ -22,12 +25,9 @@ import prompts
 from db import journal, leaderboard
 from llm import (
     LlmError,
-    build_llm_request,
     call_llm,
     empty_output_situation,
     extract_json,
-    require_api_key,
-    shape_llm_text,
 )
 
 logger = logging.getLogger(__name__)
@@ -104,30 +104,3 @@ async def judge_trade(npub: str, entry_id: str, trade_proposal: str) -> dict[str
     return await _finalize(npub, entry_id, trade_proposal, raw)
 
 
-async def build_closure(
-    npub: str = "", entry_id: str = "", trade_proposal: str = "", **_: Any
-) -> dict[str, Any]:
-    """Detached path: bake the judge request into a sealed ``http_request`` spec."""
-    prompt = await _prepare(npub, entry_id, trade_proposal)
-    api_key = await require_api_key()
-    return {
-        "op": "http_request",
-        "request": build_llm_request(
-            api_key=api_key,
-            prompt=prompt,
-            system=prompts.EVAL_SYSTEM,
-            max_tokens=_MAX_TOKENS,
-            timeout_seconds=_TIMEOUT_SECONDS,
-        ),
-    }
-
-
-async def shape_result(raw: dict[str, Any] | None, params: dict[str, Any]) -> dict[str, Any]:
-    """Detached path: settle a completed run — extract the text, then finalize."""
-    text = await shape_llm_text(raw, npub=params.get("npub", ""), tool="judge_trade")
-    return await _finalize(
-        params.get("npub", ""),
-        params.get("entry_id", ""),
-        params.get("trade_proposal", ""),
-        text,
-    )
