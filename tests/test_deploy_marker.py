@@ -1,6 +1,6 @@
 """Regression: Horizon stale-wheel deploys are cleared by touching server.py's marker.
 
-Issue #88 (and the long 6bbcd100 series before it) fire when live
+Issue #90 (and the long 6bbcd100 series before it) fire when live
 ``optionality_service_status`` still reports ``fastmcp_cloud_git_commit_sha=6bbcd100``
 after main has moved on. The established fix is a one-line deploy-marker bump in
 the server entry-point docstring so Horizon rebuilds clean layers.
@@ -16,8 +16,8 @@ from pathlib import Path
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 _SERVER = _REPO_ROOT / "server.py"
 
-# Land target for the #88 nudge — must match the Deploy marker line in server.py.
-_LAND_SHA_PREFIX = "6061556c"
+# Land target for the #90 nudge — must match the Deploy marker line in server.py.
+_LAND_SHA_PREFIX = "48108fd7"
 _STALE_SHA_PREFIX = "6bbcd100"
 
 
@@ -34,6 +34,6 @@ def test_deploy_marker_names_stale_wheel_and_land_target() -> None:
         f"marker must name the stale sha being escaped, got: {line!r}"
     )
     assert _LAND_SHA_PREFIX in line, (
-        f"marker must name land target {_LAND_SHA_PREFIX} (issue #88), got: {line!r}"
+        f"marker must name land target {_LAND_SHA_PREFIX} (issue #90), got: {line!r}"
     )
-    assert "#88" in line, f"marker should cite issue #88, got: {line!r}"
+    assert "#90" in line, f"marker should cite issue #90, got: {line!r}"
