@@ -3,6 +3,22 @@
 All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.6.14 — 2026-08-10
+
+### Changed — track tollbooth-dpyc 0.85.0
+
+Picks up the shared param-default binding: a schema's declared `default` was honoured on
+only one of the two routes into a dynamic tool, so an omitted optional parameter could reach
+a backend unbound and fail with nothing the caller could act on.
+
+### Changed — CI carries the fleet's entrypoint check
+
+0.6.13 added `tests/test_entrypoint_imports.py` here, ahead of the fleet-wide rule. That rule
+now exists as a CI step enforced by the doctrine linter, so this repo carries it like every
+other rather than being the one place that solved the problem its own way. The test stays: it
+also asserts the three job runners are registered, which is this repo's own regression, not
+the fleet's invariant.
+
 ## 0.6.13 — 2026-08-09
 
 ### Fixed — the service had not deployed since 2026-08-05
