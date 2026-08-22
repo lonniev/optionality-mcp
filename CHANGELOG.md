@@ -190,6 +190,15 @@ reply. That was harmless while one model was hardwired; with the model now confi
 would have mis-attributed every row after a change, and the Profile/Usage view compares
 token counts across models. Both paths now read the model from the response.
 
+## [0.6.16] — 2026-08-22
+
+### Changed — track tollbooth-dpyc 0.87.1
+
+Picks up the relay-reliability work: `COURIER_RELAY_UNREACHABLE` so an
+unreachable pinned rendezvous is no longer reported as the patron never
+replying, relay-failure reporting to the Oracle, and a publish that counts
+only when the relay acknowledges that exact event.
+
 ## [0.6.11] — 2026-07-12
 
 ### Changed — "Top Off" → "Top Up" (DPYC vocabulary)
