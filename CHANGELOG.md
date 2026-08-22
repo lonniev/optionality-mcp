@@ -3,6 +3,65 @@
 All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.7.0 — 2026-08-22
+
+### Fixed — drills run detached again; they had not since 2026-08-06
+
+Optionality carried `tollbooth-dpyc[nostr,prefect]` from 2026-07-12, when the
+`[prefect]` extra was added precisely so durable jobs would reach detached
+compute. On 2026-08-06 a routine dependency bump to 0.82.0 rewrote the pin to
+`[nostr]` — the SDK had deleted the Prefect executor that day — and **nothing
+replaced it**. `uv.lock` shed the Prefect tree and no `[modal]` extra was ever
+added.
+
+For sixteen days every `deal_scenario`, `judge_trade` and `ask_tip` ran
+in-process on a stateless front. A container recycle mid-call orphaned the job:
+the row stays `running` until it goes stale, then a second worker starts the
+drill over on a fresh budget the trainee had already given up on. That is the
+exact failure the durable-jobs work fixed a month earlier, silently
+reintroduced.
+
+Nothing was red, because the wheel degrades on purpose — no extra, no executor,
+jobs still run. `service_status` said so plainly the whole time
+(`detached_executor_resolved: false`, `modal_app: null`,
+`durable_across_recycles: false`); nobody was reading it.
+
+- Pin moves to `tollbooth-dpyc[nostr,modal]`.
+- New `modal_app.py` — a *place to run*, not a second implementation. The
+  wheel's `ModalExecutor` spawns the operator's already-registered runner
+  unchanged, which is why no sealed closure, op vocabulary or interpreter flow
+  is involved. One mounted secret, `TOLLBOOTH_NOSTR_OPERATOR_NSEC`; everything
+  downstream of identity is discovered over Nostr, so the container holds
+  exactly what Horizon holds and no more.
+- New `deploy-modal.yml`, with a paths filter deliberately wider than the image:
+  the image mounts source at *deploy* time, so a source change without a
+  redeploy leaves Modal running code that exists nowhere else. eXcalibur shipped
+  a release that reached Horizon and not Modal, and the container quietly
+  enforced the old budget for a day.
+
+### Added — the job budget rings are computed, not restated
+
+`config.py` now authors one number, `JOB_ATTEMPT_MAX_S`, and derives the
+detached runner's ceiling from it. `max_runtime_seconds` is load-bearing twice —
+attempt ceiling *and* the wheel's re-claim threshold — so a runner timeout
+inside it kills work nothing has given up on, and the drill hangs until the row
+goes stale rather than failing. Modal bakes that timeout in at deploy time on a
+CI runner, where a wrong literal is invisible to every in-process test, so
+`tests/test_modal_app.py` asserts the nesting and forbids a literal outright.
+
+The same tests guard two contracts nothing else covers: the app name must match
+the vaulted `modal_app_name` (rename it without re-couriering and every drill
+falls back in-process while status reports an executor installed), and every
+module in this flat project's `py-modules`/`packages` must be mounted (miss one
+and the container fails at import, inside a job, on the operator's dime).
+
+### Note — detached execution is still OFF until the operator provisions it
+
+This change makes optionality *able* to run detached. It does not turn it on.
+Three vaulted fields (`modal_token_id`, `modal_token_secret`, `modal_app_name`)
+are what flip the runtime over, and they arrive by Secure Courier. Until then
+drills run in-process exactly as they do today — correct, just not durable.
+
 ## 0.6.15 — 2026-08-17
 
 ### Changed — track tollbooth-dpyc 0.86.0 (GitHub-free bootstrap)
