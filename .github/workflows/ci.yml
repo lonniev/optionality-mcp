@@ -46,6 +46,13 @@ jobs:
       - name: Run tests
         run: pytest tests/ -v
 
+      # The detached runner's deploy graph builds. No credentials needed — this
+      # constructs the App/Image objects without contacting Modal, and catches a
+      # broken image spec or a missing mounted module before merge rather than
+      # inside a patron's drill.
+      - name: The detached runner's deploy graph builds
+        run: python -c "import modal_app; print(modal_app.app.name)"
+
       - name: Entrypoint inspects (the check Horizon performs at build time)
         run: |
           [ -f fastmcp.json ] || { echo "no fastmcp.json — not a FastMCP deployment; skipping"; exit 0; }

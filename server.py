@@ -28,6 +28,8 @@ from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 from tollbooth.version import resolve_service_version
 
+from config import JOB_ATTEMPT_MAX_S
+
 __version__ = resolve_service_version("optionality-mcp", __file__)
 
 logger = logging.getLogger(__name__)
@@ -415,13 +417,14 @@ async def deal_scenario(
             "sector": sector,
         },
         tool_id=DEAL_SCENARIO_UUID,
-        # Live + web_search on a cold Prefect Managed worker (~40-50s spin-up)
-        # legitimately runs several minutes; give the job room to finish before
-        # the watchdog reclaims it, and keep a finished result claimable long
-        # enough for a patron who wandered off to come back for it. Must stay
-        # ABOVE the runner's own 600s LLM read timeout so a slow-but-alive call
-        # fails as a curated situation rather than being reclaimed mid-flight.
-        max_runtime_seconds=700,
+        # Live + web_search legitimately runs several minutes; give the job room
+        # to finish before the watchdog reclaims it, and keep a finished result
+        # claimable long enough for a patron who wandered off to come back for
+        # it. Must stay ABOVE the runner's own 600s LLM read timeout so a
+        # slow-but-alive call fails as a curated situation rather than being
+        # reclaimed mid-flight — and BELOW the detached runner's ceiling, which
+        # config.runner_timeout_s derives from this number.
+        max_runtime_seconds=JOB_ATTEMPT_MAX_S,
         result_ttl_seconds=1200,
         expected_seconds=expected,
     )
