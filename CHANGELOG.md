@@ -249,6 +249,15 @@ reply. That was harmless while one model was hardwired; with the model now confi
 would have mis-attributed every row after a change, and the Profile/Usage view compares
 token counts across models. Both paths now read the model from the response.
 
+## [0.7.1] — 2026-08-22
+
+### Changed — track tollbooth-dpyc 0.87.2
+
+An object argument a client serialised as a JSON string is now parsed
+rather than refused as `dict_type`. Fixes `update_post` rejecting a
+large patch and `update_design_text` rejecting a multi-key edits
+object.
+
 ## [0.6.16] — 2026-08-22
 
 ### Changed — track tollbooth-dpyc 0.87.1
