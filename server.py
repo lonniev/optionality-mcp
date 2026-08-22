@@ -19,7 +19,6 @@ from typing import Annotated, Any
 
 from fastmcp import FastMCP
 from pydantic import Field
-from config import JOB_ATTEMPT_MAX_S
 from tollbooth.credential_templates import (
     LONGRUNNER_CREDENTIAL_FIELDS,
     CredentialTemplate,
@@ -28,6 +27,8 @@ from tollbooth.credential_templates import (
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
 from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
 from tollbooth.version import resolve_service_version
+
+from config import JOB_ATTEMPT_MAX_S
 
 __version__ = resolve_service_version("optionality-mcp", __file__)
 

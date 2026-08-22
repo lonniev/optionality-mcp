@@ -46,7 +46,7 @@ class TestTheLayoutContract:
             cfg["tool"]["setuptools"]["packages"]
         )
         source = (ROOT / "modal_app.py").read_text()
-        call = re.search(r"add_local_python_source\(([^)]*)\)", source, re.S)
+        call = re.search(r"add_local_python_source\(([^)]*)\)", source, re.DOTALL)
         assert call, "modal_app.py must mount the operator's own source"
         mounted = set(re.findall(r'"([^"]+)"', call.group(1)))
         assert declared <= mounted, f"not mounted on Modal: {sorted(declared - mounted)}"
