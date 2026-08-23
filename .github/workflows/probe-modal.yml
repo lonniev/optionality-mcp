@@ -1,0 +1,71 @@
+name: Probe the Detached Runner
+
+# Layered dependency probes for the Modal runner, run on demand.
+#
+# A drill needs container lifecycle, egress, relays, a replicated bootstrap
+# config, a working bootstrap and Neon — all at once — and reports a single
+# "Bootstrap failed" when any one is missing. On 2026-08-23 that message meant
+# "the one relay carrying the bootstrap config was down for thirty seconds",
+# with three other relays healthy. Nothing in the failure said so.
+#
+# This walks the layers in dependency order and stops at the first failure, so
+# the output names the broken ingredient instead of restating the symptom.
+# Not on push: it deploys a real app and spends real (small) compute.
+on:
+  workflow_dispatch:
+    inputs:
+      operator_hex:
+        description: "Operator pubkey hex, for the config-replication check (optional)"
+        required: false
+        default: ""
+
+concurrency:
+  group: probe-modal
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # Must match `debian_slim(python_version=...)` in modal_probe.py, for the
+      # same reason the deploy workflow pins it: resolution happens here.
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -e ".[dev]"
+
+      - name: The probe graph builds
+        run: python -c "import modal_probe; print(modal_probe.app.name)"
+
+      - name: Deploy the probes
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MODAL_TOKEN_ID:-}" ] || [ -z "${MODAL_TOKEN_SECRET:-}" ]; then
+            echo "::error::MODAL_TOKEN_ID / MODAL_TOKEN_SECRET are not set."
+            exit 1
+          fi
+          modal deploy modal_probe.py
+
+      # A layer's failure is the diagnosis, so this step failing is the point —
+      # read which layer it stopped at, not just that it went red.
+      - name: Walk the layers, stopping at the first failure
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+          DPYC_OPERATOR_HEX: ${{ github.event.inputs.operator_hex }}
+        run: python scripts/run_probes.py
+
+      # Leave nothing running. The probes are a diagnostic, not a service.
+      - name: Stop the probe app
+        if: always()
+        env:
+          MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
+          MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
+        run: modal app stop dpyc-probe --yes || true
