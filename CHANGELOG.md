@@ -3,6 +3,39 @@
 All notable changes to this project will be documented in this file.
 Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## 0.7.4 — 2026-08-24
+
+### Security — track tollbooth-dpyc 0.88.1 (cryptography floor raised to >=49.0.0)
+
+Picks up the SDK's fix for GHSA-m2h6-j472-rp4c: the X.509 verifier accepted wildcard
+DNS SANs, escaping `permittedSubtrees`. The advisory is fixed in cryptography 49.0.0,
+and the SDK previously declared a floor of `>=46.0.5` — which admitted every affected
+release.
+
+No install here was exposed: the resolved lock already carried a patched cryptography.
+What changes is what a fresh resolve is *allowed* to land on. See tollbooth-dpyc v0.88.1.
+
+## 0.7.3 — 2026-08-22
+
+### Changed — dependency tracking
+
+Tracks tollbooth-dpyc 0.88.0. Recorded after the fact: the
+version was released without a CHANGELOG entry at the time.
+
+## 0.7.2 — 2026-08-22
+
+### Changed — dependency tracking
+
+Tracks tollbooth-dpyc 0.87.3. Recorded after the fact: the
+version was released without a CHANGELOG entry at the time.
+
+## 0.7.1 — 2026-08-22
+
+### Changed — dependency tracking
+
+Tracks tollbooth-dpyc 0.87.2. Recorded after the fact: the
+version was released without a CHANGELOG entry at the time.
+
 ## 0.7.0 — 2026-08-22
 
 ### Fixed — drills run detached again; they had not since 2026-08-06
@@ -145,19 +178,6 @@ while calling another and so failed for every operator.
 ### Changed — track tollbooth-dpyc 0.63.3
 
 - Bumped the pinned SDK to 0.63.3 (npub-proof challenge DM now stamps the request time). Also cuts a release for changes accumulated since the last tag.
-
-## [0.7.4] — 2026-08-24
-
-### Security — track tollbooth-dpyc 0.88.1 (cryptography floor raised to >=49.0.0)
-
-Picks up the SDK's fix for GHSA-m2h6-j472-rp4c: the X.509 verifier accepted
-wildcard DNS SANs, escaping `permittedSubtrees`. The advisory is fixed in
-cryptography 49.0.0, and the SDK previously declared a floor of `>=46.0.5` —
-which admitted every affected release.
-
-No install here was exposed: the resolved lock already carried a patched
-cryptography. What changes is what a fresh resolve is *allowed* to land on.
-See tollbooth-dpyc v0.88.1.
 
 ## [Unreleased]
 
