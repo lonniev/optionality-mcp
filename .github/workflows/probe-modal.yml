@@ -35,11 +35,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@v10.0.0
+
+      # `uv sync --locked` is how Horizon installs: fastmcp's UVEnvironment.prepare()
+      # shells out to `uv sync`, and build_command() prefixes `uv run`. Installing with
+      # pip here meant CI validated a resolution the deploy never used — and `--locked`
+      # additionally fails on a stale lock, so drift is a pre-merge error instead of a
+      # deploy-time surprise.
+      - name: Install dependencies (the lockfile Horizon deploys)
+        run: uv sync --locked --extra dev
 
       - name: The probe graph builds
-        run: python -c "import modal_probe; print(modal_probe.app.name)"
+        run: uv run python -c "import modal_probe; print(modal_probe.app.name)"
 
       - name: Deploy the probes
         env:
@@ -60,7 +67,7 @@ jobs:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
           MODAL_TOKEN_SECRET: ${{ secrets.MODAL_TOKEN_SECRET }}
           DPYC_OPERATOR_HEX: ${{ github.event.inputs.operator_hex }}
-        run: python scripts/run_probes.py
+        run: uv run python scripts/run_probes.py
 
       # Leave nothing running. The probes are a diagnostic, not a service.
       - name: Stop the probe app

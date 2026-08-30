@@ -54,8 +54,15 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@v10.0.0
+
+      # `uv sync --locked` is how Horizon installs: fastmcp's UVEnvironment.prepare()
+      # shells out to `uv sync`, and build_command() prefixes `uv run`. Installing with
+      # pip here meant CI validated a resolution the deploy never used — and `--locked`
+      # additionally fails on a stale lock, so drift is a pre-merge error instead of a
+      # deploy-time surprise.
+      - name: Install dependencies (the lockfile Horizon deploys)
+        run: uv sync --locked --extra dev
 
       # The tokens are repo secrets, NOT read from the operator vault. The
       # tempting alternative — give CI the nsec and pull the Modal tokens out of
