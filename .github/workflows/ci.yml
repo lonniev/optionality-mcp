@@ -80,7 +80,7 @@ jobs:
       # broken image spec or a missing mounted module before merge rather than
       # inside a patron's drill.
       - name: The detached runner's deploy graph builds
-        run: python -c "import modal_app; print(modal_app.app.name)"
+        run: uv run python -c "import modal_app; print(modal_app.app.name)"
 
       - name: Entrypoint inspects (the check Horizon performs at build time)
         run: |
