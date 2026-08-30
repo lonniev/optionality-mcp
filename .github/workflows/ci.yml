@@ -59,14 +59,21 @@ jobs:
             exit 1
 
 
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
+      - uses: astral-sh/setup-uv@v10.0.0
+
+      # `uv sync --locked` is how Horizon installs: fastmcp's UVEnvironment.prepare()
+      # shells out to `uv sync`, and build_command() prefixes `uv run`. Installing with
+      # pip here meant CI validated a resolution the deploy never used — and `--locked`
+      # additionally fails on a stale lock, so drift is a pre-merge error instead of a
+      # deploy-time surprise.
+      - name: Install dependencies (the lockfile Horizon deploys)
+        run: uv sync --locked --extra dev
 
       - name: Lint
-        run: ruff check .
+        run: uv run ruff check .
 
       - name: Run tests
-        run: pytest tests/ -v
+        run: uv run pytest tests/ -v
 
       # The detached runner's deploy graph builds. No credentials needed — this
       # constructs the App/Image objects without contacting Modal, and catches a
