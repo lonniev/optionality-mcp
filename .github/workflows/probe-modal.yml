@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: astral-sh/setup-uv@v10.0.0
+      - uses: astral-sh/setup-uv@v10.0.1
 
       # `uv sync --locked` is how Horizon installs: fastmcp's UVEnvironment.prepare()
       # shells out to `uv sync`, and build_command() prefixes `uv run`. Installing with
