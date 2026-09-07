@@ -79,6 +79,13 @@ jobs:
       # changes detected". That is the invariant HOLDING, not failing — and it is
       # the common case, because the paths filter is deliberately wider than the
       # image.
+      # Every command here goes through `uv run`, because the step above
+      # installs with `uv sync` — into `.venv`, which nothing has activated.
+      # Bare `python` and `modal` resolve to the runner's system interpreter
+      # instead, which has neither. This workflow last passed on 2026-08-30 and
+      # broke on the very next commit, the one that switched the install to
+      # `uv sync`; the install moved and the invocation did not follow it. Eight
+      # days of "deployed" that never left the runner.
       - name: Deploy to Modal and verify the live version
         env:
           MODAL_TOKEN_ID: ${{ secrets.MODAL_TOKEN_ID }}
@@ -90,18 +97,18 @@ jobs:
             echo "Detached execution stays off until they are; drills run in-process."
             exit 1
           fi
-          APP=$(python -c "import modal_app; print(modal_app.app.name)")
+          APP=$(uv run python -c "import modal_app; print(modal_app.app.name)")
           EXPECTED=$(git rev-parse --short HEAD)
 
           # tee so the deploy output is still in the log we assert against.
-          modal deploy modal_app.py 2>&1 | tee "$RUNNER_TEMP/modal-deploy.log"
+          uv run modal deploy modal_app.py 2>&1 | tee "$RUNNER_TEMP/modal-deploy.log"
 
           if grep -q 'no changes detected' "$RUNNER_TEMP/modal-deploy.log"; then
             echo "$APP already runs this commit's content — Modal cut no new version."
             exit 0
           fi
 
-          HISTORY=$(COLUMNS=200 modal app history "$APP")
+          HISTORY=$(COLUMNS=200 uv run modal app history "$APP")
           echo "$HISTORY"
           if ! echo "$HISTORY" | grep -q "$EXPECTED"; then
             echo "::error::$APP cut a new version, but not at $EXPECTED"
