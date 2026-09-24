@@ -26,8 +26,7 @@ import {
 } from "./claimCheck";
 export { ClaimCheckError };
 import type { Evaluation, Scenario, TipExchange } from "../types";
-import { clearSessionNsec, hasSessionNsec, sessionNsecNpub } from "./sessionNsec";
-import { signInlineProof } from "./inlineProof";
+import { clearSessionNsec, hasSessionNsec, sessionNsecNpub, signInlineProof } from "@tollbooth-dpyc/web";
 import { PROOF_EXPIRED_EVENT, isProofExpiryPayload } from "./proofExpiry";
 
 /// Return the npub proof that authenticates a paid tool call. One
@@ -276,16 +275,10 @@ export function logOut(): void {
   window.localStorage.removeItem(NPUB_STORAGE_KEY);
   window.localStorage.removeItem(PROOF_STORAGE_KEY);
   setGuestMode(false);
-  // Best-effort wipe of the in-browser session nsec. The escrowed copy
-  // on the BE survives until the user explicitly withdraws it via
-  // Profile → Game Persona Key.
-  try {
-    // Lazy require to avoid load-order issues if sessionNsec module is
-    // not yet hydrated (e.g. on cold tab close).
-    window.localStorage.removeItem("optionality:session_nsec:v1");
-  } catch {
-    /* noop */
-  }
+  // Wipe the in-browser session nsec. The escrowed copy on the BE
+  // survives until the user explicitly withdraws it via Profile → Game
+  // Persona Key.
+  clearSessionNsec();
 }
 
 interface ToolResultText {
@@ -1179,49 +1172,4 @@ export async function listMyCoupons(): Promise<ListMyCouponsResult> {
  */
 export async function forgetCoupon(couponId: string): Promise<ForgetCouponResult> {
   return callTool<ForgetCouponResult>("forget_coupon", { coupon_id: couponId });
-}
-
-// ─── Nostr kind-0 profile (served by the wheel; no relay I/O in the FE) ────
-
-export interface Kind0 {
-  name?: string;
-  display_name?: string;
-  about?: string;
-  picture?: string;
-  banner?: string;
-  nip05?: string;
-  website?: string;
-  lud16?: string;
-}
-
-export interface GetNostrProfileResult {
-  success: boolean;
-  npub?: string;
-  profile?: Kind0;
-  error?: string;
-}
-
-/// Read an npub's public kind-0 profile via the operator MCP (free, no proof).
-export async function getNostrProfile(npub: string): Promise<GetNostrProfileResult> {
-  return callTool<GetNostrProfileResult>("get_nostr_profile", { npub });
-}
-
-export interface PublishNostrProfileResult {
-  success: boolean;
-  ok?: number;
-  total?: number;
-  errors?: string[];
-  error?: string;
-}
-
-/// Relay a CLIENT-signed kind-0 event through the operator MCP. The FE signs;
-/// the wheel verifies pubkey+signature and fans out to relays.
-export async function publishNostrProfile(
-  npub: string,
-  signedEvent: string,
-): Promise<PublishNostrProfileResult> {
-  return callTool<PublishNostrProfileResult>("publish_nostr_profile", {
-    npub,
-    signed_event: signedEvent,
-  });
 }

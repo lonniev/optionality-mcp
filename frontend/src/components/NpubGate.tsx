@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { generateSecretKey, getPublicKey, nip19 } from "nostr-tools";
+import { setSessionNsec } from "@tollbooth-dpyc/web";
 
 import {
   forgetRecentLogin,
@@ -348,7 +349,6 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
 
     setBusy(true);
     try {
-      const { setSessionNsec } = await import("../lib/sessionNsec");
       const { escrowNsec } = await import("../lib/mcp");
       setStoredNpub(derivedNpub);
       setSessionNsec(nsec);
@@ -624,7 +624,6 @@ export default function NpubGate({ onAuthenticated }: { onAuthenticated: () => v
               // (Tactic 2 in identity_proof.verify_proof), so we
               // stash the nsec in browser session storage and the
               // mcp.ts callTool wrapper signs per-call proofs.
-              const { setSessionNsec } = await import("../lib/sessionNsec");
               const { escrowNsec } = await import("../lib/mcp");
               setStoredNpub(generated.npub);
               setSessionNsec(generated.nsec);

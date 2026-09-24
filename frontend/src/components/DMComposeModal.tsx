@@ -19,7 +19,8 @@ import {
   type RelayPublishResult,
 } from "../lib/nostr";
 import { getStoredNpub, sendPatronDm } from "../lib/mcp";
-import Avatar, { shortNpub } from "./Avatar";
+import { shortNpub } from "@tollbooth-dpyc/web";
+import { Avatar } from "@tollbooth-dpyc/web/react";
 
 interface Props {
   target: { npub: string; displayName?: string | null; avatar?: string | null };

@@ -1,5 +1,16 @@
 @import url('https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,700;1,9..144,400&family=JetBrains+Mono:wght@300;400;500;600&display=swap');
 
+/*
+ * Tailwind here serves only the shared @tollbooth-dpyc/web components: no
+ * preflight (the site keeps its own reset below) and no scan of our own
+ * source, so none of the site's class names ever turns into a utility.
+ */
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities) source(none);
+@import "@tollbooth-dpyc/web/theme.css";
+@source "../node_modules/@tollbooth-dpyc/web/dist";
+
 :root {
   --bg: #0d0b08;
   --bg-soft: #14110c;
@@ -46,7 +57,11 @@
   color-scheme: light;
 }
 
-* { box-sizing: border-box; margin: 0; padding: 0; }
+/* In the base layer so the shared cards' spacing utilities outrank it; any
+   unlayered rule of the site's own still does. */
+@layer base {
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+}
 
 html, body, #root {
   margin: 0;
@@ -63,3 +78,34 @@ body {
 }
 
 .serif { font-family: 'Fraunces', Georgia, serif; }
+
+/*
+ * The shared account cards in Optionality's own palette. These point at the
+ * site tokens, so they follow the dark/light toggle; written under both
+ * selectors so the package's prefers-color-scheme block never wins — the
+ * theme is the patron's choice here, not the device's.
+ */
+:root,
+:root:not([data-theme="light"]) {
+  --tb-accent: var(--amber);
+  --tb-on-accent: var(--bg);
+  --tb-surface: var(--panel);
+  --tb-surface-2: var(--bg-soft);
+  --tb-ink: var(--ink);
+  --tb-muted: var(--ink-soft);
+  --tb-line: var(--panel-edge);
+  --tb-ok: var(--jade);
+  --tb-warn-bg: var(--bg-soft);
+  --tb-warn-line: var(--amber);
+  --tb-warn-ink: var(--amber-bright);
+  --tb-err-bg: var(--bg-soft);
+  --tb-err-line: var(--crimson);
+  --tb-err-ink: var(--rust);
+}
+
+/* Without preflight a bare <button> keeps the browser's grey face. Scoped to
+   the host of the shared cards so the site's own buttons are untouched; the
+   package's buttons draw their own borders and fills over this. */
+@layer base {
+  .tb-host button { background: none; border: 0 solid; color: inherit; font: inherit; cursor: pointer; }
+}

@@ -1,11 +1,13 @@
 // Profile page — one identity, sourced from Nostr.
 //
 // The patron's profile (display name, avatar, bio, and the Nostr-native fields)
-// is read from and published to their Nostr kind-0 in NostrProfilePanel — the
-// single, self-sovereign source of truth. On publish, the identity fields are
-// mirrored into Optionality's store so the leaderboard + DM addressing keep
-// rendering names/avatars fast (no live relay fetch per row); the DB is a
-// derived cache, not an editable identity surface.
+// is read from and published to their Nostr kind-0 by the shared
+// NostrProfilePanel from @tollbooth-dpyc/web — the single, self-sovereign
+// source of truth. On publish, the name, avatar and bio are mirrored into
+// Optionality's store so the leaderboard + DM addressing keep rendering them
+// fast (no live relay fetch per row); the DB is a derived cache, not an
+// editable identity surface. Beside it, SessionKeyClaim lets a patron who signed in with
+// an in-browser key take that key with them; it renders nothing otherwise.
 //
 // This page also carries the app-side bits that AREN'T Nostr identity:
 // Preferences (theme — browser-local), the Game Persona Key (nsec escrow), My
@@ -19,6 +21,7 @@ import {
   forgetCoupon,
   getPatronProfile,
   listMyCoupons,
+  setProfile,
   redeemCoupon,
   serviceStatus,
   withdrawNsec,
@@ -26,12 +29,13 @@ import {
   type ServiceStatus,
 } from "../lib/mcp";
 import { useTheme, type Theme } from "../lib/theme";
-import NostrProfilePanel from "./NostrProfilePanel";
+import type { Kind0 } from "@tollbooth-dpyc/web";
+import { NostrProfilePanel, SessionKeyClaim } from "@tollbooth-dpyc/web/react";
 
 export default function ProfileTab({ npub }: { npub: string }) {
   // The only app-local profile state this page still needs is the nsec-escrow
   // custody flag — it can't live on Nostr, and it drives the Game Persona Key
-  // panel below. Identity (name/avatar/bio) lives on Nostr (NostrProfilePanel).
+  // panel below. Identity (name/avatar/bio) lives on Nostr (IdentityPanel).
   const [escrowed, setEscrowed] = useState<boolean>(false);
 
   useEffect(() => {
@@ -47,12 +51,45 @@ export default function ProfileTab({ npub }: { npub: string }) {
 
   return (
     <>
-      <NostrProfilePanel npub={npub} />
+      <IdentityPanel npub={npub} />
       <PreferencesPanel />
       <GamePersonaKeyPanel escrowed={escrowed} onChange={setEscrowed} />
       <MyCouponsPanel />
       <BuildAndLicensePanel />
     </>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────
+// Identity — the patron's Nostr kind-0, and their session key when this
+// browser holds it. Keyed by npub so a new sign-in never shows the last
+// patron's key state.
+
+/// Mirror a just-published kind-0 into Optionality's store. The draft keeps a
+/// glyph avatar (kind-0 drops it, since a Nostr picture must be a URL), so the
+/// leaderboard still shows it. Best-effort — never blocks the publish.
+function mirrorToLeaderboard(profile: Kind0): void {
+  void setProfile({
+    display_name: profile.display_name ?? "",
+    avatar: profile.picture ?? "",
+    bio: profile.about ?? "",
+  }).catch(() => { /* cache mirror is best-effort */ });
+}
+
+function IdentityPanel({ npub }: { npub: string }) {
+  return (
+    <div className="panel" style={{ marginTop: 20 }}>
+      <span className="panel-label">Profile</span>
+      <h2 className="serif">Your self-sovereign identity.</h2>
+      <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 18, lineHeight: 1.6 }}>
+        Your profile lives in your Nostr kind-0 metadata — read from relays and shown in every Nostr
+        client. Edits are signed in your browser and relayed; your key never leaves this device.
+      </p>
+      <div className="tb-host" style={{ display: "grid", gap: 12 }}>
+        <NostrProfilePanel npub={npub} onPublished={mirrorToLeaderboard} />
+        <SessionKeyClaim key={npub} npub={npub} />
+      </div>
+    </div>
   );
 }
 

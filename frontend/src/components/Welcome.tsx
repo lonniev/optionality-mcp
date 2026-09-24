@@ -15,7 +15,7 @@
 
 import { useEffect, useState } from "react";
 import { checkPrice, getGuestId } from "../lib/mcp";
-import { shortNpub } from "./Avatar";
+import { shortNpub } from "@tollbooth-dpyc/web";
 
 interface Props {
   onTopUp: () => void;
