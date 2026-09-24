@@ -18,12 +18,16 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
+    "@tailwindcss/vite": "^4.3.3",
+    "@tollbooth-dpyc/web": "0.2.0",
+    "lucide-react": "^1.48.0",
     "nostr-tools": "^2.23.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-markdown": "^10.0.0",
     "recharts": "^3.0.0",
-    "remark-gfm": "^4.0.0"
+    "remark-gfm": "^4.0.0",
+    "tailwindcss": "^4.3.3"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
