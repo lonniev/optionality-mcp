@@ -195,7 +195,8 @@ import RiskProfileChart from "./RiskProfileChart";
 import FactsLedger from "./FactsLedger";
 import SampleAssessment from "./SampleAssessment";
 import TopUpModal from "./TopUpModal";
-import Avatar, { shortNpub } from "./Avatar";
+import { shortNpub } from "@tollbooth-dpyc/web";
+import { Avatar } from "@tollbooth-dpyc/web/react";
 import ProfileTab from "./Profile";
 import DMComposeModal from "./DMComposeModal";
 import Welcome from "./Welcome";
@@ -423,7 +424,6 @@ const styles = `
     --jade: #6b8e6b;
     --crimson: #a4453a;
   }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
   body, .opt-root {
     background: var(--bg);
     color: var(--ink);
@@ -653,6 +653,10 @@ const styles = `
   .history-row .h-date { color: var(--ink-faint); font-size:11px;}
   .history-row .h-grade { font-family:'Fraunces',serif; font-size:20px; color: var(--amber); text-align:right; font-weight:500;}
   .history-row .h-score { color: var(--ink-soft); text-align:right;}
+
+  .avatar-dm { display:inline-flex; padding:0; border:none; border-radius:50%; background:none; cursor:pointer;}
+  .avatar-dm > span { transition: border-color 120ms ease;}
+  .avatar-dm:hover > span, .avatar-dm:focus-visible > span { border-color: var(--amber);}
 
   .loading { display: inline-block; padding: 12px 18px; color: var(--amber); font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; }
   .loading::after { content: ""; animation: dots 1.4s infinite; }
@@ -3258,9 +3262,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             shows up in your own Nostr client's inbox.
                             stopPropagation so the avatar tap doesn't
                             also expand the row's shared-pitches list. */}
-                        <Avatar
-                          value={row.avatar}
-                          size={40}
+                        <button
+                          type="button"
+                          className="avatar-dm"
                           onClick={() => setDmTarget({
                             npub: row.npub,
                             displayName: row.display_name,
@@ -3271,7 +3275,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                               ? "DM yourself — test the relay path"
                               : `DM ${row.display_name || shortNpub(row.npub)}`
                           }
-                        />
+                        >
+                          <Avatar value={row.avatar} size={40} />
+                        </button>
                       </div>
                       <div style={{ minWidth: 0 }}>
                         <div style={{ color: "var(--ink)" }}>
