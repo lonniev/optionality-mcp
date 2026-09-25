@@ -6,7 +6,7 @@
 // Two consumers:
 //   - bootstrapTheme() called from main.tsx before render, so the
 //     correct palette is in place on first paint and there's no flash.
-//   - useTheme() React hook (NpubGate + Profile use it) for components
+//   - useTheme() React hook (Profile uses it) for components
 //     that need to react to theme changes.
 
 import { useEffect, useState } from "react";

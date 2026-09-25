@@ -14,7 +14,8 @@
 // figures so we never misstate the operator's actual toll.
 
 import { useEffect, useState } from "react";
-import { checkPrice, getGuestId } from "../lib/mcp";
+import { checkPrice } from "../lib/mcp";
+import { getGuestId } from "../lib/guest";
 import { shortNpub } from "@tollbooth-dpyc/web";
 
 interface Props {

@@ -18,7 +18,8 @@ import {
   sendNip04DM,
   type RelayPublishResult,
 } from "../lib/nostr";
-import { getStoredNpub, sendPatronDm } from "../lib/mcp";
+import { getStoredNpub } from "@tollbooth-dpyc/web";
+import { sendPatronDm } from "../lib/mcp";
 import { shortNpub } from "@tollbooth-dpyc/web";
 import { Avatar } from "@tollbooth-dpyc/web/react";
 
