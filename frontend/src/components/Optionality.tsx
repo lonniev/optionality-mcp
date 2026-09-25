@@ -25,13 +25,15 @@ import type {
 } from "../types";
 import {
   checkBalance,
+  checkPrice,
   getAccountStatement,
   getStoredNpub,
   ProofRequiredError,
+  type AccountStatementResult,
+  type CheckBalanceResult,
 } from "@tollbooth-dpyc/web";
 import {
   askTip,
-  checkPrice,
   ClaimCheckError,
   dealScenario,
   deleteJournal,
@@ -46,7 +48,6 @@ import {
   saveDraft,
   shareEntry,
   startDeal,
-  type BalanceLedger,
 } from "../lib/mcp";
 import { getGuestId, isGuestMode } from "../lib/guest";
 import type { SharedEntry } from "../types";
@@ -200,7 +201,7 @@ import FactsLedger from "./FactsLedger";
 import SampleAssessment from "./SampleAssessment";
 import TopUpModal from "./TopUpModal";
 import { shortNpub } from "@tollbooth-dpyc/web";
-import { Avatar } from "@tollbooth-dpyc/web/react";
+import { Avatar, PageControls } from "@tollbooth-dpyc/web/react";
 import ProfileTab from "./Profile";
 import DMComposeModal from "./DMComposeModal";
 import Welcome from "./Welcome";
@@ -586,6 +587,9 @@ const styles = `
     color: var(--ink-soft);
     border: 1px solid var(--panel-edge);
   }
+  .journal-pager { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 14px; font-size: 12px; color: var(--ink-faint); flex-wrap: wrap; }
+  .journal-pager .btn { padding: 3px 9px; }
+  .journal-pager-label { flex: 1; text-align: center; }
   .btn-ghost:hover:not(:disabled) { color: var(--amber-bright); border-color: var(--amber); background: transparent; box-shadow:none;}
 
   .scenario-meta { font-size: 11px; color: var(--amber); letter-spacing: 0.2em; text-transform: uppercase; margin-bottom: 8px;}
@@ -954,12 +958,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [apiUsageLoading, setApiUsageLoading] = useState<boolean>(false);
   // DPYC ledger snapshot for the Usage tab — sats balance + per-tool
   // spend today + tranche detail. Loaded on tab open alongside apiUsage.
-  const [ledger, setLedger] = useState<BalanceLedger | null>(null);
+  const [ledger, setLedger] = useState<CheckBalanceResult | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState<boolean>(false);
   // Wheel's account_statement — authoritative all-time per-tool spend
   // with real sats. Loaded on Usage tab open. Covers every paid tool,
   // not just Claude-burning ones.
-  const [statement, setStatement] = useState<import("../types").AccountStatementResult | null>(null);
+  const [statement, setStatement] = useState<AccountStatementResult | null>(null);
   const [statementLoading, setStatementLoading] = useState<boolean>(false);
   // Effective price preview for the current (mode, difficulty) selection.
   // null = not yet looked up; -1 = lookup failed (e.g. pricing model has no
@@ -1953,7 +1957,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   async function loadLedger(): Promise<void> {
     setLedgerLoading(true);
     try {
-      setLedger((await checkBalance()) as BalanceLedger);
+      setLedger(await checkBalance());
     } catch (e) {
       if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
       console.error("ledger load failed", e);
@@ -1965,7 +1969,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   async function loadStatement(): Promise<void> {
     setStatementLoading(true);
     try {
-      setStatement((await getAccountStatement(30)) as import("../types").AccountStatementResult);
+      setStatement(await getAccountStatement(30));
     } catch (e) {
       if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
       console.error("account_statement load failed", e);
@@ -1992,12 +1996,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     let cancelled = false;
     (async () => {
       try {
-        const r = await checkPrice("deal_scenario", { mode, difficulty });
+        const fare = await checkPrice("deal_scenario", { mode, difficulty });
         if (cancelled) return;
-        const eff = r.effective_cost ?? r.cost
-          ?? ((r as unknown as { effective_cost_api_sats?: number }).effective_cost_api_sats)
-          ?? ((r as unknown as { base_cost_api_sats?: number }).base_cost_api_sats);
-        setDealPrice(typeof eff === "number" ? eff : -1);
+        setDealPrice(fare ?? -1);
       } catch {
         if (!cancelled) setDealPrice(-1);
       }
@@ -3597,19 +3598,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               </div>
             )}
 
-            {journalTotal > JOURNAL_PAGE_SIZE && (
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8, marginTop: 14, fontSize: 12, color: "var(--ink-faint)", flexWrap: "wrap" }}>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button className="btn btn-ghost" style={{ padding: "3px 9px" }} disabled={journalPage === 0} onClick={() => { setExpandedEntryId(null); setJournalPage(0); }} title="First page">⏮</button>
-                  <button className="btn btn-ghost" style={{ padding: "3px 9px" }} disabled={journalPage === 0} onClick={() => { setExpandedEntryId(null); setJournalPage((p) => Math.max(0, p - 1)); }}>← Prev</button>
-                </div>
-                <span>Page {journalPage + 1} of {Math.ceil(journalTotal / JOURNAL_PAGE_SIZE)} · {journalTotal} total</span>
-                <div style={{ display: "flex", gap: 6 }}>
-                  <button className="btn btn-ghost" style={{ padding: "3px 9px" }} disabled={journalPage >= Math.ceil(journalTotal / JOURNAL_PAGE_SIZE) - 1} onClick={() => { setExpandedEntryId(null); setJournalPage((p) => p + 1); }}>Next →</button>
-                  <button className="btn btn-ghost" style={{ padding: "3px 9px" }} disabled={journalPage >= Math.ceil(journalTotal / JOURNAL_PAGE_SIZE) - 1} onClick={() => { setExpandedEntryId(null); setJournalPage(Math.ceil(journalTotal / JOURNAL_PAGE_SIZE) - 1); }} title="Last page">⏭</button>
-                </div>
-              </div>
-            )}
+            <PageControls
+              page={journalPage}
+              pageSize={JOURNAL_PAGE_SIZE}
+              total={journalTotal}
+              onPage={(p) => { setExpandedEntryId(null); setJournalPage(p); }}
+              hideSinglePage
+              classNames={{ root: "journal-pager", chip: "btn btn-ghost", label: "journal-pager-label" }}
+            />
           </div>
         )}
       </div>
