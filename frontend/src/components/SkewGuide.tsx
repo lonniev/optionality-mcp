@@ -770,6 +770,20 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
           margin-top: 18px; padding-top: 12px; border-top: 1px solid var(--panel-edge);
           font-size: 11.5px; color: var(--ink-faint); font-style: italic; line-height: 1.5;
         }
+
+        @media (max-width: 1000px) {
+          .sg-trigger { min-height: 40px; }
+          .sg-close { width: 40px; height: 40px; }
+          .sg-wbtn { min-height: 40px; }
+        }
+        @media (max-width: 640px) {
+          .sg-scrim {
+            padding:
+              max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+              max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+          }
+          .sg-modal { width: 100%; height: 100%; }
+        }
       `}</style>
     </div>
   );

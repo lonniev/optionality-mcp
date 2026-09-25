@@ -103,8 +103,8 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
   const isSelfDM = target.npub === getStoredNpub();
 
   return (
-    <div style={STYLES.scrim} onClick={() => stage.kind !== "sending" && onClose()}>
-      <div style={STYLES.card} onClick={(e) => e.stopPropagation()}>
+    <div className="opt-scrim" style={STYLES.scrim} onClick={() => stage.kind !== "sending" && onClose()}>
+      <div className="opt-modal-card" style={STYLES.card} onClick={(e) => e.stopPropagation()}>
         <div style={STYLES.head}>{isSelfDM ? "Send DM to Yourself" : "Send DM"}</div>
 
         <div style={STYLES.recipient}>
@@ -134,7 +134,7 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
           <div style={STYLES.warn}>
             The shared relay set is still loading — close this and try again in a moment.
             <div style={STYLES.actions}>
-              <button onClick={onClose} style={STYLES.btnGhost}>Close</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>Close</button>
             </div>
           </div>
         )}
@@ -169,7 +169,7 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
             </p>
 
             <div style={STYLES.actions}>
-              <button onClick={onClose} style={STYLES.btnGhost}>Cancel</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>Cancel</button>
               <button
                 onClick={() => void handleSend()}
                 disabled={!text.trim()}
@@ -227,7 +227,7 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
               )}
             </p>
             <div style={STYLES.actions}>
-              <button onClick={onClose} style={STYLES.btnPrimary}>Done</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnPrimary}>Done</button>
             </div>
           </>
         )}
@@ -236,10 +236,10 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
           <>
             <div style={STYLES.errorMsg}>{stage.message}</div>
             <div style={STYLES.actions}>
-              <button onClick={onClose} style={STYLES.btnGhost}>Close</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>Close</button>
               <button
                 onClick={() => setStage({ kind: "compose" })}
-                style={STYLES.btnPrimary}
+                className="opt-tap" style={STYLES.btnPrimary}
               >
                 Try Again
               </button>
@@ -277,7 +277,7 @@ function NoSignerNotice({ onClose }: { onClose: () => void }) {
         />
       </div>
       <div style={STYLES.actions}>
-        <button onClick={onClose} style={STYLES.btnGhost}>Close</button>
+        <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>Close</button>
       </div>
     </>
   );
@@ -302,15 +302,13 @@ const STYLES: Record<string, React.CSSProperties> = {
     position: "fixed", inset: 0, zIndex: 100,
     background: "rgba(0,0,0,0.65)",
     display: "flex", alignItems: "center", justifyContent: "center",
-    padding: 20, backdropFilter: "blur(4px)",
+    backdropFilter: "blur(4px)",
   },
   card: {
     background: "var(--panel)",
     border: "1px solid var(--amber)",
     boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
-    padding: "26px 28px",
     width: "100%", maxWidth: 520,
-    maxHeight: "90vh", overflowY: "auto",
   },
   head: {
     fontFamily: "Fraunces, Georgia, serif",

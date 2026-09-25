@@ -783,6 +783,30 @@ export default function OptionChainGuide({
           color: var(--ink-faint);
           margin-left: 6px;
         }
+
+        /* Narrow screens: the chain fills the visible viewport (clear of
+           notches), the table tightens to fit a phone, and scrolls sideways
+           inside its own section as a last resort. */
+        .ocg-section { overflow-x: auto; }
+        @media (max-width: 1000px) {
+          .ocg-trigger { min-height: 40px; }
+          .ocg-close { width: 40px; height: 40px; }
+          .ocg-qty-btn { min-width: 36px; min-height: 36px; }
+        }
+        @media (max-width: 640px) {
+          .ocg-scrim {
+            padding:
+              max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right))
+              max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+          }
+          .ocg-modal { width: 100%; height: 100%; }
+          .ocg-body { padding: 18px 12px 24px; }
+          .ocg-title { padding-right: 48px; }
+          .ocg-table { font-size: 11px; }
+          .ocg-table thead th { padding: 4px 3px; letter-spacing: 0.04em; }
+          .ocg-table tbody td { padding: 6px 3px; }
+          .ocg-leg-chip { margin-left: 3px; padding: 1px 4px; }
+        }
       `}</style>
     </div>
   );
