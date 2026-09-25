@@ -114,3 +114,47 @@ body {
 @layer base {
   .tb-host button { background: none; border: 0 solid; color: inherit; font: inherit; cursor: pointer; }
 }
+
+/* The loading quotes (lib/quoteStyles.ts names these for the package's
+   QuoteScroller). On the site tokens, so they follow the dark/light toggle. */
+.quote-scroller {
+  padding: 22px 18px 14px;
+  text-align: center;
+}
+.quote-scroller-heading {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 11px;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--amber);
+  margin-bottom: 26px;
+}
+.quote-scroller-body {
+  max-width: 520px;
+  margin: 0 auto;
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 16px;
+}
+.quote-scroller-text {
+  font-family: Georgia, "Times New Roman", serif;
+  font-style: italic;
+  font-size: 17px;
+  line-height: 1.55;
+  color: var(--ink-soft);
+}
+.quote-scroller-text .qmark {
+  color: var(--amber);
+  font-size: 22px;
+  font-style: normal;
+  margin: 0 2px;
+}
+.quote-scroller-author {
+  font-family: "JetBrains Mono", monospace;
+  font-size: 10px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
