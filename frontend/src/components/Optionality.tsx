@@ -201,7 +201,7 @@ import FactsLedger from "./FactsLedger";
 import SampleAssessment from "./SampleAssessment";
 import TopUpModal from "./TopUpModal";
 import { shortNpub } from "@tollbooth-dpyc/web";
-import { Avatar, PageControls } from "@tollbooth-dpyc/web/react";
+import { Avatar, PageControls, SortHeader } from "@tollbooth-dpyc/web/react";
 import ProfileTab from "./Profile";
 import DMComposeModal from "./DMComposeModal";
 import Welcome from "./Welcome";
@@ -1535,18 +1535,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
   }
 
-  /// Column-header click: flip direction on the active column, else
-  /// switch to the new column (descending for newest/highest columns,
-  /// ascending otherwise). Always returns to page 0 so the user lands at
-  /// the top of the new ordering.
-  function applyJournalSort(col: string): void {
+  /// Column-header sort (the package's SortHeader picks the column and
+  /// direction). Always returns to page 0 so the user lands at the top of
+  /// the new ordering.
+  function applyJournalSort(col: string, dir: "asc" | "desc"): void {
     setExpandedEntryId(null);
-    if (col === journalSortCol) {
-      setJournalSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    } else {
-      setJournalSortCol(col);
-      setJournalSortDir(JOURNAL_DESC_FIRST.has(col) ? "desc" : "asc");
-    }
+    setJournalSortCol(col);
+    setJournalSortDir(dir);
     setJournalPage(0);
   }
 
@@ -3512,14 +3507,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   >
                     <div></div>
                     {JOURNAL_SORT_HEADERS.map((h) => (
-                      <div
+                      <SortHeader
                         key={h.key}
-                        onClick={() => applyJournalSort(h.key)}
-                        title={`Sort by ${h.label.toLowerCase()}`}
-                        style={{ cursor: "pointer", userSelect: "none", textAlign: h.align ?? "left" }}
-                      >
-                        {h.label}{journalSortCol === h.key ? (journalSortDir === "asc" ? " ▲" : " ▼") : ""}
-                      </div>
+                        as="div"
+                        label={h.label}
+                        col={h.key}
+                        activeCol={journalSortCol}
+                        dir={journalSortDir}
+                        onSort={applyJournalSort}
+                        initialDir={JOURNAL_DESC_FIRST.has(h.key) ? "desc" : "asc"}
+                        classNames={{ cell: h.align === "right" ? "journal-sort right" : "journal-sort" }}
+                      />
                     ))}
                     <div></div>
                   </div>

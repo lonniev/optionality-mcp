@@ -395,6 +395,8 @@ function MyCouponsPanel() {
         heading={null}
         intro="Redeem an operator code once. The discount applies automatically on subsequent paid tool calls until the per-patron cap or the calendar window expires."
         empty="No coupons redeemed yet. Operators distribute codes via Twitter, email, the welcome page, or DM — paste the code above to claim its discount."
+        formHeading="Redeem a code"
+        listHeading="Active"
         placeholder="FRESHMAN, EARLYBIRD…"
         redeemLabel="🎟 Redeem"
         forgetLabel="🗑"
@@ -403,6 +405,7 @@ function MyCouponsPanel() {
           form: "coupons-form",
           input: "coupons-input",
           chip: "btn coupons-chip",
+          subheading: "coupons-subheading",
           message: "coupons-message",
           ok: "ok",
           error: "err",
