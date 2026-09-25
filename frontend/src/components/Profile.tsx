@@ -23,13 +23,12 @@ import {
   listMyCoupons,
   setProfile,
   redeemCoupon,
-  serviceStatus,
   withdrawNsec,
+  type BuildStatus,
   type PatronCoupon,
-  type ServiceStatus,
 } from "../lib/mcp";
 import { useTheme, type Theme } from "../lib/theme";
-import type { Kind0 } from "@tollbooth-dpyc/web";
+import { serviceStatus, type Kind0 } from "@tollbooth-dpyc/web";
 import { NostrProfilePanel, SessionKeyClaim } from "@tollbooth-dpyc/web/react";
 
 export default function ProfileTab({ npub }: { npub: string }) {
@@ -631,12 +630,12 @@ function CouponRow({ coupon, onForget }: { coupon: PatronCoupon; onForget: () =>
 // it's a footer block, not a settings surface.
 
 function BuildAndLicensePanel() {
-  const [status, setStatus] = useState<ServiceStatus | null>(null);
+  const [status, setStatus] = useState<BuildStatus | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     serviceStatus()
-      .then((s) => { if (!cancelled) setStatus(s); })
+      .then((s) => { if (!cancelled) setStatus(s as BuildStatus); })
       .catch(() => { /* silent — version chips just won't render */ });
     return () => { cancelled = true; };
   }, []);

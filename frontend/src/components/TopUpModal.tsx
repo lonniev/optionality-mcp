@@ -5,7 +5,7 @@ import {
   purchaseCredits,
   type CheckPaymentResult,
   type PurchaseCreditsResult,
-} from "../lib/mcp";
+} from "@tollbooth-dpyc/web";
 
 // State machine for the modal:
 //

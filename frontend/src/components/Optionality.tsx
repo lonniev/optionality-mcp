@@ -24,8 +24,13 @@ import type {
   TipExchange,
 } from "../types";
 import {
-  askTip,
   checkBalance,
+  getAccountStatement,
+  getStoredNpub,
+  ProofRequiredError,
+} from "@tollbooth-dpyc/web";
+import {
+  askTip,
   checkPrice,
   ClaimCheckError,
   dealScenario,
@@ -35,16 +40,15 @@ import {
   getLeaderboard,
   getMyRank,
   getSharedEntries,
-  isGuestMode,
   judgeTrade,
   listJournal,
-  ProofRequiredError,
   resumeDealClaim,
   saveDraft,
   shareEntry,
   startDeal,
-  type CheckBalanceResult,
+  type BalanceLedger,
 } from "../lib/mcp";
+import { getGuestId, isGuestMode } from "../lib/guest";
 import type { SharedEntry } from "../types";
 import { useHashTab } from "../lib/hashTab";
 import { LEGACY_SESSION_KEY, sessionKey } from "../lib/sessionKey";
@@ -205,7 +209,7 @@ import JudgeAnimation from "./JudgeAnimation";
 import OptionChainGuide from "./OptionChainGuide";
 import RichText from "./RichText";
 import SkewGuide from "./SkewGuide";
-import { getGuestId, getPatronProfile, getStoredNpub } from "../lib/mcp";
+import { getPatronProfile } from "../lib/mcp";
 import { getEcosystemRelays } from "../lib/relays";
 
 // ============================================================
@@ -950,7 +954,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [apiUsageLoading, setApiUsageLoading] = useState<boolean>(false);
   // DPYC ledger snapshot for the Usage tab — sats balance + per-tool
   // spend today + tranche detail. Loaded on tab open alongside apiUsage.
-  const [ledger, setLedger] = useState<CheckBalanceResult | null>(null);
+  const [ledger, setLedger] = useState<BalanceLedger | null>(null);
   const [ledgerLoading, setLedgerLoading] = useState<boolean>(false);
   // Wheel's account_statement — authoritative all-time per-tool spend
   // with real sats. Loaded on Usage tab open. Covers every paid tool,
@@ -1949,8 +1953,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   async function loadLedger(): Promise<void> {
     setLedgerLoading(true);
     try {
-      const res = await checkBalance();
-      setLedger(res);
+      setLedger((await checkBalance()) as BalanceLedger);
     } catch (e) {
       if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
       console.error("ledger load failed", e);
@@ -1962,9 +1965,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   async function loadStatement(): Promise<void> {
     setStatementLoading(true);
     try {
-      const { getAccountStatement } = await import("../lib/mcp");
-      const res = await getAccountStatement(30);
-      setStatement(res);
+      setStatement((await getAccountStatement(30)) as import("../types").AccountStatementResult);
     } catch (e) {
       if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
       console.error("account_statement load failed", e);
