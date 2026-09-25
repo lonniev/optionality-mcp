@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import type { Mode } from "../types";
 import { etaLabel as computeEtaLabel, fmtClock } from "../lib/dealClock";
-import QuoteScroller from "./QuoteScroller";
+import { QuoteScroller } from "@tollbooth-dpyc/web/react";
+import { QUOTES, QUOTES_SOURCE } from "../lib/quotes";
 
 /// Full-viewport scene shown while a scenario is being composed (or
 /// reissued via mulligan). Mirrors JudgeAnimation's pattern but pulls
@@ -74,7 +75,7 @@ export default function DealAnimation(props: {
         className="deal-anim-bg"
       />
       <div className="deal-anim-foreground">
-        <QuoteScroller heading={props.loadingMsg} />
+        <QuoteScroller quotes={QUOTES} source={QUOTES_SOURCE} heading={props.loadingMsg} />
 
         {status ? (
           <div className="deal-card" role="status" aria-live="polite">
