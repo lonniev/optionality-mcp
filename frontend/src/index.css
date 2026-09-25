@@ -181,6 +181,7 @@ body {
 }
 
 /* Profile → My Coupons: the package's CouponsPanel in the site's panel. */
+.coupons-subheading { font-size: 10px; letter-spacing: 0.25em; text-transform: uppercase; color: var(--amber); margin: 6px 0; }
 .coupons-intro { color: var(--ink-soft); font-size: 12px; margin: 6px 0 18px; line-height: 1.6; }
 .coupons-form { display: flex; gap: 8px; margin-bottom: 16px; }
 .coupons-input {
@@ -207,3 +208,16 @@ body {
 .coupons-discount { color: var(--amber-bright); font-size: 13px; font-weight: 600; }
 .coupons-meta { font-size: 11px; color: var(--ink-faint); margin-top: 2px; }
 .coupons-active { color: var(--jade); }
+
+/* Journal → column headers: the package's SortHeader, drawn as the plain
+   header text it replaced (the button carries no chrome of its own). */
+.journal-sort button {
+  all: unset;
+  cursor: pointer;
+  user-select: none;
+  display: block;
+  width: 100%;
+  text-align: left;
+}
+.journal-sort.right button { text-align: right; }
+.journal-sort button:focus-visible { outline: 1px solid var(--amber); outline-offset: 2px; }
