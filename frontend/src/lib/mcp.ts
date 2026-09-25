@@ -17,7 +17,6 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 
-import { debugPush } from "./debugLog";
 import {
   ClaimCheckError,
   claimTerminalOutcome,
@@ -26,7 +25,7 @@ import {
 } from "./claimCheck";
 export { ClaimCheckError };
 import type { Evaluation, Scenario, TipExchange } from "../types";
-import { clearSessionNsec, hasSessionNsec, sessionNsecNpub, signInlineProof } from "@tollbooth-dpyc/web";
+import { clearSessionNsec, debugPush, hasSessionNsec, sessionNsecNpub, signInlineProof } from "@tollbooth-dpyc/web";
 import { PROOF_EXPIRED_EVENT, isProofExpiryPayload } from "./proofExpiry";
 
 /// Return the npub proof that authenticates a paid tool call. One

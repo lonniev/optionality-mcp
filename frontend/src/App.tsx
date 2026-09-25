@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
+import { DebugPanel } from "@tollbooth-dpyc/web/react";
 
-import DebugPanel from "./components/DebugPanel";
 import NpubGate from "./components/NpubGate";
 import Optionality from "./components/Optionality";
 import { PROOF_EXPIRED_EVENT, isLoggedIn, logOut } from "./lib/mcp";
@@ -28,6 +28,8 @@ export default function App() {
 
   // DebugPanel renders in both states so a stuck deal *or* a sign-in bounce is
   // always visible — it's the trace that makes "spins then reloads" diagnosable.
+  // One log for the page: this site's callTool and the package's both push to
+  // the package store. The .tb-host wrapper gives its buttons the site's reset.
   return (
     <>
       {authed ? (
@@ -35,7 +37,9 @@ export default function App() {
       ) : (
         <NpubGate onAuthenticated={handleAuthenticated} />
       )}
-      <DebugPanel />
+      <div className="tb-host">
+        <DebugPanel />
+      </div>
     </>
   );
 }

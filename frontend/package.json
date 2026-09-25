@@ -19,7 +19,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
     "@tailwindcss/vite": "^4.3.3",
-    "@tollbooth-dpyc/web": "0.2.0",
+    "@tollbooth-dpyc/web": "0.3.0",
     "lucide-react": "^1.48.0",
     "nostr-tools": "^2.23.5",
     "react": "^19.0.0",

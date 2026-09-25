@@ -28,6 +28,7 @@
   --rust: #b8553a;
   --jade: #6b8e6b;
   --crimson: #a4453a;
+  --plum: #b48ad6;
   color-scheme: dark;
 }
 
@@ -54,6 +55,7 @@
   --rust: #a04a30;
   --jade: #4e7a4e;
   --crimson: #8b3a30;
+  --plum: #6e3f94;
   color-scheme: light;
 }
 
@@ -80,10 +82,10 @@ body {
 .serif { font-family: 'Fraunces', Georgia, serif; }
 
 /*
- * The shared account cards in Optionality's own palette. These point at the
- * site tokens, so they follow the dark/light toggle; written under both
- * selectors so the package's prefers-color-scheme block never wins — the
- * theme is the patron's choice here, not the device's.
+ * The shared account cards and debug panel in Optionality's own palette.
+ * These point at the site tokens, so they follow the dark/light toggle;
+ * written under both selectors so the package's prefers-color-scheme block
+ * never wins — the theme is the patron's choice here, not the device's.
  */
 :root,
 :root:not([data-theme="light"]) {
@@ -101,6 +103,9 @@ body {
   --tb-err-bg: var(--bg-soft);
   --tb-err-line: var(--crimson);
   --tb-err-ink: var(--rust);
+  --tb-notice-bg: var(--bg-soft);
+  --tb-notice-line: var(--plum);
+  --tb-notice-ink: var(--plum);
 }
 
 /* Without preflight a bare <button> keeps the browser's grey face. Scoped to
