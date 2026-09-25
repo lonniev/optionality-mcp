@@ -1,29 +1,10 @@
 import { useEffect, useState } from "react";
-import {
-  checkBalance,
-  checkPayment,
-  purchaseCredits,
-  type CheckPaymentResult,
-  type PurchaseCreditsResult,
-} from "@tollbooth-dpyc/web";
+import { checkBalance, parseSats } from "@tollbooth-dpyc/web";
+import { useTopUp } from "@tollbooth-dpyc/web/react";
 
-// State machine for the modal:
-//
-//   idle ──pick amount──▶ purchasing ─┬─ ✓ ──▶ invoice (show QR + checkout link)
-//                                     └─ ✗ ──▶ error (with retry)
-//
-//   invoice ──Check Payment──▶ checking ─┬─ settled ──▶ paid (show new balance)
-//                                        └─ pending ──▶ back to invoice
-//
-// Mirrors the Top-Up sheet flow from the Pricing Studio iOS app.
-
-type Stage =
-  | { kind: "idle" }
-  | { kind: "purchasing" }
-  | { kind: "invoice"; result: PurchaseCreditsResult; lastStatus?: string }
-  | { kind: "checking"; result: PurchaseCreditsResult }
-  | { kind: "paid"; balance: number; result: PurchaseCreditsResult; creditsGranted: number }
-  | { kind: "error"; message: string };
+// Optionality's top-up sheet. The mechanics are the package's `useTopUp`:
+// purchase_credits → an invoice → check_payment, polled while the tab is
+// visible, with a manual check. This file is only how it looks.
 
 const PRESET_AMOUNTS = [100, 500, 1000, 5000, 10000];
 
@@ -34,112 +15,29 @@ interface Props {
 
 export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
   const [amount, setAmount] = useState<string>("1000");
-  const [stage, setStage] = useState<Stage>({ kind: "idle" });
-
-  // Best-effort current balance for the header — informational only.
+  // The balance in the header — read on open and again after a settlement.
   const [currentBalance, setCurrentBalance] = useState<number | null>(null);
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const r = await checkBalance();
-        if (!cancelled && typeof r.balance_api_sats === "number") {
-          setCurrentBalance(r.balance_api_sats);
-        }
-      } catch {
-        // silent — header just hides
+
+  async function readBalance(): Promise<void> {
+    try {
+      const r = await checkBalance();
+      if (typeof r.balance_api_sats === "number") {
+        setCurrentBalance(r.balance_api_sats);
+        onBalanceUpdated?.(r.balance_api_sats);
       }
-    })();
-    return () => { cancelled = true; };
+    } catch {
+      // silent — the header just hides
+    }
+  }
+
+  useEffect(() => {
+    void readBalance();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  function parsedAmount(): number {
-    const n = parseInt(amount, 10);
-    return Number.isFinite(n) && n > 0 ? n : 0;
-  }
-
-  async function handlePurchase(): Promise<void> {
-    const sats = parsedAmount();
-    if (sats <= 0) {
-      setStage({ kind: "error", message: "Pick a positive sats amount." });
-      return;
-    }
-    setStage({ kind: "purchasing" });
-    try {
-      const result = await purchaseCredits(sats);
-      if (result.error || (result.success === false && !result.invoice_id)) {
-        setStage({ kind: "error", message: result.error || "Purchase failed." });
-        return;
-      }
-      if (!result.invoice_id) {
-        setStage({ kind: "error", message: "Server returned no invoice_id." });
-        return;
-      }
-      setStage({ kind: "invoice", result });
-    } catch (e) {
-      setStage({ kind: "error", message: (e as Error).message });
-    }
-  }
-
-  async function handleCheckPayment(): Promise<void> {
-    if (stage.kind !== "invoice") return;
-    const invoiceId = stage.result.invoice_id;
-    if (!invoiceId) return;
-    const result = stage.result;
-    setStage({ kind: "checking", result });
-    try {
-      const payment: CheckPaymentResult = await checkPayment(invoiceId);
-      if (payment.error) {
-        setStage({ kind: "error", message: payment.error });
-        return;
-      }
-
-      const status = payment.status ?? "Unknown";
-
-      if (status === "Settled") {
-        // Wheel returns balance_api_sats (snake_case); fall back to a
-        // fresh check_balance call if that's missing for any reason.
-        let newBalance = payment.balance_api_sats;
-        if (typeof newBalance !== "number") {
-          try {
-            const bal = await checkBalance();
-            newBalance = bal.balance_api_sats;
-          } catch { /* fall through */ }
-        }
-        const balance = typeof newBalance === "number" ? newBalance : 0;
-        const creditsGranted = payment.credits_granted ?? 0;
-        if (onBalanceUpdated) onBalanceUpdated(balance);
-        setStage({ kind: "paid", balance, result, creditsGranted });
-        return;
-      }
-
-      if (status === "Expired" || status === "Invalid") {
-        setStage({
-          kind: "error",
-          message:
-            payment.message ||
-            `Invoice ${status.toLowerCase()}. Cancel and create a fresh invoice.`,
-        });
-        return;
-      }
-
-      // "New" or "Processing" — payment still pending. Bounce back to
-      // the invoice view, but stash the wheel's message so the user sees
-      // why the check didn't resolve. Without this the button toggled
-      // silently and looked broken.
-      setStage({
-        kind: "invoice",
-        result,
-        lastStatus: payment.message ?? `Status: ${status}`,
-      });
-    } catch (e) {
-      setStage({ kind: "error", message: (e as Error).message });
-    }
-  }
-
-  function handleRetry(): void {
-    setStage({ kind: "idle" });
-  }
+  const topUp = useTopUp({ onSettled: () => void readBalance() });
+  const { state } = topUp;
+  const sats = parseSats(amount);
 
   return (
     <div style={STYLES.scrim} onClick={onClose}>
@@ -151,7 +49,7 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
           )}
         </div>
 
-        {stage.kind === "idle" && (
+        {state.phase === "idle" && (
           <>
             <div style={STYLES.label}>Choose amount</div>
             <div style={STYLES.chipRow}>
@@ -180,14 +78,15 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
                 style={STYLES.input}
               />
             </div>
+            {state.message && <div style={{ ...STYLES.errorMsg, marginTop: 12 }}>{state.message}</div>}
             <div style={STYLES.actions}>
               <button onClick={onClose} style={STYLES.btnGhost}>Cancel</button>
               <button
-                onClick={() => void handlePurchase()}
-                disabled={parsedAmount() <= 0}
+                onClick={() => { if (sats !== null) topUp.create(sats); }}
+                disabled={sats === null}
                 style={{
                   ...STYLES.btnPrimary,
-                  ...(parsedAmount() <= 0 ? STYLES.btnDisabled : {}),
+                  ...(sats === null ? STYLES.btnDisabled : {}),
                 }}
               >
                 Generate Invoice
@@ -200,27 +99,24 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
           </>
         )}
 
-        {stage.kind === "purchasing" && (
+        {state.phase === "creating" && (
           <div style={STYLES.spinner}>Generating Lightning invoice…</div>
         )}
 
-        {(stage.kind === "invoice" || stage.kind === "checking") && (
+        {state.phase === "awaiting" && (
           <>
             <div style={STYLES.label}>Pay this invoice</div>
             <div style={STYLES.invoiceCard}>
               <div style={STYLES.amountLine}>
-                <b>{parsedAmount().toLocaleString()}</b>
+                <b>{state.invoice.sats.toLocaleString()}</b>
                 <span>sats</span>
               </div>
-              {(stage.result.lightning_invoice || stage.result.payment_request) && (
+              {state.invoice.bolt11 && (
                 <div style={STYLES.bolt}>
-                  <code style={STYLES.boltCode}>
-                    {(stage.result.lightning_invoice || stage.result.payment_request)?.slice(0, 80)}…
-                  </code>
+                  <code style={STYLES.boltCode}>{state.invoice.bolt11.slice(0, 80)}…</code>
                   <button
                     onClick={() => {
-                      const v = stage.result.lightning_invoice || stage.result.payment_request || "";
-                      void navigator.clipboard.writeText(v).catch(() => {});
+                      void navigator.clipboard.writeText(state.invoice.bolt11 ?? "").catch(() => {});
                     }}
                     style={STYLES.copyBtn}
                   >
@@ -228,9 +124,9 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
                   </button>
                 </div>
               )}
-              {stage.result.checkout_link && (
+              {state.invoice.checkoutLink && (
                 <a
-                  href={stage.result.checkout_link}
+                  href={state.invoice.checkoutLink}
                   target="_blank"
                   rel="noopener noreferrer"
                   style={STYLES.payLink}
@@ -238,54 +134,54 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
                   → Open BTCPay page
                 </a>
               )}
-              {stage.kind === "invoice" && stage.lastStatus && (
-                <div style={STYLES.lastStatus}>{stage.lastStatus}</div>
-              )}
+              {state.status && <div style={STYLES.lastStatus}>{state.status}</div>}
             </div>
             <div style={STYLES.actions}>
-              <button onClick={onClose} style={STYLES.btnGhost}>Cancel</button>
+              <button onClick={() => { topUp.cancel(); onClose(); }} style={STYLES.btnGhost}>Cancel</button>
               <button
-                onClick={() => void handleCheckPayment()}
-                disabled={stage.kind === "checking"}
+                onClick={topUp.check}
+                disabled={state.checking}
                 style={{
                   ...STYLES.btnPrimary,
-                  ...(stage.kind === "checking" ? STYLES.btnDisabled : {}),
+                  ...(state.checking ? STYLES.btnDisabled : {}),
                 }}
               >
-                {stage.kind === "checking" ? "Checking…" : "Check Payment"}
+                {state.checking ? "Checking…" : "Check Payment"}
               </button>
             </div>
             <p style={STYLES.fine}>
-              Pay from any Lightning wallet (Satoshi, Phoenix, Wallet of Satoshi, Mutiny, etc.) then
-              tap Check Payment. Settlement is usually instant.
+              Pay from any Lightning wallet (Satoshi, Phoenix, Wallet of Satoshi, Mutiny, etc.).
+              Settlement is usually instant, and this sheet notices it on its own.
             </p>
           </>
         )}
 
-        {stage.kind === "paid" && (
+        {state.phase === "settled" && (
           <>
             <div style={STYLES.successHead}>✓ Payment settled</div>
-            {stage.creditsGranted > 0 && (
+            {state.credited > 0 && (
               <div style={STYLES.creditsGranted}>
-                +{stage.creditsGranted.toLocaleString()} sats credited
+                +{state.credited.toLocaleString()} sats credited
               </div>
             )}
-            <div style={STYLES.successBalance}>
-              New balance
-              <b>{stage.balance.toLocaleString()} sats</b>
-            </div>
+            {currentBalance !== null && (
+              <div style={STYLES.successBalance}>
+                New balance
+                <b>{currentBalance.toLocaleString()} sats</b>
+              </div>
+            )}
             <div style={STYLES.actions}>
               <button onClick={onClose} style={STYLES.btnPrimary}>Done</button>
             </div>
           </>
         )}
 
-        {stage.kind === "error" && (
+        {state.phase === "failed" && (
           <>
-            <div style={STYLES.errorMsg}>{stage.message}</div>
+            <div style={STYLES.errorMsg}>{state.message}</div>
             <div style={STYLES.actions}>
               <button onClick={onClose} style={STYLES.btnGhost}>Close</button>
-              <button onClick={handleRetry} style={STYLES.btnPrimary}>Try Again</button>
+              <button onClick={topUp.reset} style={STYLES.btnPrimary}>Try Again</button>
             </div>
           </>
         )}

@@ -1,14 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { configureTollbooth } from '@tollbooth-dpyc/web'
+import { bootstrapTheme, configureTollbooth } from '@tollbooth-dpyc/web'
 import App from './App'
 import './index.css'
-import { bootstrapTheme } from './lib/theme'
-
-// Apply persisted light/dark theme before React paints — otherwise the
-// first frame flashes the default dark palette on light-theme users.
-bootstrapTheme()
-
 // The MCP client, sign-in gate and account pieces read who this site is from
 // here. The storage prefix defaults to the slug, so the identity, proof,
 // recent logins and session key stay under the optionality:* keys they
@@ -23,6 +17,10 @@ configureTollbooth({
   // Polled liveness and balance: too routine for the debug log.
   quietTools: ['session_status', 'check_balance'],
 })
+
+// The stored pick (dark or light; dark when none) is on <html> before React
+// paints, so a light-theme patron never sees a dark first frame.
+bootstrapTheme('dark')
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

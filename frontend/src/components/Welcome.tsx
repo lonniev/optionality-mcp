@@ -14,9 +14,8 @@
 // figures so we never misstate the operator's actual toll.
 
 import { useEffect, useState } from "react";
-import { checkPrice } from "../lib/mcp";
 import { getGuestId } from "../lib/guest";
-import { shortNpub } from "@tollbooth-dpyc/web";
+import { checkPrice, shortNpub } from "@tollbooth-dpyc/web";
 
 interface Props {
   onTopUp: () => void;
@@ -34,22 +33,6 @@ interface PriceQuote {
   pitch: number;     // judge_trade base
 }
 
-function readCost(r: Awaited<ReturnType<typeof checkPrice>>): number | null {
-  // Different wheel versions surface the cost under slightly different
-  // keys. Tolerate the variations rather than rejecting a quote on a
-  // shape change.
-  const candidates = [
-    (r as unknown as { effective_cost?: number }).effective_cost,
-    (r as unknown as { cost?: number }).cost,
-    (r as unknown as { effective_cost_api_sats?: number }).effective_cost_api_sats,
-    (r as unknown as { base_cost_api_sats?: number }).base_cost_api_sats,
-  ];
-  for (const v of candidates) {
-    if (typeof v === "number" && v >= 0) return v;
-  }
-  return null;
-}
-
 export default function Welcome({ onTopUp, onSeeAssessment, isGuest, npub, displayName }: Props) {
   // Live pricing from the BE — null until the lookup completes; -1
   // sentinel if the lookup failed and we should avoid quoting numbers.
@@ -59,15 +42,12 @@ export default function Welcome({ onTopUp, onSeeAssessment, isGuest, npub, displ
     let cancelled = false;
     (async () => {
       try {
-        const [cheap, expensive, pitch] = await Promise.all([
+        const [c, e, p] = await Promise.all([
           checkPrice("deal_scenario", { mode: "fiction", difficulty: "apprentice" }),
           checkPrice("deal_scenario", { mode: "live", difficulty: "sovereign" }),
           checkPrice("judge_trade", {}),
         ]);
         if (cancelled) return;
-        const c = readCost(cheap);
-        const e = readCost(expensive);
-        const p = readCost(pitch);
         if (typeof c === "number" && typeof e === "number" && typeof p === "number") {
           setPrices({ cheap: c, expensive: e, pitch: p });
         } else {
