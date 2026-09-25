@@ -26,12 +26,13 @@ import type {
 import {
   checkBalance,
   checkPrice,
-  getAccountStatement,
+  formatDate,
+  formatDateTime,
+  formatTime,
   getStoredNpub,
   ProofRequiredError,
-  type AccountStatementResult,
-  type CheckBalanceResult,
 } from "@tollbooth-dpyc/web";
+import { PatronFundingStatus, UsageSummary, useTimezone } from "@tollbooth-dpyc/web/react";
 import {
   askTip,
   ClaimCheckError,
@@ -84,11 +85,9 @@ const JOURNAL_GROUP_OPTIONS: { val: string; label: string }[] = [
 ];
 
 /// Compact date+time for the Created / Updated columns.
-function fmtJournalDate(iso?: string): string {
-  if (!iso) return "—";
-  const d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  return d.toLocaleString(undefined, {
+function fmtJournalDate(iso: string | undefined, zone: string): string {
+  if (!iso || isNaN(Date.parse(iso))) return "—";
+  return formatDateTime(iso, zone, {
     month: "short", day: "numeric", year: "2-digit",
     hour: "2-digit", minute: "2-digit", hour12: false,
   });
@@ -107,7 +106,6 @@ function fmtGroupLabel(groupBy: string, key: string): string {
 const MI_LOGOUT = "M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.58L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z";
 const MI_DELETE = "M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z";
 const MI_REFRESH = "M17.65 6.35C16.2 4.9 14.21 4 12 4c-4.42 0-7.99 3.58-7.99 8s3.57 8 7.99 8c3.73 0 6.84-2.55 7.73-6h-2.08c-.82 2.33-3.04 4-5.65 4-3.31 0-6-2.69-6-6s2.69-6 6-6c1.66 0 3.14.69 4.22 1.78L13 11h7V4l-2.35 2.35z";
-const MI_CART = "M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zM1 2v2h2l3.6 7.59-1.35 2.45c-.16.28-.25.61-.25.96 0 1.1.9 2 2 2h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12.9-1.63h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49c.08-.14.12-.31.12-.48 0-.55-.45-1-1-1H5.21l-.94-2H1zm16 16c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2z";
 // Tab glyphs. waving_hand + emoji_people fetched verbatim from Google's
 // material-design-icons repo; the rest are standard Material paths.
 const MI_WAVE = "M23,17c0,3.31-2.69,6-6,6v-1.5c2.48,0,4.5-2.02,4.5-4.5H23z M1,7c0-3.31,2.69-6,6-6v1.5C4.52,2.5,2.5,4.52,2.5,7H1z M8.01,4.32l-4.6,4.6c-3.22,3.22-3.22,8.45,0,11.67s8.45,3.22,11.67,0l7.07-7.07c0.49-0.49,0.49-1.28,0-1.77 c-0.49-0.49-1.28-0.49-1.77,0l-4.42,4.42l-0.71-0.71l6.54-6.54c0.49-0.49,0.49-1.28,0-1.77s-1.28-0.49-1.77,0l-5.83,5.83l-0.71-0.71 l6.89-6.89c0.49-0.49,0.49-1.28,0-1.77s-1.28-0.49-1.77,0l-6.89,6.89L11.02,9.8l5.48-5.48c0.49-0.49,0.49-1.28,0-1.77 s-1.28-0.49-1.77,0l-7.62,7.62c1.22,1.57,1.11,3.84-0.33,5.28l-0.71-0.71c1.17-1.17,1.17-3.07,0-4.24l-0.35-0.35l4.07-4.07 c0.49-0.49,0.49-1.28,0-1.77C9.29,3.83,8.5,3.83,8.01,4.32z";
@@ -831,6 +829,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Open from the lower-left of the scenario chooser; closed in all other
   // app states so an in-progress scenario doesn't get covered.
   const [topUpOpen, setTopUpOpen] = useState<boolean>(false);
+  // The patron's display time zone (Profile → Preferences); every date here follows it.
+  const [, zone] = useTimezone();
   // DM Compose modal target — clicking an avatar on the leaderboard
   // populates this with that patron's identity; null hides the modal.
   const [dmTarget, setDmTarget] = useState<{
@@ -1031,15 +1031,6 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   // Profile/Usage state (TaxSort-style transparency view).
   const [apiUsage, setApiUsage] = useState<ApiUsageResult | null>(null);
   const [apiUsageLoading, setApiUsageLoading] = useState<boolean>(false);
-  // DPYC ledger snapshot for the Usage tab — sats balance + per-tool
-  // spend today + tranche detail. Loaded on tab open alongside apiUsage.
-  const [ledger, setLedger] = useState<CheckBalanceResult | null>(null);
-  const [ledgerLoading, setLedgerLoading] = useState<boolean>(false);
-  // Wheel's account_statement — authoritative all-time per-tool spend
-  // with real sats. Loaded on Usage tab open. Covers every paid tool,
-  // not just Claude-burning ones.
-  const [statement, setStatement] = useState<AccountStatementResult | null>(null);
-  const [statementLoading, setStatementLoading] = useState<boolean>(false);
   // Effective price preview for the current (mode, difficulty) selection.
   // null = not yet looked up; -1 = lookup failed (e.g. pricing model has no
   // multipliers configured yet). Positive integers are the wheel's authoritative
@@ -2024,36 +2015,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
   }
 
-  async function loadLedger(): Promise<void> {
-    setLedgerLoading(true);
-    try {
-      setLedger(await checkBalance());
-    } catch (e) {
-      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
-      console.error("ledger load failed", e);
-    } finally {
-      setLedgerLoading(false);
-    }
-  }
-
-  async function loadStatement(): Promise<void> {
-    setStatementLoading(true);
-    try {
-      setStatement(await getAccountStatement(30));
-    } catch (e) {
-      if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
-      console.error("account_statement load failed", e);
-    } finally {
-      setStatementLoading(false);
-    }
-  }
-
-  // Auto-load usage stats + DPYC ledger + account statement on Usage tab open.
+  // Auto-load the model usage stats on Usage tab open (the ledger cards load
+  // themselves).
   useEffect(() => {
     if (tab === "usage") {
       if (apiUsage === null && !apiUsageLoading) void loadApiUsage();
-      if (ledger === null && !ledgerLoading) void loadLedger();
-      if (statement === null && !statementLoading) void loadStatement();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
@@ -2750,7 +2716,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         </div>
                         {draftSavedAt && !savingDraft && (
                           <div style={{ fontSize: 11, color: "var(--jade)", marginTop: 8, letterSpacing: "0.1em" }}>
-                            ✓ Draft saved {new Date(draftSavedAt).toLocaleTimeString()}
+                            ✓ Draft saved {formatTime(new Date(draftSavedAt).toISOString(), zone)}
                           </div>
                         )}
                         {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
@@ -2951,150 +2917,65 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         {tab === "sample" && <SampleAssessment />}
 
         {tab === "usage" && (
-          <div className="panel" style={{ position: "relative" }}>
-            <button
-              className="icon-btn spin"
-              onClick={() => { void loadLedger(); }}
-              disabled={ledgerLoading}
-              title="Refresh the ledger"
-              aria-label="Refresh the ledger"
-              style={{ position: "absolute", top: 16, right: 16, background: "transparent", border: "none", color: "var(--ink-faint)", cursor: "pointer", padding: 4, display: "inline-flex" }}
-            >
-              <MaterialIcon path={MI_REFRESH} size={30} />
-            </button>
+          <div className="panel">
             <span className="panel-label">DPYC Ledger</span>
             <h2 className="serif">Sats balance & MCP tool usage</h2>
             <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
-              Your live balance at Optionality MCP, what you've spent today, and the active
-              credit tranches funding it. Tolls are deducted at call time; the operator's
-              accounting flushes to Neon after each settle.
+              Your balance at Optionality MCP, what the last 30 days spent and bought, and the
+              tools the sats went to. Tolls are deducted at call time; the operator's accounting
+              flushes to Neon after each settle.
             </p>
-
-            {ledgerLoading && ledger === null && (
-              <div className="loading" style={{ display: "block", padding: "20px 0" }}>Pulling the ledger</div>
-            )}
-
-            {ledger !== null && ledger.error && (
-              <div className="error">{ledger.error}</div>
-            )}
-
-            {ledger !== null && !ledger.error && (() => {
-              const balance = ledger.balance_api_sats ?? 0;
-              const deposited = ledger.total_deposited_api_sats ?? 0;
-              const consumed = ledger.total_consumed_api_sats ?? 0;
-              const expired = ledger.total_expired_api_sats ?? 0;
-              // Lifetime per-tool from the wheel's account_statement —
-              // authoritative source with REAL sats per tool. Covers
-              // every paid tool, not just Claude-burning ones.
-              const lifetimeTools = (statement?.tool_usage_all_time ?? [])
-                .map((t) => ({
-                  tool: t.tool,
-                  calls: t.calls,
-                  sats: t.api_sats,
-                }))
-                .sort((a, b) => b.sats - a.sats);
-              const lifetimeCalls = lifetimeTools.reduce((s, r) => s + r.calls, 0);
-              const lifetimeSats = lifetimeTools.reduce((s, r) => s + r.sats, 0);
-
-              return (
+            <UsageSummary
+              heading=""
+              toolsHeading="MCP tool usage — last 30 days"
+              empty="No paid tool calls in the last 30 days."
+              renderRow={(t) => (
                 <>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12, marginBottom: 18 }}>
-                    <div style={{ background: "rgba(212,163,91,0.06)", border: "1px solid var(--amber)", padding: 16 }}>
-                      <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
-                        Balance
-                      </div>
-                      <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500, display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10 }}>
-                        {balance.toLocaleString()}
-                        <button
-                          className="icon-btn"
-                          onClick={() => setTopUpOpen(true)}
-                          title="Top Up — buy sats from the operator via Bitcoin Lightning"
-                          aria-label="Top Up sats"
-                          style={{ background: "transparent", border: "none", color: "var(--amber)", cursor: "pointer", padding: 2, display: "inline-flex" }}
-                        >
-                          <MaterialIcon path={MI_CART} size={30} />
-                        </button>
-                      </div>
-                      <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
-                        sats · {ledger.active_tranches ?? 0} tranche{(ledger.active_tranches ?? 0) === 1 ? "" : "s"}
-                      </div>
-                    </div>
-                    <div style={{ background: "var(--bg-soft)", border: "1px solid var(--panel-edge)", padding: 16 }}>
-                      <div style={{ fontSize: 10, color: "var(--ink-soft)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
-                        Deposited
-                      </div>
-                      <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, color: "var(--ink)" }}>
-                        {deposited.toLocaleString()}
-                      </div>
-                    </div>
-                    <div style={{ background: "var(--bg-soft)", border: "1px solid var(--panel-edge)", padding: 16 }}>
-                      <div style={{ fontSize: 10, color: "var(--ink-soft)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
-                        Consumed
-                      </div>
-                      <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, color: "var(--ink)" }}>
-                        {consumed.toLocaleString()}
-                      </div>
-                    </div>
-                    {expired > 0 && (
-                      <div style={{ background: "var(--bg-soft)", border: "1px solid var(--panel-edge)", padding: 16 }}>
-                        <div style={{ fontSize: 10, color: "var(--rust)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
-                          Expired
-                        </div>
-                        <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 20, color: "var(--rust)" }}>
-                          {expired.toLocaleString()}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-
-                  {ledger.expiring_within_24h_sats && ledger.expiring_within_24h_sats > 0 && (
-                    <div style={{ background: "rgba(184,85,58,0.06)", border: "1px solid var(--rust)", borderLeft: "3px solid var(--rust)", padding: 12, fontSize: 12, marginBottom: 14 }}>
-                      <b>{ledger.expiring_within_24h_sats.toLocaleString()} sats</b> expire within 24 hours.
-                      {ledger.next_expiration_iso && <> Next expiration: {new Date(ledger.next_expiration_iso).toLocaleString()}.</>}
-                    </div>
-                  )}
-
-                  <h3 className="serif">MCP tool usage — all time</h3>
-                  <p style={{ color: "var(--ink-faint)", fontSize: 11, marginTop: -4, marginBottom: 12 }}>
-                    Every paid tool you've ever called at this operator, with the sats actually charged. Source: the wheel's <code>account_statement</code> ledger.
-                  </p>
-                  {statementLoading && lifetimeTools.length === 0 ? (
-                    <div className="loading" style={{ display: "block", padding: "12px 0" }}>Fetching statement</div>
-                  ) : lifetimeTools.length === 0 ? (
-                    <div className="empty">No paid tool calls recorded yet.</div>
-                  ) : (
-                    <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12 }}>
-                      <thead>
-                        <tr style={{ borderBottom: "1px solid var(--panel-edge)", color: "var(--ink-faint)", letterSpacing: "0.15em", textTransform: "uppercase", fontSize: 10 }}>
-                          <th style={{ textAlign: "left", padding: "8px 6px" }}>Tool</th>
-                          <th style={{ textAlign: "right", padding: "8px 6px" }}>Calls</th>
-                          <th style={{ textAlign: "right", padding: "8px 6px" }}>Sats</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {lifetimeTools.map((r) => (
-                          <tr key={r.tool} style={{ borderBottom: "1px solid var(--panel-edge)" }}>
-                            <td style={{ padding: "8px 6px", color: "var(--ink)" }}>
-                              {displayToolName(r.tool)}
-                              <span style={{ marginLeft: 8, color: "var(--ink-faint)", fontSize: 10, fontFamily: "JetBrains Mono, monospace" }}>
-                                {r.tool}
-                              </span>
-                            </td>
-                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink-soft)" }}>{r.calls.toLocaleString()}</td>
-                            <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>{r.sats.toLocaleString()}</td>
-                          </tr>
-                        ))}
-                        <tr style={{ borderTop: "2px solid var(--panel-edge)", fontWeight: 600 }}>
-                          <td style={{ padding: "8px 6px", color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase", fontSize: 10 }}>Lifetime</td>
-                          <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{lifetimeCalls.toLocaleString()}</td>
-                          <td style={{ padding: "8px 6px", textAlign: "right", fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>{lifetimeSats.toLocaleString()}</td>
-                        </tr>
-                      </tbody>
-                    </table>
-                  )}
+                  <span className="usage-tool">
+                    {displayToolName(t.tool)}
+                    <span className="usage-raw">{t.tool}</span>
+                  </span>
+                  <span className="usage-calls">{t.calls.toLocaleString()}</span>
+                  <span className="usage-sats">{t.sats.toLocaleString()}</span>
                 </>
-              );
-            })()}
+              )}
+              classNames={{
+                root: "tb-host usage",
+                header: "usage-header",
+                chip: "btn btn-ghost usage-chip",
+                figures: "usage-figures",
+                figure: "usage-figure",
+                value: "usage-value",
+                label: "usage-label",
+                subheading: "usage-subheading",
+                list: "usage-list",
+                row: "usage-row",
+                loading: "loading usage-note",
+                error: "error",
+                empty: "empty",
+              }}
+            />
+            <PatronFundingStatus
+              heading="Account health"
+              classNames={{
+                root: "tb-host funding",
+                header: "usage-header funding-header",
+                heading: "usage-subheading",
+                overall: "funding-state",
+                chip: "btn btn-ghost usage-chip",
+                list: "funding-list",
+                row: "funding-row",
+                dependency: "funding-dep",
+                state: "funding-state",
+                detail: "funding-detail",
+                checked: "funding-checked",
+                loading: "loading usage-note",
+                error: "error",
+                ok: "ok",
+                warning: "warn",
+                blocked: "blocked",
+              }}
+            />
           </div>
         )}
 
@@ -3370,7 +3251,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           )}
                         </div>
                         <div className="h-date lb-npub" style={{ fontFamily: "JetBrains Mono, monospace" }}>
-                          {shortNpub(row.npub)}{row.last_played_at ? `  ·  last: ${new Date(row.last_played_at).toLocaleDateString()}` : ""}
+                          {shortNpub(row.npub)}{row.last_played_at ? `  ·  last: ${formatDate(row.last_played_at, zone)}` : ""}
                         </div>
                       </div>
                       <div className="lb-break" />
@@ -3421,7 +3302,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                         <span style={{ color: "var(--ink-faint)", marginRight: 8, fontSize: 10 }}>{open ? "▼" : "▶"}</span>
                                         {s.ticker || "—"} <span style={{ color: "var(--ink-faint)", fontSize: 11 }}>· {s.mode} · {s.difficulty}</span>
                                       </div>
-                                      <div className="h-date">{s.created_at ? new Date(s.created_at).toLocaleString() : ""}</div>
+                                      <div className="h-date">{s.created_at ? formatDateTime(s.created_at, zone) : ""}</div>
                                     </div>
                                     <div className="h-grade">{s.letter_grade ?? "—"}</div>
                                     <div className="h-score">{s.score != null ? `${s.score}/100` : "—"}</div>
@@ -3678,8 +3559,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           <div className="h-ticker j-ticker">{row.ticker || "—"}</div>
                           <div className="j-mode" style={{ color: "var(--ink-soft)" }}>{row.mode}</div>
                           <div className="j-diff" style={{ color: "var(--ink-soft)" }}>{row.difficulty}</div>
-                          <div className="j-created" style={{ color: "var(--ink-faint)", fontSize: 11 }}><span className="j-label">Created</span>{fmtJournalDate(row.created_at)}</div>
-                          <div className="j-updated" style={{ color: "var(--ink-faint)", fontSize: 11 }}><span className="j-label">Updated</span>{fmtJournalDate(row.updated_at)}</div>
+                          <div className="j-created" style={{ color: "var(--ink-faint)", fontSize: 11 }}><span className="j-label">Created</span>{fmtJournalDate(row.created_at, zone)}</div>
+                          <div className="j-updated" style={{ color: "var(--ink-faint)", fontSize: 11 }}><span className="j-label">Updated</span>{fmtJournalDate(row.updated_at, zone)}</div>
                           <div className="h-grade j-grade" style={{ fontSize: 16 }}>{row.letter_grade ?? "—"}</div>
                           <div className="h-score j-score">{row.score != null ? row.score : "—"}</div>
                           <div className="j-break b1" />

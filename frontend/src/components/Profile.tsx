@@ -22,12 +22,14 @@ import {
   setProfile,
   withdrawNsec,
 } from "../lib/mcp";
-import { serviceStatus, type Kind0, type ServiceStatus } from "@tollbooth-dpyc/web";
+import type { Kind0 } from "@tollbooth-dpyc/web";
 import {
+  BuildInfoPanel,
   CouponsPanel,
   NostrProfilePanel,
   SessionKeyClaim,
   ThemeToggle,
+  TimezonePicker,
 } from "@tollbooth-dpyc/web/react";
 
 export default function ProfileTab({ npub }: { npub: string }) {
@@ -92,8 +94,9 @@ function IdentityPanel({ npub }: { npub: string }) {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Preferences — app-side, browser-local. Just the theme now that relays are an
-// ecosystem concern (dpyc-community/relays.json), not a per-patron setting.
+// Preferences — app-side, browser-local: the theme and the display time zone.
+// Relays are an ecosystem concern (dpyc-community/relays.json), not a
+// per-patron setting.
 
 function PreferencesPanel() {
   return (
@@ -110,6 +113,9 @@ function PreferencesPanel() {
         labels={{ dark: "🌑 Dark", light: "☀ Light" }}
         classNames={{ root: "theme-toggle", chip: "theme-chip", active: "active" }}
       />
+
+      <FieldLabel>Time zone</FieldLabel>
+      <TimezonePicker classNames={{ select: "tz-select" }} />
     </div>
   );
 }
@@ -424,126 +430,42 @@ function MyCouponsPanel() {
 }
 
 // ──────────────────────────────────────────────────────────────────
-// Build & License — transparency block at the bottom of Profile.
-//
-// Shows the FE bundle version + git commit (from Vite's define-time
-// inject), the MCP server version + Horizon commit SHA (from
-// service_status), the GitHub repos for both, and a "open-source,
-// private-commerce" framing for the licensing posture. No interactivity —
-// it's a footer block, not a settings surface.
+// Build & License — transparency block at the bottom of Profile: the package's
+// BuildInfoPanel (FE bundle version + commit from Vite's define-time inject,
+// the MCP server's version, wheel and deployed commit from service_status, the
+// Tollbooth-DPYC™ links, licence and patent notice) in Optionality's panel.
 
 function BuildAndLicensePanel() {
-  const [status, setStatus] = useState<ServiceStatus | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    serviceStatus()
-      .then((s) => { if (!cancelled) setStatus(s); })
-      .catch(() => { /* silent — version chips just won't render */ });
-    return () => { cancelled = true; };
-  }, []);
-
-  const feCommit = __BUILD_COMMIT__;
-  const feVersion = __APP_VERSION__;
-  const feBuildTime = __BUILD_TIME__;
-  const mcpVersion = status?.version;
-  const mcpCommit = status?.build_info?.fastmcp_cloud_git_commit_sha?.slice(0, 7);
-  const mcpRepo = status?.build_info?.fastmcp_cloud_git_repo;
-  const wheelVersion = status?.tollbooth_dpyc_version;
-
   return (
     <div className="panel" style={{ marginTop: 20 }}>
       <span className="panel-label">Build &amp; License</span>
       <h2 className="serif">Open source, private commerce.</h2>
-      <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 18, lineHeight: 1.6 }}>
-        Optionality and Tollbooth-DPYC<sup>™</sup> ship as open source under the Apache
-        License 2.0 — anyone can read the code, fork it, run their own operator. The{" "}
-        <i>services</i> hosted on top of that code are private commerce: each operator
-        sets their own tolls and pricing model; patrons pre-fund a Lightning balance
-        and pay per-call. The protocol is shared; the businesses on it are not.
-      </p>
-
-      <FieldLabel>Frontend</FieldLabel>
-      <BuildRow label="Version" value={`${feVersion} · ${feCommit}`} />
-      <BuildRow label="Built at" value={feBuildTime} />
-      <BuildRow
-        label="Source"
-        href="https://github.com/lonniev/optionality-mcp"
-        value="github.com/lonniev/optionality-mcp"
-      />
-
-      <FieldLabel>MCP server</FieldLabel>
-      <BuildRow
-        label="Version"
-        value={
-          mcpVersion
-            ? `${mcpVersion}${mcpCommit ? ` · ${mcpCommit}` : ""}`
-            : "—"
+      <BuildInfoPanel
+        heading={null}
+        intro={
+          <>
+            Optionality and Tollbooth-DPYC<sup>™</sup> ship as open source under the Apache
+            License 2.0 — anyone can read the code, fork it, run their own operator. The{" "}
+            <i>services</i> hosted on top of that code are private commerce: each operator
+            sets their own tolls and pricing model; patrons pre-fund a Lightning balance
+            and pay per-call. The protocol is shared; the businesses on it are not.
+          </>
         }
+        frontend={{
+          version: __APP_VERSION__,
+          commit: __BUILD_COMMIT__,
+          builtAt: __BUILD_TIME__,
+          source: "https://github.com/lonniev/optionality-mcp",
+        }}
+        classNames={{
+          intro: "build-intro",
+          section: "build-section",
+          row: "build-row",
+          label: "build-label",
+          value: "build-value",
+          link: "build-link",
+        }}
       />
-      <BuildRow
-        label="tollbooth-dpyc"
-        value={wheelVersion ? `wheel ${wheelVersion}` : "—"}
-      />
-      {mcpRepo && (
-        <BuildRow label="Source" href={mcpRepo} value={mcpRepo.replace("https://", "")} />
-      )}
-
-      <FieldLabel>Tollbooth-DPYC<sup>™</sup></FieldLabel>
-      <BuildRow
-        label="Marketing"
-        href="https://tollbooth-dpyc.com"
-        value="tollbooth-dpyc.com"
-      />
-      <BuildRow
-        label="Community"
-        href="https://github.com/lonniev/dpyc-community"
-        value="github.com/lonniev/dpyc-community"
-      />
-      <BuildRow
-        label="Wheel source"
-        href="https://github.com/lonniev/tollbooth-dpyc"
-        value="github.com/lonniev/tollbooth-dpyc"
-      />
-
-      <FieldLabel>License</FieldLabel>
-      <BuildRow
-        label="Apache 2.0"
-        href="https://www.apache.org/licenses/LICENSE-2.0"
-        value="apache.org/licenses/LICENSE-2.0"
-      />
-    </div>
-  );
-}
-
-function BuildRow({ label, value, href }: { label: string; value: string; href?: string }) {
-  const valueStyle: React.CSSProperties = {
-    fontFamily: "JetBrains Mono, monospace",
-    fontSize: 11,
-    color: href ? "var(--amber-bright)" : "var(--ink)",
-    textDecoration: "none",
-    wordBreak: "break-all",
-  };
-  return (
-    <div
-      style={{
-        display: "flex",
-        gap: 12,
-        padding: "6px 0",
-        borderBottom: "1px solid var(--panel-edge)",
-        fontSize: 12,
-      }}
-    >
-      <div style={{ minWidth: 110, color: "var(--ink-faint)", letterSpacing: "0.08em" }}>{label}</div>
-      <div style={{ flex: 1 }}>
-        {href ? (
-          <a href={href} target="_blank" rel="noopener noreferrer" style={valueStyle}>
-            {value}
-          </a>
-        ) : (
-          <span style={valueStyle}>{value}</span>
-        )}
-      </div>
     </div>
   );
 }
