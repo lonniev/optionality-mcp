@@ -221,3 +221,31 @@ body {
 }
 .journal-sort.right button { text-align: right; }
 .journal-sort button:focus-visible { outline: 1px solid var(--amber); outline-offset: 2px; }
+
+/* Overlays (the site's own modals): fill the visible viewport less a gutter
+   that clears notches and the home bar, and scroll inside the card rather
+   than past the screen. */
+.opt-scrim {
+  padding:
+    max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right))
+    max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+.opt-modal-card {
+  padding: 26px 28px;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+@media (max-width: 560px) {
+  .opt-scrim {
+    padding:
+      max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+      max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+  }
+  .opt-modal-card { padding: 20px 18px; }
+}
+
+/* Touch-sized screens: the modals' chips, buttons and fields get a 40px floor. */
+@media (max-width: 1000px) {
+  .opt-tap { min-height: 40px; }
+}

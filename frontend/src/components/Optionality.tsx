@@ -62,14 +62,6 @@ import {
 } from "../lib/pendingDeals";
 import { etaLabel as computeEtaLabel, fmtClock } from "../lib/dealClock";
 
-/// Grid column template for the Journal table: caret · Symbol · Historicity
-/// · Difficulty · Created · Updated · Grade · Score · Status · Actions.
-/// Fixed widths for the narrow cells; flexible minmax(floor, fr) for the
-/// text cells so the table fills its (80%-wide, centered) frame and reflows
-/// responsively, falling back to horizontal scroll below the floor widths.
-const JOURNAL_COLS =
-  "26px minmax(56px,0.8fr) minmax(88px,1fr) minmax(92px,1fr) " +
-  "minmax(116px,1.3fr) minmax(116px,1.3fr) 50px 56px minmax(84px,1fr) 50px";
 
 /// Sortable column headers. `key` matches the wheel's `sort_col` whitelist
 /// (list_journal); the caret and actions columns aren't sortable.
@@ -442,6 +434,8 @@ const styles = `
       radial-gradient(ellipse at top left, rgba(212,163,91,0.05), transparent 50%),
       radial-gradient(ellipse at bottom right, rgba(164,69,58,0.04), transparent 50%);
     padding: 24px clamp(16px, 3vw, 40px) 80px;
+    padding-left: max(clamp(16px, 3vw, 40px), env(safe-area-inset-left));
+    padding-right: max(clamp(16px, 3vw, 40px), env(safe-area-inset-right));
   }
   .serif { font-family: 'Fraunces', Georgia, serif; }
   /* Container widths scale with viewport. iPad landscape (~1180-1366px)
@@ -734,6 +728,87 @@ const styles = `
   .leg-table th { text-align: left; font-weight: 400; font-size: 9.5px; letter-spacing: 0.2em; text-transform: uppercase; color: var(--ink-faint); padding: 5px 8px; border-bottom: 1px solid var(--panel-edge); }
   .leg-table td { padding: 5px 8px; border-bottom: 1px solid var(--panel-edge); color: var(--ink); }
   .leg-table tr:last-child td { border-bottom: none; }
+
+  /* Journal: a sortable table on wide screens, row cards on narrow ones.
+     The card-only pieces (the sort picker, the row breaks, the cell labels)
+     are display:none here, so the desktop grid never sees them. */
+  .journal-scroll { overflow-x: auto; }
+  .journal-table { width: 80%; min-width: 760px; margin: 0 auto; }
+  /* caret · Symbol · Historicity · Difficulty · Created · Updated · Grade ·
+     Score · Status · Actions: fixed widths for the narrow cells, minmax for
+     the text cells so the table fills its frame. */
+  .journal-row { grid-template-columns: 26px minmax(56px,0.8fr) minmax(88px,1fr) minmax(92px,1fr) minmax(116px,1.3fr) minmax(116px,1.3fr) 50px 56px minmax(84px,1fr) 50px; }
+  .journal-row .j-break, .journal-row .j-label, .journal-sort-picker { display: none; }
+  .j-del { background: none; border: none; cursor: pointer; padding: 2px 4px; color: var(--ink-faint); display: inline-flex; align-items: center; justify-content: center; opacity: 0.7; }
+
+  /* Leaderboard rows: the same grid for the header and every trader. */
+  .lb-row { grid-template-columns: 40px 56px 1fr 84px 84px 60px 60px 60px; }
+  .lb-row .lb-label, .lb-row .lb-break { display: none; }
+  .lb-name, .lb-npub { overflow-wrap: anywhere; }
+
+  .tap-icon { display: inline-flex; align-items: center; justify-content: center; }
+
+  @media (max-width: 1100px) {
+    .journal-table { width: 100%; }
+  }
+
+  /* Touch-sized screens: every control a thumb can hit (40px floor). */
+  @media (max-width: 1000px) {
+    .btn { min-height: 40px; }
+    .journal-pager .btn { min-width: 40px; }
+    .icon-btn, .tap-icon, .j-del, .avatar-dm { min-width: 40px; min-height: 40px; }
+  }
+
+  @media (max-width: 1000px) {
+    .journal-table { min-width: 0; }
+    .journal-row.journal-head { display: none !important; }
+    .journal-sort-picker { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 12px; }
+    .journal-sort-picker select {
+      -webkit-appearance: none; appearance: none; height: 40px; border-radius: 0; color: var(--ink); border: 1px solid var(--panel-edge);
+      font-family: 'JetBrains Mono', monospace; font-size: 13px; padding: 0 30px 0 10px;
+      background-color: var(--bg-soft);
+      background-image: linear-gradient(45deg, transparent 50%, var(--ink-soft) 50%), linear-gradient(135deg, var(--ink-soft) 50%, transparent 50%);
+      background-position: calc(100% - 15px) 55%, calc(100% - 10px) 55%;
+      background-size: 5px 5px; background-repeat: no-repeat;
+    }
+    .journal-row { display: flex !important; flex-wrap: wrap; align-items: center; gap: 2px 12px; padding: 12px 10px 12px 34px; position: relative; }
+    .journal-row .j-break { display: block; flex-basis: 100%; height: 0; }
+    .journal-row .j-caret { position: absolute; left: 12px; top: 16px; }
+    .journal-row .j-ticker { order: 1; flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; font-size: 17px; }
+    .journal-row .j-grade { order: 2; font-size: 20px !important; }
+    .journal-row .j-score { order: 3; min-width: 28px; }
+    .journal-row .j-act { order: 4; }
+    .journal-row .j-break.b1 { order: 5; }
+    .journal-row .j-mode, .journal-row .j-diff, .journal-row .j-status { order: 6; }
+    .journal-row .j-break.b2 { order: 7; }
+    .journal-row .j-created, .journal-row .j-updated { order: 8; }
+    .journal-row .j-label { display: inline; color: var(--ink-faint); font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; margin-right: 6px; }
+    .journal-detail { padding: 10px 4px 20px !important; }
+  }
+
+  @media (max-width: 640px) {
+    .panel { padding: 22px 16px; }
+    .header { align-items: flex-start; }
+    .brand { font-size: 28px; }
+    .stats { flex-wrap: wrap; gap: 12px 20px; width: 100%; }
+    .stats b, .balance-chip b { font-size: 19px; }
+    h2.serif { font-size: 23px; }
+    .score-banner { flex-wrap: wrap; gap: 10px 18px; padding: 14px 16px; }
+    .score-banner .headline { flex-basis: 100%; }
+
+    .lb-row.lb-head { display: none !important; }
+    .lb-row { display: flex !important; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px 8px; }
+    .lb-row .lb-name { flex: 1 1 0; min-width: 0; }
+    .lb-row .lb-stat { flex: 1 1 0; min-width: 52px; text-align: left !important; }
+    .lb-row .lb-label { display: block; color: var(--ink-faint); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; font-weight: 400; }
+    .lb-row .lb-break { display: block; flex-basis: 100%; height: 0; }
+    .lb-shared-row { grid-template-columns: 1fr 44px 64px !important; }
+    .lb-shared-row > div:last-child { display: none; }
+  }
+  @media (max-width: 560px) {
+    .tab-bar { flex-wrap: wrap; }
+    .tab { flex: 1 0 33.333%; padding: 10px 4px; letter-spacing: 0.08em; }
+  }
 `;
 
 // ============================================================
@@ -2039,6 +2114,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               onClick={onSignOut}
               title="Sign out — clear stored npub and proof token"
               aria-label="Sign out"
+              className="tap-icon"
               style={{
                 background: "transparent",
                 border: "none",
@@ -2212,6 +2288,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       step={50}
                       placeholder="optional"
                       value={maxLossInput}
+                      className="opt-tap"
                       onChange={(e) => setMaxLossInput(e.target.value)}
                       style={{
                         background: "transparent",
@@ -2229,6 +2306,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     <button
                       key={v}
                       type="button"
+                      className="opt-tap"
                       onClick={() => setMaxLossInput(String(v))}
                       style={{
                         background: maxLossInput === String(v) ? "var(--amber-glow)" : "transparent",
@@ -2247,6 +2325,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   {maxLossInput && (
                     <button
                       type="button"
+                      className="opt-tap"
                       onClick={() => setMaxLossInput("")}
                       style={{
                         background: "transparent",
@@ -2273,6 +2352,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       <button
                         key={s.id || "_any"}
                         type="button"
+                        className="opt-tap"
                         onClick={() => setSector(s.id)}
                         title={s.id ? `Limit the dealer to ${s.label}` : "Let the dealer pick any sector"}
                         style={{
@@ -2301,6 +2381,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     type="text"
                     placeholder="e.g. luxury goods"
                     value={SECTORS.some((s) => s.id === sector) ? "" : sector}
+                    className="opt-tap"
                     onChange={(e) => setSector(e.target.value)}
                     style={{
                       background: "transparent",
@@ -2316,6 +2397,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   {sector && !SECTORS.some((s) => s.id === sector) && (
                     <button
                       type="button"
+                      className="opt-tap"
                       onClick={() => setSector("")}
                       style={{
                         background: "transparent",
@@ -2589,6 +2671,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           disabled={savingDraft || !answer.trim()}
                           title="Persist this draft to your Journal entry so it survives a page reload — keep working without losing your pitch"
                           aria-label="Save draft"
+                          className="tap-icon"
                           style={{
                             background: "transparent",
                             border: "none",
@@ -2606,6 +2689,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           onClick={() => setConfirmingDiscard(true)}
                           title="Discard this scenario and pick a new one — the scenario fee is non-refundable, so you'll be asked to confirm"
                           aria-label="Discard scenario"
+                          className="tap-icon"
                           style={{
                             background: "transparent",
                             border: "none",
@@ -2646,6 +2730,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             disabled={loading || !answer.trim()}
                             title="Present your trade — submit to the senior PM for review and a graded pitch audit"
                             aria-label="Present pitch"
+                          className="tap-icon"
                             style={{
                               position: "absolute",
                               right: 8,
@@ -2702,6 +2787,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                     ? "Copied to clipboard"
                                     : "Copy this clue conversation to your clipboard, to continue in your own Claude.ai session"}
                                   aria-label="Copy conversation to clipboard"
+                          className="tap-icon"
                                   style={{
                                     background: "transparent",
                                     border: "none",
@@ -2766,6 +2852,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                 ? "Asking the clue desk…"
                                 : "Send this question — small clue fee applies"}
                               aria-label="Send clue question"
+                          className="tap-icon"
                               style={{
                                 position: "absolute",
                                 right: 8,
@@ -3217,7 +3304,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
             {leaderboard !== null && Array.isArray(leaderboard.rows) && leaderboard.rows.length > 0 && (
               <div>
-                <div className="history-row" style={{ gridTemplateColumns: "40px 56px 1fr 84px 84px 60px 60px 60px", color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase" }}>
+                <div className="history-row lb-row lb-head" style={{ color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase" }}>
                   <div>#</div>
                   <div></div>
                   <div>Trader</div>
@@ -3236,10 +3323,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   return (
                     <div key={row.npub}>
                     <div
-                      className="history-row"
+                      className="history-row lb-row"
                       onClick={() => { void togglePeerExpansion(row.npub); }}
                       style={{
-                        gridTemplateColumns: "40px 56px 1fr 84px 84px 60px 60px 60px",
                         background: isYou ? "var(--amber-glow)" : undefined,
                         alignItems: "center",
                         cursor: "pointer",
@@ -3276,26 +3362,29 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           <Avatar value={row.avatar} size={40} />
                         </button>
                       </div>
-                      <div style={{ minWidth: 0 }}>
+                      <div className="lb-name" style={{ minWidth: 0 }}>
                         <div style={{ color: "var(--ink)" }}>
                           {row.display_name || "Anonymous"}
                           {isYou && (
                             <span style={{ marginLeft: 6, fontSize: 10, color: "var(--amber)", letterSpacing: "0.15em" }}>YOU</span>
                           )}
                         </div>
-                        <div className="h-date" style={{ fontFamily: "JetBrains Mono, monospace" }}>
+                        <div className="h-date lb-npub" style={{ fontFamily: "JetBrains Mono, monospace" }}>
                           {shortNpub(row.npub)}{row.last_played_at ? `  ·  last: ${new Date(row.last_played_at).toLocaleDateString()}` : ""}
                         </div>
                       </div>
-                      <div className="h-score" style={{ color: "var(--amber-bright)", fontWeight: 600 }}>
+                      <div className="lb-break" />
+                      <div className="h-score lb-stat" style={{ color: "var(--amber-bright)", fontWeight: 600 }}>
+                        <span className="lb-label">W·Avg</span>
                         {row.weighted_avg != null ? Number(row.weighted_avg).toFixed(1) : "—"}
                       </div>
-                      <div className="h-score">
+                      <div className="h-score lb-stat">
+                        <span className="lb-label">W·Best</span>
                         {row.weighted_best != null ? Number(row.weighted_best).toFixed(1) : "—"}
                       </div>
-                      <div className="h-score" style={{ color: "var(--ink-faint)" }}>{row.avg_score}</div>
-                      <div className="h-score">{row.longest_streak ?? row.current_streak}</div>
-                      <div className="h-score">{row.total_played}</div>
+                      <div className="h-score lb-stat" style={{ color: "var(--ink-faint)" }}><span className="lb-label">Avg</span>{row.avg_score}</div>
+                      <div className="h-score lb-stat"><span className="lb-label">Streak</span>{row.longest_streak ?? row.current_streak}</div>
+                      <div className="h-score lb-stat"><span className="lb-label">Played</span>{row.total_played}</div>
                     </div>
 
                     {isExpanded && (
@@ -3323,7 +3412,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                               return (
                                 <div key={s.id} style={{ marginBottom: 6 }}>
                                   <div
-                                    className="history-row"
+                                    className="history-row lb-shared-row"
                                     onClick={() => setExpandedSharedTrade(open ? null : s.id)}
                                     style={{ cursor: "pointer", gridTemplateColumns: "1fr 80px 80px 64px", padding: "8px 12px", background: open ? "var(--bg)" : undefined }}
                                   >
@@ -3498,12 +3587,41 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               </div>
             )}
 
+            {/* Narrow screens hide the column headers (the rows become
+                cards), so the same sort is picked here instead. */}
             {journalEntries.length > 0 && (
-              <div style={{ overflowX: "auto" }}>
-                <div style={{ width: "80%", minWidth: 760, margin: "0 auto" }}>
+              <div className="journal-sort-picker">
+                <label htmlFor="journal-sort" style={{ fontSize: 11, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Sort by</label>
+                <select
+                  id="journal-sort"
+                  value={journalSortCol}
+                  onChange={(e) => {
+                    const col = e.target.value;
+                    applyJournalSort(col, JOURNAL_DESC_FIRST.has(col) ? "desc" : "asc");
+                  }}
+                >
+                  {JOURNAL_SORT_HEADERS.map((h) => (
+                    <option key={h.key} value={h.key}>{h.label}</option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-ghost"
+                  style={{ padding: "4px 12px", fontSize: 12 }}
+                  title="Flip the sort direction"
+                  aria-label={journalSortDir === "asc" ? "Sorted ascending — flip to descending" : "Sorted descending — flip to ascending"}
+                  onClick={() => applyJournalSort(journalSortCol, journalSortDir === "asc" ? "desc" : "asc")}
+                >
+                  {journalSortDir === "asc" ? "▲ Asc" : "▼ Desc"}
+                </button>
+              </div>
+            )}
+
+            {journalEntries.length > 0 && (
+              <div className="journal-scroll">
+                <div className="journal-table">
                   <div
-                    className="history-row"
-                    style={{ gridTemplateColumns: JOURNAL_COLS, color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase" }}
+                    className="history-row journal-row journal-head"
+                    style={{ color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.12em", textTransform: "uppercase" }}
                   >
                     <div></div>
                     {JOURNAL_SORT_HEADERS.map((h) => (
@@ -3546,7 +3664,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           </div>
                         )}
                         <div
-                          className="history-row"
+                          className="history-row journal-row"
                           onClick={() => {
                             const willOpen = !expanded;
                             setExpandedEntryId(willOpen ? row.id : null);
@@ -3554,35 +3672,37 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                               void loadJournalDetail(row.id);
                             }
                           }}
-                          style={{ gridTemplateColumns: JOURNAL_COLS, cursor: "pointer", alignItems: "center", fontSize: 12 }}
+                          style={{ cursor: "pointer", alignItems: "center", fontSize: 12 }}
                         >
-                          <div style={{ color: "var(--ink-faint)" }}>{expanded ? "▾" : "▸"}</div>
-                          <div className="h-ticker">{row.ticker || "—"}</div>
-                          <div style={{ color: "var(--ink-soft)" }}>{row.mode}</div>
-                          <div style={{ color: "var(--ink-soft)" }}>{row.difficulty}</div>
-                          <div style={{ color: "var(--ink-faint)", fontSize: 11 }}>{fmtJournalDate(row.created_at)}</div>
-                          <div style={{ color: "var(--ink-faint)", fontSize: 11 }}>{fmtJournalDate(row.updated_at)}</div>
-                          <div className="h-grade" style={{ fontSize: 16 }}>{row.letter_grade ?? "—"}</div>
-                          <div className="h-score">{row.score != null ? row.score : "—"}</div>
-                          <div>
+                          <div className="j-caret" style={{ color: "var(--ink-faint)" }}>{expanded ? "▾" : "▸"}</div>
+                          <div className="h-ticker j-ticker">{row.ticker || "—"}</div>
+                          <div className="j-mode" style={{ color: "var(--ink-soft)" }}>{row.mode}</div>
+                          <div className="j-diff" style={{ color: "var(--ink-soft)" }}>{row.difficulty}</div>
+                          <div className="j-created" style={{ color: "var(--ink-faint)", fontSize: 11 }}><span className="j-label">Created</span>{fmtJournalDate(row.created_at)}</div>
+                          <div className="j-updated" style={{ color: "var(--ink-faint)", fontSize: 11 }}><span className="j-label">Updated</span>{fmtJournalDate(row.updated_at)}</div>
+                          <div className="h-grade j-grade" style={{ fontSize: 16 }}>{row.letter_grade ?? "—"}</div>
+                          <div className="h-score j-score">{row.score != null ? row.score : "—"}</div>
+                          <div className="j-break b1" />
+                          <div className="j-status">
                             <span style={{ fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{row.status}</span>
                             {row.is_shared && (
                               <span style={{ marginLeft: 6, fontSize: 9, color: "var(--amber)", letterSpacing: "0.12em", textTransform: "uppercase" }}>· shared</span>
                             )}
                           </div>
-                          <div style={{ textAlign: "right" }}>
+                          <div className="j-act" style={{ textAlign: "right" }}>
                             <button
+                              className="j-del"
                               onClick={(e) => { e.stopPropagation(); setDeletingEntry(row); }}
                               title="Delete this session — permanent"
                               aria-label="Delete session"
-                              style={{ background: "none", border: "none", cursor: "pointer", padding: "2px 4px", color: "var(--ink-faint)", display: "inline-flex", opacity: 0.7 }}
                             >
                               <MaterialIcon path={MI_DELETE} size={16} />
                             </button>
                           </div>
+                          <div className="j-break b2" />
                         </div>
                         {expanded && (
-                          <div style={{ padding: "10px 14px 20px", background: "var(--bg-soft)" }}>
+                          <div className="journal-detail" style={{ padding: "10px 14px 20px", background: "var(--bg-soft)" }}>
                             {detailLoading && (
                               <div className="loading" style={{ display: "block", padding: "16px 0" }}>Loading entry</div>
                             )}
@@ -3634,21 +3754,21 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 100,
-            padding: 20,
             backdropFilter: "blur(4px)",
             WebkitBackdropFilter: "blur(4px)",
           }}
           onClick={() => setConfirmingDiscard(false)}
+          className="opt-scrim"
         >
           <div
             style={{
               background: "var(--panel)",
               border: "1px solid var(--amber)",
               boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
-              padding: "26px 28px",
               width: "100%",
               maxWidth: 460,
             }}
+            className="opt-modal-card"
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 22, color: "var(--amber-bright)", marginBottom: 14 }}>
@@ -3688,21 +3808,21 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 100,
-            padding: 20,
             backdropFilter: "blur(4px)",
             WebkitBackdropFilter: "blur(4px)",
           }}
           onClick={() => { if (!deleteInFlight) setDeletingEntry(null); }}
+          className="opt-scrim"
         >
           <div
             style={{
               background: "var(--panel)",
               border: "1px solid var(--amber)",
               boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
-              padding: "26px 28px",
               width: "100%",
               maxWidth: 460,
             }}
+            className="opt-modal-card"
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 22, color: "var(--amber-bright)", marginBottom: 14 }}>
@@ -3746,19 +3866,19 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             alignItems: "center",
             justifyContent: "center",
             zIndex: 100,
-            padding: 16,
             backdropFilter: "blur(4px)",
             WebkitBackdropFilter: "blur(4px)",
           }}
           onClick={() => setZoomedText(null)}
+          className="opt-scrim"
         >
           <div
             style={{
               background: "var(--panel)",
               border: "1px solid var(--amber)",
               boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
-              width: "min(960px, 96vw)",
-              maxHeight: "92vh",
+              width: "min(960px, 100%)",
+              maxHeight: "100%",
               display: "flex",
               flexDirection: "column",
             }}
@@ -3790,6 +3910,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   onClick={handleCopyZoomed}
                   title={zoomedCopied ? "Copied to clipboard" : "Copy this text to your clipboard"}
                   aria-label="Copy text to clipboard"
+                          className="tap-icon"
                   style={{
                     background: "transparent",
                     border: "none",
@@ -3806,6 +3927,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   type="button"
                   onClick={() => setZoomedText(null)}
                   title="Close (Esc)"
+                  className="tap-icon"
                   aria-label="Close"
                   style={{
                     background: "transparent",

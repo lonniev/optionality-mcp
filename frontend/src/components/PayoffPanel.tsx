@@ -528,6 +528,18 @@ export default function PayoffPanel({
         }
         .pp-confirm-cancel:hover { color: var(--ink); }
         .pp-confirm-go:hover { background: color-mix(in srgb, var(--amber) 14%, transparent); }
+
+        @media (max-width: 1000px) {
+          .pp-copy, .pp-presets-toggle { min-height: 40px; }
+        }
+        @media (max-width: 640px) {
+          .pp-confirm-scrim {
+            padding:
+              max(10px, env(safe-area-inset-top)) max(10px, env(safe-area-inset-right))
+              max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+          }
+          .pp-confirm { max-height: 100%; overflow-y: auto; padding: 20px 18px; }
+        }
       `}</style>
     </div>
   );

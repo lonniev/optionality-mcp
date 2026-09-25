@@ -40,8 +40,8 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
   const sats = parseSats(amount);
 
   return (
-    <div style={STYLES.scrim} onClick={onClose}>
-      <div style={STYLES.card} onClick={(e) => e.stopPropagation()}>
+    <div className="opt-scrim" style={STYLES.scrim} onClick={onClose}>
+      <div className="opt-modal-card" style={STYLES.card} onClick={(e) => e.stopPropagation()}>
         <div style={STYLES.head}>
           Top Up — Buy Sats
           {currentBalance !== null && (
@@ -57,6 +57,7 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
                 <button
                   key={v}
                   onClick={() => setAmount(String(v))}
+                  className="opt-tap"
                   style={{
                     ...STYLES.chip,
                     ...(amount === String(v) ? STYLES.chipActive : {}),
@@ -75,15 +76,16 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
                 step={50}
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
-                style={STYLES.input}
+                className="opt-tap" style={STYLES.input}
               />
             </div>
             {state.message && <div style={{ ...STYLES.errorMsg, marginTop: 12 }}>{state.message}</div>}
             <div style={STYLES.actions}>
-              <button onClick={onClose} style={STYLES.btnGhost}>Cancel</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>Cancel</button>
               <button
                 onClick={() => { if (sats !== null) topUp.create(sats); }}
                 disabled={sats === null}
+                className="opt-tap"
                 style={{
                   ...STYLES.btnPrimary,
                   ...(sats === null ? STYLES.btnDisabled : {}),
@@ -137,10 +139,11 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
               {state.status && <div style={STYLES.lastStatus}>{state.status}</div>}
             </div>
             <div style={STYLES.actions}>
-              <button onClick={() => { topUp.cancel(); onClose(); }} style={STYLES.btnGhost}>Cancel</button>
+              <button onClick={() => { topUp.cancel(); onClose(); }} className="opt-tap" style={STYLES.btnGhost}>Cancel</button>
               <button
                 onClick={topUp.check}
                 disabled={state.checking}
+                className="opt-tap"
                 style={{
                   ...STYLES.btnPrimary,
                   ...(state.checking ? STYLES.btnDisabled : {}),
@@ -171,7 +174,7 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
               </div>
             )}
             <div style={STYLES.actions}>
-              <button onClick={onClose} style={STYLES.btnPrimary}>Done</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnPrimary}>Done</button>
             </div>
           </>
         )}
@@ -180,8 +183,8 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
           <>
             <div style={STYLES.errorMsg}>{state.message}</div>
             <div style={STYLES.actions}>
-              <button onClick={onClose} style={STYLES.btnGhost}>Close</button>
-              <button onClick={topUp.reset} style={STYLES.btnPrimary}>Try Again</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>Close</button>
+              <button onClick={topUp.reset} className="opt-tap" style={STYLES.btnPrimary}>Try Again</button>
             </div>
           </>
         )}
@@ -199,18 +202,14 @@ const STYLES: Record<string, React.CSSProperties> = {
     alignItems: "center",
     justifyContent: "center",
     zIndex: 100,
-    padding: 20,
     backdropFilter: "blur(4px)",
   },
   card: {
     background: "var(--panel)",
     border: "1px solid var(--amber)",
     boxShadow: "0 12px 48px rgba(0,0,0,0.6)",
-    padding: "26px 28px",
     width: "100%",
     maxWidth: 460,
-    maxHeight: "90vh",
-    overflowY: "auto",
   },
   head: {
     display: "flex",
