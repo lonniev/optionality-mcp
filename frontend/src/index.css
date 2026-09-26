@@ -301,3 +301,15 @@ body {
 .build-label { min-width: 110px; color: var(--ink-faint); letter-spacing: 0.08em; }
 .build-value { flex: 1; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: var(--ink); word-break: break-all; text-decoration: none; }
 .build-link { color: var(--amber-bright); }
+
+/* Profile: the package's AccountPage as a column of the site's panels. The
+   identity heading panel leads; the Nostr profile and session-key cards
+   follow it; each section heading carries the amber border tab. */
+.account-page { display: flex; flex-direction: column; gap: 18px; margin-top: 20px; }
+.account-page .panel { margin-bottom: 0; }
+.account-page h2 .panel-label { font-family: 'JetBrains Mono', monospace; font-weight: 400; line-height: normal; }
+.account-intro { color: var(--ink-soft); font-size: 12px; margin: 6px 0 18px; line-height: 1.6; }
+.account-identity .account-intro { margin-bottom: 0; }
+
+/* Usage → AI usage: the package's RefreshButton in the panel's corner. */
+.usage-refresh { position: absolute; top: 16px; right: 16px; background: transparent; border: none; color: var(--ink-faint); cursor: pointer; padding: 4px; display: inline-flex; align-items: center; justify-content: center; }

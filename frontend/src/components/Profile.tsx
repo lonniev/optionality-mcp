@@ -1,20 +1,17 @@
-// Profile page — one identity, sourced from Nostr.
+// Profile page — the package's AccountPage in Optionality's panels.
 //
-// The patron's profile (display name, avatar, bio, and the Nostr-native fields)
-// is read from and published to their Nostr kind-0 by the shared
-// NostrProfilePanel from @tollbooth-dpyc/web — the single, self-sovereign
-// source of truth. On publish, the name, avatar and bio are mirrored into
-// Optionality's store so the leaderboard + DM addressing keep rendering them
-// fast (no live relay fetch per row); the DB is a derived cache, not an
-// editable identity surface. Beside it, SessionKeyClaim lets a patron who signed in with
-// an in-browser key take that key with them; it renders nothing otherwise.
+// AccountPage (@tollbooth-dpyc/web) owns the order every DPYC site shares:
+// the patron's Nostr kind-0 (the single, self-sovereign source of identity),
+// the session key (renders nothing unless this browser holds one), time
+// zone, theme, coupons and build. Optionality's own panel — the Game Persona
+// Key (nsec escrow) — sits after the theme, where Preferences used to end.
+// Usage has its own tab here, so the page's usage section is off.
 //
-// This page also carries the app-side bits that AREN'T Nostr identity:
-// Preferences (theme — browser-local), the Game Persona Key (nsec escrow), My
-// Coupons, and the Build & License footer. Relay selection is gone — the DPYC
-// ecosystem agrees on one relay set (dpyc-community/relays.json).
+// On publish, the name, avatar and bio are mirrored into Optionality's store so
+// the leaderboard + DM addressing keep rendering them fast (no live relay fetch
+// per row); the DB is a derived cache, not an editable identity surface.
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import {
   WITHDRAW_ACKNOWLEDGMENT,
   escrowNsec,
@@ -23,19 +20,23 @@ import {
   withdrawNsec,
 } from "../lib/mcp";
 import type { Kind0 } from "@tollbooth-dpyc/web";
-import {
-  BuildInfoPanel,
-  CouponsPanel,
-  NostrProfilePanel,
-  SessionKeyClaim,
-  ThemeToggle,
-  TimezonePicker,
-} from "@tollbooth-dpyc/web/react";
+import { AccountPage } from "@tollbooth-dpyc/web/react";
+
+/// A panel heading in the site's shape: the small amber tab on the border,
+/// then the serif title.
+function PanelTitle({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <span className="panel-label">{label}</span>
+      {children}
+    </>
+  );
+}
 
 export default function ProfileTab({ npub }: { npub: string }) {
   // The only app-local profile state this page still needs is the nsec-escrow
   // custody flag — it can't live on Nostr, and it drives the Game Persona Key
-  // panel below. Identity (name/avatar/bio) lives on Nostr (IdentityPanel).
+  // panel. Identity (name/avatar/bio) lives on Nostr.
   const [escrowed, setEscrowed] = useState<boolean>(false);
 
   useEffect(() => {
@@ -50,20 +51,111 @@ export default function ProfileTab({ npub }: { npub: string }) {
   }, []);
 
   return (
-    <>
-      <IdentityPanel npub={npub} />
-      <PreferencesPanel />
-      <GamePersonaKeyPanel escrowed={escrowed} onChange={setEscrowed} />
-      <MyCouponsPanel />
-      <BuildAndLicensePanel />
-    </>
+    <AccountPage
+      npub={npub}
+      heading={null}
+      before={
+        <div className="panel account-identity">
+          <span className="panel-label">Profile</span>
+          <h2 className="serif">Your self-sovereign identity.</h2>
+          <p className="account-intro">
+            Your profile lives in your Nostr kind-0 metadata — read from relays and shown in every Nostr
+            client. Edits are signed in your browser and relayed; your key never leaves this device.
+          </p>
+        </div>
+      }
+      profile={{ onPublished: mirrorToLeaderboard }}
+      usage={false}
+      timezone={{
+        heading: <PanelTitle label="Time zone">Every clock, one zone.</PanelTitle>,
+        intro: "Every date on Optionality follows this zone. Local to this browser — nothing here is published or shared.",
+        classNames: { select: "tz-select" },
+      }}
+      theme={{
+        heading: <PanelTitle label="Preferences">How Optionality looks to you.</PanelTitle>,
+        intro: "Local to this browser — nothing here is published or shared.",
+        themes: ["dark", "light"],
+        labels: { dark: "🌑 Dark", light: "☀ Light" },
+        classNames: { root: "theme-toggle", chip: "theme-chip", active: "active" },
+      }}
+      between={{ theme: <GamePersonaKeyPanel escrowed={escrowed} onChange={setEscrowed} /> }}
+      coupons={{
+        heading: (
+          <>
+            <span className="panel-label">My Coupons</span>
+            <h2 className="serif">Codes that ride along.</h2>
+          </>
+        ),
+        intro:
+          "Redeem an operator code once. The discount applies automatically on subsequent paid tool calls until the per-patron cap or the calendar window expires.",
+        empty:
+          "No coupons redeemed yet. Operators distribute codes via Twitter, email, the welcome page, or DM — paste the code above to claim its discount.",
+        formHeading: "Redeem a code",
+        listHeading: "Active",
+        placeholder: "FRESHMAN, EARLYBIRD…",
+        redeemLabel: "🎟 Redeem",
+        forgetLabel: "🗑",
+        classNames: {
+          root: "panel",
+          intro: "coupons-intro",
+          form: "coupons-form",
+          input: "coupons-input",
+          chip: "btn coupons-chip",
+          subheading: "coupons-subheading",
+          message: "coupons-message",
+          ok: "ok",
+          error: "err",
+          loading: "coupons-note",
+          empty: "coupons-note",
+          list: "coupons-list",
+          row: "coupons-row",
+          name: "coupons-name",
+          discount: "coupons-discount",
+          meta: "coupons-meta",
+          active: "coupons-active",
+        },
+      }}
+      build={{
+        heading: (
+          <>
+            <span className="panel-label">Build &amp; License</span>
+            <h2 className="serif">Open source, private commerce.</h2>
+          </>
+        ),
+        intro: (
+          <>
+            Optionality and Tollbooth-DPYC<sup>™</sup> ship as open source under the Apache
+            License 2.0 — anyone can read the code, fork it, run their own operator. The{" "}
+            <i>services</i> hosted on top of that code are private commerce: each operator
+            sets their own tolls and pricing model; patrons pre-fund a Lightning balance
+            and pay per-call. The protocol is shared; the businesses on it are not.
+          </>
+        ),
+        frontend: {
+          version: __APP_VERSION__,
+          commit: __BUILD_COMMIT__,
+          builtAt: __BUILD_TIME__,
+          source: "https://github.com/lonniev/optionality-mcp",
+        },
+        classNames: {
+          root: "panel",
+          intro: "build-intro",
+          section: "build-section",
+          row: "build-row",
+          label: "build-label",
+          value: "build-value",
+          link: "build-link",
+        },
+      }}
+      classNames={{
+        root: "tb-host account-page",
+        section: "panel",
+        sectionHeading: "serif",
+        sectionIntro: "account-intro",
+      }}
+    />
   );
 }
-
-// ──────────────────────────────────────────────────────────────────
-// Identity — the patron's Nostr kind-0, and their session key when this
-// browser holds it. Keyed by npub so a new sign-in never shows the last
-// patron's key state.
 
 /// Mirror a just-published kind-0 into Optionality's store. The draft keeps a
 /// glyph avatar (kind-0 drops it, since a Nostr picture must be a URL), so the
@@ -74,50 +166,6 @@ function mirrorToLeaderboard(profile: Kind0): void {
     avatar: profile.picture ?? "",
     bio: profile.about ?? "",
   }).catch(() => { /* cache mirror is best-effort */ });
-}
-
-function IdentityPanel({ npub }: { npub: string }) {
-  return (
-    <div className="panel" style={{ marginTop: 20 }}>
-      <span className="panel-label">Profile</span>
-      <h2 className="serif">Your self-sovereign identity.</h2>
-      <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 18, lineHeight: 1.6 }}>
-        Your profile lives in your Nostr kind-0 metadata — read from relays and shown in every Nostr
-        client. Edits are signed in your browser and relayed; your key never leaves this device.
-      </p>
-      <div className="tb-host" style={{ display: "grid", gap: 12 }}>
-        <NostrProfilePanel npub={npub} onPublished={mirrorToLeaderboard} />
-        <SessionKeyClaim key={npub} npub={npub} />
-      </div>
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────
-// Preferences — app-side, browser-local: the theme and the display time zone.
-// Relays are an ecosystem concern (dpyc-community/relays.json), not a
-// per-patron setting.
-
-function PreferencesPanel() {
-  return (
-    <div className="panel" style={{ marginTop: 20 }}>
-      <span className="panel-label">Preferences</span>
-      <h2 className="serif">How Optionality looks to you.</h2>
-      <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 18, lineHeight: 1.6 }}>
-        Local to this browser — nothing here is published or shared.
-      </p>
-
-      <FieldLabel>Theme</FieldLabel>
-      <ThemeToggle
-        themes={["dark", "light"]}
-        labels={{ dark: "🌑 Dark", light: "☀ Light" }}
-        classNames={{ root: "theme-toggle", chip: "theme-chip", active: "active" }}
-      />
-
-      <FieldLabel>Time zone</FieldLabel>
-      <TimezonePicker classNames={{ select: "tz-select" }} />
-    </div>
-  );
 }
 
 // ──────────────────────────────────────────────────────────────────
@@ -370,7 +418,7 @@ function GamePersonaKeyPanel({
   );
 }
 
-function FieldLabel({ children }: { children: React.ReactNode }) {
+function FieldLabel({ children }: { children: ReactNode }) {
   return (
     <div
       style={{
@@ -383,89 +431,6 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
       }}
     >
       {children}
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────
-// My Coupons — the package's CouponsPanel (redeem, list, remove) in
-// Optionality's panel. Operators distribute codes off-network (Twitter,
-// email, DM); the wheel applies the discount on later paid calls.
-
-function MyCouponsPanel() {
-  return (
-    <div className="panel" style={{ marginTop: 20 }}>
-      <span className="panel-label">My Coupons</span>
-      <h2 className="serif">Codes that ride along.</h2>
-      <CouponsPanel
-        heading={null}
-        intro="Redeem an operator code once. The discount applies automatically on subsequent paid tool calls until the per-patron cap or the calendar window expires."
-        empty="No coupons redeemed yet. Operators distribute codes via Twitter, email, the welcome page, or DM — paste the code above to claim its discount."
-        formHeading="Redeem a code"
-        listHeading="Active"
-        placeholder="FRESHMAN, EARLYBIRD…"
-        redeemLabel="🎟 Redeem"
-        forgetLabel="🗑"
-        classNames={{
-          intro: "coupons-intro",
-          form: "coupons-form",
-          input: "coupons-input",
-          chip: "btn coupons-chip",
-          subheading: "coupons-subheading",
-          message: "coupons-message",
-          ok: "ok",
-          error: "err",
-          loading: "coupons-note",
-          empty: "coupons-note",
-          list: "coupons-list",
-          row: "coupons-row",
-          name: "coupons-name",
-          discount: "coupons-discount",
-          meta: "coupons-meta",
-          active: "coupons-active",
-        }}
-      />
-    </div>
-  );
-}
-
-// ──────────────────────────────────────────────────────────────────
-// Build & License — transparency block at the bottom of Profile: the package's
-// BuildInfoPanel (FE bundle version + commit from Vite's define-time inject,
-// the MCP server's version, wheel and deployed commit from service_status, the
-// Tollbooth-DPYC™ links, licence and patent notice) in Optionality's panel.
-
-function BuildAndLicensePanel() {
-  return (
-    <div className="panel" style={{ marginTop: 20 }}>
-      <span className="panel-label">Build &amp; License</span>
-      <h2 className="serif">Open source, private commerce.</h2>
-      <BuildInfoPanel
-        heading={null}
-        intro={
-          <>
-            Optionality and Tollbooth-DPYC<sup>™</sup> ship as open source under the Apache
-            License 2.0 — anyone can read the code, fork it, run their own operator. The{" "}
-            <i>services</i> hosted on top of that code are private commerce: each operator
-            sets their own tolls and pricing model; patrons pre-fund a Lightning balance
-            and pay per-call. The protocol is shared; the businesses on it are not.
-          </>
-        }
-        frontend={{
-          version: __APP_VERSION__,
-          commit: __BUILD_COMMIT__,
-          builtAt: __BUILD_TIME__,
-          source: "https://github.com/lonniev/optionality-mcp",
-        }}
-        classNames={{
-          intro: "build-intro",
-          section: "build-section",
-          row: "build-row",
-          label: "build-label",
-          value: "build-value",
-          link: "build-link",
-        }}
-      />
     </div>
   );
 }
