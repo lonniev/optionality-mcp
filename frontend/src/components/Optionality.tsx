@@ -32,7 +32,7 @@ import {
   getStoredNpub,
   ProofRequiredError,
 } from "@tollbooth-dpyc/web";
-import { PatronFundingStatus, UsageSummary, useTimezone } from "@tollbooth-dpyc/web/react";
+import { PatronFundingStatus, RefreshButton, UsageSummary, useTimezone } from "@tollbooth-dpyc/web/react";
 import {
   askTip,
   ClaimCheckError,
@@ -661,11 +661,9 @@ const styles = `
   .loading { display: inline-block; padding: 12px 18px; color: var(--amber); font-size: 12px; letter-spacing: 0.3em; text-transform: uppercase; }
   .loading::after { content: ""; animation: dots 1.4s infinite; }
   @keyframes dots { 0%,20%{content:"";} 40%{content:" .";} 60%{content:" . .";} 80%,100%{content:" . . .";} }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   .icon-btn { transition: color 0.15s; }
   .icon-btn:hover:not(:disabled) { color: var(--amber-bright); }
   .icon-btn:disabled { cursor: default; }
-  .icon-btn.spin:disabled svg { animation: spin 0.8s linear infinite; }
 
   .error { color: var(--crimson); background: rgba(164,69,58,0.08); border-left: 2px solid var(--crimson); padding: 10px 14px; font-size: 12px; }
 
@@ -3017,16 +3015,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
           return (
             <div className="panel" style={{ position: "relative" }}>
-              <button
-                className="icon-btn spin"
-                onClick={() => { void loadApiUsage(); }}
-                disabled={apiUsageLoading}
-                title="Refresh API usage"
-                aria-label="Refresh API usage"
-                style={{ position: "absolute", top: 16, right: 16, background: "transparent", border: "none", color: "var(--ink-faint)", cursor: "pointer", padding: 4, display: "inline-flex" }}
-              >
-                <MaterialIcon path={MI_REFRESH} size={30} />
-              </button>
+              <RefreshButton
+                onRefresh={loadApiUsage}
+                busy={apiUsageLoading}
+                label="Refresh API usage"
+                icon={<MaterialIcon path={MI_REFRESH} size={30} />}
+                classNames={{ root: "icon-btn usage-refresh" }}
+              />
               <span className="panel-label">Usage</span>
               <h2 className="serif">AI usage & what it cost</h2>
               <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
