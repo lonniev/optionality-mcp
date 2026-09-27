@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { serviceStatus } from "@tollbooth-dpyc/web";
 import { NpubGate } from "@tollbooth-dpyc/web/react";
 
+/** The site's own words above the sign-in card. */
+const WELCOME = "An agentic options-trading trainer. The Firm composes the opportunity, you write the pitch, a judge scores your discipline.";
+
 /**
  * Optionality's sign-in screen: its own frame around the shared gate.
  *
@@ -45,7 +48,7 @@ export default function SignInScreen({
         </div>
 
         <div className="tb-host">
-          <NpubGate onLogin={onLogin} operatorHash={operatorHash || undefined} notice={notice} />
+          <NpubGate onLogin={onLogin} operatorHash={operatorHash || undefined} notice={notice} welcome={WELCOME} />
         </div>
 
         <div style={STYLES.panel}>
