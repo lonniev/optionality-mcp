@@ -1,0 +1,1 @@
+- Every Optionality tool carries a title and its behaviour (what it reads, writes or deletes, and which calls reach an LLM provider or Nostr); every parameter is described, with `npub` and `dpop_token` using the fleet's shared wording; the server reports its own version, website and icon.
