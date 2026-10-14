@@ -15,17 +15,29 @@ Deploy on Horizon:
 from __future__ import annotations
 
 import logging
-from typing import Annotated, Any
+from typing import Any
 
 from fastmcp import FastMCP
-from pydantic import Field
+from mcp.types import Icon
 from tollbooth.credential_templates import (
     LONGRUNNER_CREDENTIAL_FIELDS,
     CredentialTemplate,
     FieldSpec,
 )
+from tollbooth.params import DpopToken, PatronNpub
 from tollbooth.runtime import OperatorRuntime, register_standard_tools
-from tollbooth.tool_identity import STANDARD_IDENTITIES, ToolIdentity, capability_uuid
+from tollbooth.tool_identity import (
+    CONSUMES_REMOTE,
+    CREATES_REMOTE,
+    DELETES,
+    READS,
+    REPLACES,
+    STANDARD_IDENTITIES,
+    WRITES,
+    WRITES_REMOTE,
+    ToolIdentity,
+    capability_uuid,
+)
 from tollbooth.version import resolve_service_version
 
 from config import JOB_ATTEMPT_MAX_S
@@ -35,13 +47,11 @@ __version__ = resolve_service_version("optionality-mcp", __file__)
 logger = logging.getLogger(__name__)
 
 
-_NPUB_DOC = "Required. Your Nostr public key (npub1...) for credit billing."
-
-NpubField = Annotated[str, Field(description=_NPUB_DOC)]
-
-
 mcp = FastMCP(
     "optionality-mcp",
+    version=__version__,
+    website_url="https://optionality.tollbooth-dpyc.com",
+    icons=[Icon(src="https://tollbooth-dpyc.com/dpyc-logo.png", mimeType="image/png")],
     instructions=(
         "Optionality MCP — an AI-judged options trading drill, monetized "
         "via Tollbooth DPYC Bitcoin Lightning micropayments.\n\n"
@@ -101,6 +111,8 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=DEAL_SCENARIO_UUID,
         capability="deal_scenario",
+        title="Deal a scenario",
+        behavior=CREATES_REMOTE,
         category="heavy",
         intent="Generate a fresh options trading scenario and open a journal entry",
         pricing_hint_value=1,
@@ -127,6 +139,8 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=ASK_TIP_UUID,
         capability="ask_tip",
+        title="Ask for a clue",
+        behavior=CREATES_REMOTE,
         category="write",
         intent="Get a Socratic, non-spoiler hint on the open scenario",
     ),
@@ -134,6 +148,8 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=JUDGE_TRADE_UUID,
         capability="judge_trade",
+        title="Judge a trade",
+        behavior=CONSUMES_REMOTE,
         category="heavy",
         intent="Evaluate the trainee's trade across six dimensions and parse trade legs",
     ),
@@ -144,18 +160,24 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=FETCH_SCENARIO_UUID,
         capability="fetch_scenario",
+        title="Collect a scenario",
+        behavior=WRITES_REMOTE,
         category="free",
         intent="Redeem a deal_scenario claim check for the generated scenario",
     ),
     ToolIdentity(
         tool_id=FETCH_TIP_UUID,
         capability="fetch_tip",
+        title="Collect a clue",
+        behavior=WRITES_REMOTE,
         category="free",
         intent="Redeem an ask_tip claim check for the Socratic hint",
     ),
     ToolIdentity(
         tool_id=FETCH_JUDGEMENT_UUID,
         capability="fetch_judgement",
+        title="Collect a judgement",
+        behavior=WRITES_REMOTE,
         category="free",
         intent="Redeem a judge_trade claim check for the evaluation",
     ),
@@ -165,6 +187,8 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=SAVE_DRAFT_UUID,
         capability="save_draft",
+        title="Save a draft trade",
+        behavior=REPLACES,
         category="write",
         intent="Persist a draft trade proposal without running the judge",
         pricing_hint_value=1,
@@ -172,24 +196,32 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=LIST_JOURNAL_UUID,
         capability="list_journal",
+        title="List journal entries",
+        behavior=READS,
         category="read",
         intent="Paginated list of the patron's past journal entries",
     ),
     ToolIdentity(
         tool_id=GET_JOURNAL_UUID,
         capability="get_journal",
+        title="Get a journal entry",
+        behavior=READS,
         category="read",
         intent="Fetch a single journal entry including scenario + evaluation",
     ),
     ToolIdentity(
         tool_id=DELETE_JOURNAL_UUID,
         capability="delete_journal",
+        title="Delete a journal entry",
+        behavior=DELETES,
         category="write",
         intent="Hard-delete a journal entry and recompute the leaderboard",
     ),
     ToolIdentity(
         tool_id=SHARE_ENTRY_UUID,
         capability="share_entry",
+        title="Share a journal entry",
+        behavior=WRITES,
         category="write",
         intent="Toggle a journal entry's share flag so peers can see it under the patron's leaderboard row",
         pricing_hint_value=0,
@@ -197,6 +229,8 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=GET_SHARED_ENTRIES_UUID,
         capability="get_shared_entries",
+        title="Shared entries of a peer",
+        behavior=READS,
         category="read",
         intent="List a target patron's shared, evaluated entries — public peer-learning read",
         pricing_hint_value=0,
@@ -205,18 +239,24 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=GET_LEADERBOARD_UUID,
         capability="get_leaderboard",
+        title="Leaderboard",
+        behavior=READS,
         category="read",
         intent="Global leaderboard with optional mode/difficulty scope",
     ),
     ToolIdentity(
         tool_id=GET_MY_RANK_UUID,
         capability="get_my_rank",
+        title="My rank",
+        behavior=READS,
         category="read",
         intent="The caller's rank and stats under a chosen sort",
     ),
     ToolIdentity(
         tool_id=SET_DISPLAY_NAME_UUID,
         capability="set_display_name",
+        title="Set display name",
+        behavior=REPLACES,
         category="write",
         intent="Set the caller's display name on the leaderboard",
     ),
@@ -227,12 +267,16 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=GET_PATRON_PROFILE_UUID,
         capability="get_patron_profile",
+        title="My profile",
+        behavior=READS,
         category="free",
         intent="Read the caller's profile — display name, avatar, bio, preferred relays",
     ),
     ToolIdentity(
         tool_id=SET_PROFILE_UUID,
         capability="set_profile",
+        title="Update my profile",
+        behavior=REPLACES,
         category="free",
         intent="Update any subset of the caller's profile fields",
     ),
@@ -245,18 +289,24 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=ESCROW_NSEC_UUID,
         capability="escrow_nsec",
+        title="Escrow an nsec",
+        behavior=WRITES,
         category="free",
         intent="Deposit a freshly-generated nsec for operator-managed Nostr signing",
     ),
     ToolIdentity(
         tool_id=WITHDRAW_NSEC_UUID,
         capability="withdraw_nsec",
+        title="Withdraw an nsec",
+        behavior=DELETES,
         category="free",
         intent="Return the plaintext nsec once and remove it from operator storage",
     ),
     ToolIdentity(
         tool_id=SEND_PATRON_DM_UUID,
         capability="send_patron_dm",
+        title="Send a Nostr DM",
+        behavior=CREATES_REMOTE,
         category="write",
         intent="Sign and publish a Nostr DM as the patron using the escrowed nsec",
         # 5 sats per DM: pays for the operator's relay fan-out plus a
@@ -266,6 +316,8 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=GET_ESCROW_STATUS_UUID,
         capability="get_escrow_status",
+        title="Nsec escrow status",
+        behavior=READS,
         category="free",
         intent="Quick presence check for whether the patron has an escrowed nsec",
     ),
@@ -274,6 +326,8 @@ _DOMAIN_TOOLS: list[ToolIdentity] = [
     ToolIdentity(
         tool_id=GET_API_USAGE_STATS_UUID,
         capability="get_api_usage_stats",
+        title="LLM usage stats",
+        behavior=READS,
         category="free",
         intent="Aggregated LLM token usage per model, scoped to the caller",
     ),
@@ -358,8 +412,8 @@ tool = register_standard_tools(
 async def deal_scenario(
     mode: str,
     difficulty: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
     max_loss_usd: int | None = None,
     replay_entry_id: str | None = None,
     sector: str = "",
@@ -440,8 +494,8 @@ async def deal_scenario(
 @runtime.paid_tool(capability_uuid("fetch_scenario"))
 async def fetch_scenario(
     claim_check: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Redeem a deal_scenario claim check.
 
@@ -449,6 +503,9 @@ async def fetch_scenario(
     call again. When ``done``, ``result`` holds the deal_scenario response
     (``entry_id`` + ``scenario``). ``expired`` means the claim is unknown
     or its result aged out — start a new deal_scenario request.
+
+    Args:
+        claim_check: The ``claim_check`` string that deal_scenario returned.
     """
     return await runtime.fetch_async_job(claim_check, npub)
 
@@ -459,14 +516,19 @@ async def ask_tip(
     entry_id: str,
     question: str,
     history: str = "",
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Get a non-spoiler Socratic hint for an open journal entry.
 
-    history is an optional JSON-encoded array of prior {question, answer}
-    turns from this clue conversation, so follow-on questions have
-    context. The wheel caps it hard, so oversupplying gains nothing.
+    Args:
+        entry_id: UUID of the caller's journal entry whose scenario the
+            question is about.
+        question: The trainee's question, in free text. An empty or
+            oversized question gets a canned nudge with no LLM call.
+        history: Optional JSON-encoded array of prior ``{question, answer}``
+            turns from this clue conversation, so follow-on questions have
+            context. The wheel caps it hard, so oversupplying gains nothing.
 
     Returns a **claim check**, not the hint. Redeem the ``claim_check``
     with ``optionality_fetch_tip``, polling until ``status`` is ``done``.
@@ -498,8 +560,8 @@ async def ask_tip(
 @runtime.paid_tool(capability_uuid("fetch_tip"))
 async def fetch_tip(
     claim_check: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Redeem an ask_tip claim check.
 
@@ -507,6 +569,9 @@ async def fetch_tip(
     call again. When ``done``, ``result`` holds the ask_tip response
     (``tip``). ``expired`` means the claim is unknown or its result aged
     out — ask again.
+
+    Args:
+        claim_check: The ``claim_check`` string that ask_tip returned.
     """
     return await runtime.fetch_async_job(claim_check, npub)
 
@@ -516,10 +581,15 @@ async def fetch_tip(
 async def judge_trade(
     entry_id: str,
     trade_proposal: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Evaluate the trainee's trade. Persists evaluation, parses legs, recomputes leaderboard.
+
+    Args:
+        entry_id: UUID of the caller's journal entry holding the scenario.
+        trade_proposal: The trainee's free-text trade pitch. Must not be
+            blank; it replaces any earlier proposal on the entry.
 
     Returns a **claim check**, not the evaluation. Redeem the
     ``claim_check`` with ``optionality_fetch_judgement``, polling until
@@ -544,8 +614,8 @@ async def judge_trade(
 @runtime.paid_tool(capability_uuid("fetch_judgement"))
 async def fetch_judgement(
     claim_check: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Redeem a judge_trade claim check.
 
@@ -553,6 +623,9 @@ async def fetch_judgement(
     call again. When ``done``, ``result`` holds the judge_trade response
     (``entry_id`` + ``evaluation``). ``expired`` means the claim is
     unknown or its result aged out — submit the trade again.
+
+    Args:
+        claim_check: The ``claim_check`` string that judge_trade returned.
     """
     return await runtime.fetch_async_job(claim_check, npub)
 
@@ -562,10 +635,16 @@ async def fetch_judgement(
 async def save_draft(
     entry_id: str,
     trade_proposal: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Persist a draft trade proposal without running the judge."""
+    """Persist a draft trade proposal without running the judge.
+
+    Args:
+        entry_id: UUID of the caller's journal entry.
+        trade_proposal: The draft trade pitch, in free text. It replaces the
+            entry's saved draft; the entry stays ``open``.
+    """
     from tools.journal import save_draft as _impl
     return await _impl(npub=npub, entry_id=entry_id, trade_proposal=trade_proposal)
 
@@ -580,8 +659,8 @@ async def list_journal(
     sort_dir: str = "desc",
     page: int = 0,
     page_size: int = 25,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Server-side sorted, grouped, paginated list of the caller's journal.
 
@@ -616,10 +695,14 @@ async def list_journal(
 @runtime.paid_tool(capability_uuid("get_journal"))
 async def get_journal(
     entry_id: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Return the full journal entry including scenario + evaluation."""
+    """Return the full journal entry including scenario + evaluation.
+
+    Args:
+        entry_id: UUID of the caller's journal entry.
+    """
     from tools.journal import get_journal as _impl
     return await _impl(npub=npub, entry_id=entry_id)
 
@@ -628,10 +711,14 @@ async def get_journal(
 @runtime.paid_tool(capability_uuid("delete_journal"))
 async def delete_journal(
     entry_id: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Hard-delete a journal entry and recompute the leaderboard cache."""
+    """Hard-delete a journal entry and recompute the leaderboard cache.
+
+    Args:
+        entry_id: UUID of the caller's journal entry to delete.
+    """
     from tools.journal import delete_journal as _impl
     return await _impl(npub=npub, entry_id=entry_id)
 
@@ -641,8 +728,8 @@ async def delete_journal(
 async def share_entry(
     entry_id: str,
     shared: bool = True,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Toggle a journal entry's share flag.
 
@@ -672,7 +759,8 @@ async def get_shared_entries(
     tool the FE invokes without identity injection.
 
     Args:
-        target_npub: Whose shared entries to fetch.
+        target_npub: Nostr public key (npub1...) of the leaderboard peer
+            whose shared entries to list.
         limit:       Max rows (1..50, default 20).
     """
     from tools.journal import get_shared_entries as _impl
@@ -685,8 +773,8 @@ async def get_leaderboard(
     sort_by: str = "avg",
     limit: int = 25,
     scope: str = "",
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Global leaderboard ordered by ``sort_by``.
 
@@ -704,10 +792,14 @@ async def get_leaderboard(
 @runtime.paid_tool(capability_uuid("get_my_rank"))
 async def get_my_rank(
     sort_by: str = "avg",
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """The caller's leaderboard row plus their ordinal rank under ``sort_by``."""
+    """The caller's leaderboard row plus their ordinal rank under ``sort_by``.
+
+    Args:
+        sort_by: ``avg`` | ``best`` | ``streak`` | ``played`` | ``recent``.
+    """
     from tools.leaderboard import get_my_rank as _impl
     return await _impl(npub=npub, sort_by=sort_by)
 
@@ -716,10 +808,14 @@ async def get_my_rank(
 @runtime.paid_tool(capability_uuid("set_display_name"))
 async def set_display_name(
     name: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
-    """Set the caller's display name on the leaderboard. 1..32 chars, unicode allowed."""
+    """Set the caller's display name on the leaderboard.
+
+    Args:
+        name: The display name, 1..32 characters, unicode allowed.
+    """
     from tools.leaderboard import set_display_name as _impl
     return await _impl(npub=npub, name=name)
 
@@ -727,8 +823,8 @@ async def set_display_name(
 @tool
 @runtime.paid_tool(capability_uuid("get_patron_profile"))
 async def get_patron_profile(
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Return the caller's profile — display_name, avatar, bio, relays."""
     from tools.profile import get_patron_profile as _impl
@@ -742,8 +838,8 @@ async def set_profile(
     avatar: str | None = None,
     bio: str | None = None,
     relays: str | None = None,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Update any subset of the caller's profile fields.
 
@@ -771,8 +867,8 @@ async def set_profile(
 @runtime.paid_tool(capability_uuid("escrow_nsec"))
 async def escrow_nsec(
     nsec: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Deposit a freshly-generated nsec for operator-managed Nostr signing.
 
@@ -784,6 +880,9 @@ async def escrow_nsec(
 
     The nsec MUST derive to the same npub that authenticated this call,
     or the deposit is rejected.
+
+    Args:
+        nsec: The patron's Nostr secret key in bech32 form (nsec1...).
     """
     from tools.escrow import escrow_nsec as _impl
     return await _impl(npub=npub, nsec_bech32=nsec)
@@ -793,8 +892,8 @@ async def escrow_nsec(
 @runtime.paid_tool(capability_uuid("withdraw_nsec"))
 async def withdraw_nsec(
     acknowledgment: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Return the plaintext nsec once and remove it from operator storage.
 
@@ -804,6 +903,10 @@ async def withdraw_nsec(
     After this call you regain full self-custody; the operator forgets
     the key. You're now responsible for stashing it in a Nostr client
     (0xchat, Damus, Amber) and signing DMs locally via NIP-07.
+
+    Args:
+        acknowledgment: Exactly "I understand I am now solely responsible
+            for this nsec."
     """
     from tools.escrow import withdraw_nsec as _impl
     return await _impl(npub=npub, acknowledgment=acknowledgment)
@@ -814,8 +917,8 @@ async def withdraw_nsec(
 async def send_patron_dm(
     target_npub: str,
     message: str,
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Sign and publish a Nostr DM as the patron, using the escrowed nsec.
 
@@ -828,6 +931,10 @@ async def send_patron_dm(
     Returns {"success": True, "sender_npub", "target_npub"} on the
     happy path; {"success": False, "error"} on validation or send
     failure.
+
+    Args:
+        target_npub: Nostr public key (npub1...) of the DM's recipient.
+        message: The DM's plaintext body, 1..2000 characters.
     """
     from tools.escrow import send_patron_dm as _impl
     return await _impl(npub=npub, target_npub=target_npub, message=message)
@@ -836,8 +943,8 @@ async def send_patron_dm(
 @tool
 @runtime.paid_tool(capability_uuid("get_escrow_status"))
 async def get_escrow_status(
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Return ``{"escrowed": bool}`` — whether Optionality holds the
     patron's nsec. Free; the FE polls this to render Withdraw vs
@@ -849,8 +956,8 @@ async def get_escrow_status(
 @tool
 @runtime.paid_tool(capability_uuid("get_api_usage_stats"))
 async def get_api_usage_stats(
-    npub: NpubField = "",
-    dpop_token: str = "",
+    npub: PatronNpub = "",
+    dpop_token: DpopToken = "",
 ) -> dict[str, Any]:
     """Aggregated LLM usage and cost for this patron's calls.
 
