@@ -390,6 +390,9 @@ runtime = OperatorRuntime(
     ),
     service_name="Optionality MCP",
     credential_validator=None,
+    # Connections authenticate as holders: each npub proven through one stays
+    # with it, so tool calls pass only the npub.
+    holder_auth_url="https://optionality-mcp.fastmcp.app",
 )
 
 
