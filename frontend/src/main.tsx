@@ -11,6 +11,7 @@ configureTollbooth({
   slug: 'optionality',
   appName: 'Optionality',
   mcpUrl: import.meta.env.VITE_MCP_URL as string,
+  operatorUrl: "https://optionality-mcp.fastmcp.app",
   // A public read (guests browse a peer's shared trades): its wheel signature
   // takes no npub/proof, so the envelope would be rejected.
   extraBootstrapTools: ['get_shared_entries'],
