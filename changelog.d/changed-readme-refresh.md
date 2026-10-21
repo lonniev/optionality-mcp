@@ -1,0 +1,1 @@
+- README matches the code: describes the opt-in nsec escrow tools (`escrow_nsec`, `send_patron_dm`, `get_escrow_status`, `withdraw_nsec`), the frontend's React 19, the Modal detached runner and the full repo layout, and calls Optionality the practice game it is in the network list.
