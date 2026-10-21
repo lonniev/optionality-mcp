@@ -5,6 +5,121 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
 
+## [0.8.0] — 2026-10-21
+
+### Added
+
+`optionality_api_usage` gains a `cost_usd` column, written from the provider's own
+per-call figure. The browser previously reconstructed cost from a bundled rate table; that
+was fine while one model was hardwired, and wrong the moment the route can change model,
+because tokens from two models are not comparable money.
+
+Rows predating the column carry NULL and are rendered as estimates, explicitly labelled —
+never silently blended with measured figures. `null` means unknown, never free.
+
+`get_api_usage_stats` gains a `totals` block including **`avg_cost_usd`** — what one
+scenario, clue or verdict costs to serve, which is the figure that says whether a tool's
+sats price covers its own compute. The Usage page surfaces it as a "Cost per call" tile
+and a per-model "Per call" figure.
+
+The sats-equivalent tile's $100K/BTC constant is now labelled as the fixed reference rate
+it has always been, rather than reading as today's spot.
+
+### Changed
+
+The old instruction ("find market conditions, recent news, and active catalysts") named no
+finish line, so every answer invited another query — eleven searches and ~35k input tokens
+for one scenario, since it is search *results*, not the prompt, that fill the context.
+
+`SCENARIO_LIVE` now names the six facts a live scenario actually needs, the order to get
+them (broad once → narrow to one ticker → stop), and what needs no research at all (option
+chains, analyst targets, red-herring material). It stops the model answering from memory,
+and tells it what to do when a fact won't come: estimate from the regime and say so in
+`skew_note`, rather than substituting a remembered price or searching forever.
+
+`claude.py` is now `llm.py`. Its docstring recorded that it had been *"Modeled after
+`taxsort-mcp/tools/advisors.py`"* — one of three near-identical copies of the same
+provider plumbing across the estate, each pinning `api.anthropic.com`, each declaring its
+own web-search tool, two carrying a byte-identical `clamp_timeout`. That is a wheel
+concern and now lives in `tollbooth.llm_route` (SDK 0.74.0). What stays here is what makes
+a *drill* good: the prompts, the usage journal, and the JSON coercion they depend on.
+
+Dealing and judging draw the **writer** tier — both compose reasoned prose the patron is
+asked to trust, and a live deal grounds itself with web search. Tips draw the **reader**
+tier: a hint alongside a scenario already in front of the patron. Changing either model is
+an environment variable and a restart, not a release.
+
+**One request shape, one execution path.** The in-process path used the `anthropic` SDK
+client while the detached closure path built a raw HTTP envelope, so every provider
+behaviour had to be understood — and every provider failure classified — twice, by
+`_provider_situation` and `situation_from_status`. Both now build the same envelope and
+read the same reply, and `_provider_situation` is gone. The `anthropic` package is no
+longer a dependency.
+
+**The vaulted credential is renamed `anthropic_api_key` → `llm_api_key`, with no
+compatibility shim.** The operator must redeliver it via Secure Courier — already required
+to change providers, so the rename costs nothing extra.
+
+`record_call` was passed the module's default model rather than the model named in the
+reply. That was harmless while one model was hardwired; with the model now configurable it
+would have mis-attributed every row after a change, and the Profile/Usage view compares
+token counts across models. Both paths now read the model from the response.
+
+- Connections authenticate as holders (tollbooth-dpyc 0.101.1 holder bearer): connecting from Claude.ai is an Authorization Code flow with no login page, each npub proven through a connection stays with it, and tool calls pass only `npub`. The web app reaches the MCP through the shared proxy (web 1.8.2) as an anonymous caller and proves itself as before.
+
+- Every Optionality tool carries a title and its behaviour (what it reads, writes or deletes, and which calls reach an LLM provider or Nostr); every parameter is described, with `npub` and `dpop_token` using the fleet's shared wording; the server reports its own version, website and icon.
+
+- Pins tollbooth-dpyc 0.102.0: a request signed with an npub's own key (NIP-98) acts as that npub with no grant.
+
+- Pins tollbooth-dpyc 0.102.1: a request signed with an npub's own key (NIP-98) acts as that npub with no grant.
+
+- README matches the code: describes the opt-in nsec escrow tools (`escrow_nsec`, `send_patron_dm`, `get_escrow_status`, `withdraw_nsec`), the frontend's React 19, the Modal detached runner and the full repo layout, and calls Optionality the practice game it is in the network list.
+
+- Dependencies refreshed to current releases (mcp/fastmcp 1.27.1/3.4.7 → 2.3.0/4.1.0; frontend minor/patch). No service stays on old transitive versions.
+
+- Tools take only `npub`; the connection proves it (a request signed with the npub's key, or an OAuth connection that holds it after the DM). The `dpop_token` argument is gone, and the Courier phrase is `nonce`. Pins tollbooth-dpyc 0.103.0.
+
+- The web app moves to @tollbooth-dpyc/web 1.9.0: a tab that holds the signed-in key signs each request, and DM sign-in connects to the operator as a holder (one quick redirect, no login page) — no proof rides in tool arguments.
+
+### Fixed
+
+A live deal's LLM budget was 360s, sized when `max_uses: 3` bounded the scenario to three
+web searches. **Measured 2026-07-28: a model router silently drops that cap.** A request
+declaring `max_uses: 1` ran *eight* searches; one declaring 3 ran *eleven* — on an xAI
+model and on an Anthropic model alike. The declaration is forwarded, the bound is not.
+
+So a live sovereign deal ran past 360s, the read timed out, and the patron watched the
+poll ceiling instead of getting a scenario.
+
+Budgets are resized against the real distribution rather than the old cap: the LLM read
+timeout goes 360s → **600s**, `max_runtime_seconds` 420 → **700** (it must stay above the
+read timeout, or a slow-but-alive call is reclaimed mid-flight instead of failing into a
+refundable situation), and the live poll cadence 300s → 480s. `llm.py` now says plainly
+that `max_uses` is decorative on this route, so nobody sizes anything against it again.
+
+**Capping the search count was tried and rejected.** The model obeys a prompt-level "at
+most twice" where it ignores `max_uses` — and then answers the rest from training data,
+emitting a scenario dated a year in the past with no signal it had done so. For a trading
+drill that is worse than failing.
+
+Both classifiers decided the provider had run out of money by matching one lab's wording
+(`credit balance`, `purchase credits`, `plans & billing`), because that lab reports an
+empty account as a **400**. A model router reports the same condition as a **402** reading
+*"Insufficient credits"* — matching none of those needles.
+
+So an exhausted account was curated as `llm_unavailable`, `transient: True`: the
+operator's "feed me" DM never fired, and patrons were told to retry a drill that could
+never succeed until someone noticed the balance. The wheel's classifier now reads both
+providers' wording and treats a bare 402 from a metered LLM provider as unfunded. A model
+slug the provider no longer offers is newly distinguished as permanent rather than
+retryable — the signature of a marketplace retiring a model under a running deployment.
+
+The operator DM was also telling them to add credit at `console.anthropic.com` whatever
+provider the key belonged to. It now points at the account behind `llm_api_key` without
+naming a vendor console the operator may not have.
+
+- The web app builds and deploys again: its lockfile now carries `@tollbooth-dpyc/web` 1.8.0, which a dependency update had bumped in `package.json` alone.
+
 ## 0.7.4 — 2026-08-24
 
 ### Security — track tollbooth-dpyc 0.88.1 (cryptography floor raised to >=49.0.0)
