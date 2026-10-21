@@ -49,17 +49,24 @@ Mid-scenario, ask anything. Educational questions get direct, formula-backed ans
 - **Profile** &mdash; display name, avatar, bio
 - **Usage** &mdash; transparency tab showing per-model token consumption, per-tool spend, and the patron's account statement
 
+## Optional Nsec Escrow
+
+A patron on a device without a NIP-07 signer (an iPad, say) can opt in to let Optionality hold a game-scoped nsec and sign Nostr DMs for them. `escrow_nsec` deposits a freshly generated nsec (it must derive to the patron's npub), encrypted at rest and bound to that npub; `send_patron_dm` signs and publishes a DM as the patron with it; `get_escrow_status` says whether one is held; `withdraw_nsec` returns the nsec once and deletes it, after which the patron keeps the key in their own Nostr client. Self-custody with a NIP-07 signer needs none of this.
+
 ## Repo Layout
 
 ```
 optionality-mcp/
-├── server.py    # FastMCP SSE server (Python) → Horizon
-├── tools/       # dealer, judge, journal, leaderboard, profile, options chain
+├── server.py    # FastMCP server (Python) → Horizon
+├── tools/       # dealer, judge, journal, leaderboard, profile, options chain, nsec escrow
+├── db/          # Neon persistence (journal, leaderboard, patrons, usage, migrations)
+├── llm.py       # server-side LLM client (operator's vaulted llm_api_key)
 ├── prompts.py   # dealer / judge / clue-desk personas
-└── frontend/    # React 18 + Vite + TS UI → Cloudflare Pages
+├── modal_app.py # detached runner for the LLM drills (Modal)
+└── frontend/    # React 19 + Vite + TS UI → Cloudflare Pages
 ```
 
-Heavy LLM tools (deal, judge, clue desk) use a claim-check async pattern: the call returns a claim immediately and the client polls a free fetch tool, so slow generations survive client timeouts.
+Heavy LLM tools (deal, judge, clue desk) use a claim-check async pattern: the call returns a claim immediately and the client polls a free fetch tool, so slow generations survive client timeouts. When the operator has delivered Modal credentials, those jobs run detached on Modal (`modal_app.py`) instead of on the MCP host.
 
 ## DPYC Ecosystem
 
@@ -78,7 +85,12 @@ Heavy LLM tools (deal, judge, clue desk) use a claim-check async pattern: the ca
 | [thebrain-mcp](https://github.com/lonniev/thebrain-mcp) | TheBrain personal knowledge graph |
 | [excalibur-mcp](https://github.com/lonniev/excalibur-mcp) | X/Twitter posting |
 | [taxsort-mcp](https://github.com/lonniev/taxsort-mcp) | Tax classification + Cloudflare Pages UI |
-| [optionality-mcp](https://github.com/lonniev/optionality-mcp) | Options analytics (brokerage-data Operator) |
+| [optionality-mcp](https://github.com/lonniev/optionality-mcp) | Options-trading practice game (this repo) |
+| [goodearth-mcp](https://github.com/lonniev/goodearth-mcp) | Region-scoped climate analytics for small farms |
+| [beesknees-mcp](https://github.com/lonniev/beesknees-mcp) | The Bee's Knees: a multiplayer race to the queen |
+| [roastify-mcp](https://github.com/lonniev/roastify-mcp) | Roastify coffee catalog and packaging artwork |
+| [ChartRemotely-mcp](https://github.com/lonniev/ChartRemotely-mcp) | Puts a security on a desktop chart remotely |
+| [tollbooth-web](https://github.com/lonniev/tollbooth-web) | Shared browser SDK for operator front ends |
 | [tollbooth-oauth2-collector](https://github.com/lonniev/tollbooth-oauth2-collector) | OAuth2 callback handler (advocate service) |
 | [tollbooth-shortlinks](https://github.com/lonniev/tollbooth-shortlinks) | URL shortener utility |
 
