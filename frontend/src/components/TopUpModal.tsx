@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { checkBalance, parseSats } from "@tollbooth-dpyc/web";
+import { awaitingWords, checkBalance, parseSats, payLink } from "@tollbooth-dpyc/web";
 import { useTopUp } from "@tollbooth-dpyc/web/react";
 
 // Optionality's top-up sheet. The mechanics are the package's `useTopUp`:
@@ -126,6 +126,11 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
                   </button>
                 </div>
               )}
+              {state.invoice.bolt11 && (
+                <a href={payLink(state.invoice) ?? "#"} style={STYLES.payLink}>
+                  ⚡ Open in wallet
+                </a>
+              )}
               {state.invoice.checkoutLink && (
                 <a
                   href={state.invoice.checkoutLink}
@@ -136,7 +141,7 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
                   → Open BTCPay page
                 </a>
               )}
-              {state.status && <div style={STYLES.lastStatus}>{state.status}</div>}
+              <div style={STYLES.lastStatus}>{awaitingWords(state.status, topUp.watching)}</div>
             </div>
             <div style={STYLES.actions}>
               <button onClick={() => { topUp.cancel(); onClose(); }} className="opt-tap" style={STYLES.btnGhost}>Cancel</button>
@@ -149,7 +154,7 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
                   ...(state.checking ? STYLES.btnDisabled : {}),
                 }}
               >
-                {state.checking ? "Checking…" : "Check Payment"}
+                {state.checking ? "Checking…" : "Check now"}
               </button>
             </div>
             <p style={STYLES.fine}>
