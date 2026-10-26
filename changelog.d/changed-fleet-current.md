@@ -1,0 +1,1 @@
+- The top-up sheet's "Open in wallet" opens your own Lightning wallet on the invoice, it says when it is watching for your payment, and its button reads "Check now". Runs on tollbooth-dpyc 0.106.0 and @tollbooth-dpyc/web 2.6.0.
