@@ -20,7 +20,7 @@ import {
   withdrawNsec,
 } from "../lib/mcp";
 import type { Kind0 } from "@tollbooth-dpyc/web";
-import { AccountPage } from "@tollbooth-dpyc/web/react";
+import { AccountPage, Wallet } from "@tollbooth-dpyc/web/react";
 
 /// A panel heading in the site's shape: the small amber tab on the border,
 /// then the serif title.
@@ -79,42 +79,7 @@ export default function ProfileTab({ npub }: { npub: string }) {
         classNames: { root: "theme-toggle", chip: "theme-chip", active: "active" },
       }}
       between={{ theme: <GamePersonaKeyPanel escrowed={escrowed} onChange={setEscrowed} /> }}
-      coupons={{
-        heading: (
-          <>
-            <span className="panel-label">My Coupons</span>
-            <h2 className="serif">Codes that ride along.</h2>
-          </>
-        ),
-        intro:
-          "Redeem an operator code once. The discount applies automatically on subsequent paid tool calls until the per-patron cap or the calendar window expires.",
-        empty:
-          "No coupons redeemed yet. Operators distribute codes via Twitter, email, the welcome page, or DM — paste the code above to claim its discount.",
-        formHeading: "Redeem a code",
-        listHeading: "Active",
-        placeholder: "FRESHMAN, EARLYBIRD…",
-        redeemLabel: "🎟 Redeem",
-        forgetLabel: "🗑",
-        classNames: {
-          root: "panel",
-          intro: "coupons-intro",
-          form: "coupons-form",
-          input: "coupons-input",
-          chip: "btn coupons-chip",
-          subheading: "coupons-subheading",
-          message: "coupons-message",
-          ok: "ok",
-          error: "err",
-          loading: "coupons-note",
-          empty: "coupons-note",
-          list: "coupons-list",
-          row: "coupons-row",
-          name: "coupons-name",
-          discount: "coupons-discount",
-          meta: "coupons-meta",
-          active: "coupons-active",
-        },
-      }}
+      after={<Wallet />}
       build={{
         heading: (
           <>

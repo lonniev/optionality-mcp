@@ -1,0 +1,1 @@
+- The wallet is now the shared one from tollbooth-web 3.0.0, with a QR code on an open invoice and amounts of 100 to 25,000 plus Custom. The top-up sheet holds it, and the whole wallet is on your Profile.
