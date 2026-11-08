@@ -3,6 +3,7 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { execSync } from 'child_process'
 import { readFileSync } from 'fs'
+import { agentGuide } from '@tollbooth-dpyc/web/agent-guide'
 
 const pkg = JSON.parse(readFileSync('./package.json', 'utf-8'))
 
@@ -27,7 +28,19 @@ function resolveCommit(): string {
 }
 
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [
+    react(), tailwindcss(),
+    agentGuide({
+      name: "Optionality",
+      summary: "An AI-judged options trading practice drill. The Firm deals a scenario, the trainee writes a free-text trade pitch, and an AI judge scores it across six dimensions, parses the trade legs, and shows how well the pitch separated signal from noise.",
+      site: "https://optionality.tollbooth-dpyc.com",
+      mcpUrl: "https://optionality-mcp.fastmcp.app/mcp",
+      toolPrefix: "optionality",
+      source: "https://github.com/lonniev/optionality-mcp",
+      registryName: "io.github.lonniev/optionality-mcp",
+      body: "agent-guide.md",
+    }),
+  ],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_COMMIT__: JSON.stringify(resolveCommit()),
