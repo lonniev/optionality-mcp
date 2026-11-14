@@ -46,5 +46,15 @@ export default defineConfig({
     __BUILD_COMMIT__: JSON.stringify(resolveCommit()),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
   },
-  build: { outDir: 'dist' },
+  build: {
+    outDir: 'dist',
+    rolldownOptions: {
+      output: {
+        // React has its own chunk, cached apart from the app and fetched beside it.
+        advancedChunks: {
+          groups: [{ name: 'react', test: /node_modules[\\/](react|react-dom|scheduler)[\\/]/ }],
+        },
+      },
+    },
+  },
 })
