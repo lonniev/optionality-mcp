@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { lazy, Suspense, useState, useEffect, useRef } from "react";
 
 import type {
   ActiveSession,
@@ -186,22 +186,24 @@ function fmt$(n: number) {
 }
 import ModeIcon from "./ModeIcon";
 import DifficultyAvatar from "./DifficultyAvatar";
-import RiskProfileChart from "./RiskProfileChart";
 import FactsLedger from "./FactsLedger";
-import SampleAssessment from "./SampleAssessment";
 import TopUpModal from "./TopUpModal";
 import { shortNpub } from "@tollbooth-dpyc/web";
 import { Avatar, PageControls, SortHeader } from "@tollbooth-dpyc/web/react";
-import ProfileTab from "./Profile";
 import DMComposeModal from "./DMComposeModal";
-import Welcome from "./Welcome";
 import DealAnimation from "./DealAnimation";
 import JudgeAnimation from "./JudgeAnimation";
-import OptionChainGuide from "./OptionChainGuide";
 import RichText from "./RichText";
-import SkewGuide from "./SkewGuide";
 import { getPatronProfile } from "../lib/mcp";
 import { getEcosystemRelays } from "../lib/relays";
+
+// Each tab past the Pit, and every chart, is its own chunk, fetched the first time it opens.
+const RiskProfileChart = lazy(() => import("./RiskProfileChart"));
+const SampleAssessment = lazy(() => import("./SampleAssessment"));
+const ProfileTab = lazy(() => import("./Profile"));
+const Welcome = lazy(() => import("./Welcome"));
+const OptionChainGuide = lazy(() => import("./OptionChainGuide"));
+const SkewGuide = lazy(() => import("./SkewGuide"));
 
 // ============================================================
 //  OPTIONALITY — A Sovereign Trader's Drill
@@ -2137,6 +2139,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       </div>
 
       <div className="container">
+        <Suspense fallback={<div className="loading" style={{ display: "block", padding: "20px 0" }}>Opening the floor</div>}>
         {guest && (
           <div className="panel" style={{ borderLeft: "3px solid var(--amber)", background: "rgba(212,163,91,0.04)" }}>
             <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>Guest pass</div>
@@ -3602,6 +3605,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             />
           </div>
         )}
+        </Suspense>
       </div>
 
       {topUpOpen && (

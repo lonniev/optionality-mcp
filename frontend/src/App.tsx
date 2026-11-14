@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import {
   canSign,
   debugPush,
@@ -10,9 +10,11 @@ import {
 import { DebugPanel } from "@tollbooth-dpyc/web/react";
 
 import SignInScreen from "./components/SignInScreen";
-import Optionality from "./components/Optionality";
 import { isGuestMode, setGuestMode } from "./lib/guest";
 import { escrowNsec } from "./lib/mcp";
+
+// The game is its own chunk, fetched once the patron is past the sign-in gate.
+const Optionality = lazy(() => import("./components/Optionality"));
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean>(() => isGuestMode() || isLoggedIn());
@@ -63,7 +65,9 @@ export default function App() {
   return (
     <>
       {authed ? (
-        <Optionality onSignOut={handleSignOut} />
+        <Suspense fallback={<div className="loading" style={{ display: "block", padding: "20px 0" }}>Opening the floor</div>}>
+          <Optionality onSignOut={handleSignOut} />
+        </Suspense>
       ) : (
         <SignInScreen onLogin={handleLogin} onGuest={handleGuest} notice={notice} />
       )}
