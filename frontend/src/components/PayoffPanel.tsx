@@ -10,6 +10,9 @@ import {
   summarizePayoff,
 } from "../lib/payoff";
 import { externalModelerFor } from "../lib/externalModeler";
+import { Tx } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS, type MessageKey } from "../i18n";
+import { usd0, usd2 } from "../lib/money";
 
 interface PayoffPanelProps {
   ticker: string;
@@ -35,6 +38,7 @@ export default function PayoffPanel({
   scenario,
   onLoadPreset,
 }: PayoffPanelProps) {
+  const t = useT();
   const [presetsOpen, setPresetsOpen] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [confirmingPreset, setConfirmingPreset] = useState<string | null>(null);
@@ -88,14 +92,13 @@ export default function PayoffPanel({
     window.setTimeout(() => setCopied(false), 1600);
   }
 
-  const fmtMoney = (v: number) =>
-    `${v < 0 ? "−" : ""}$${Math.abs(Math.round(v)).toLocaleString()}`;
-  const fmtPx = (v: number) => `$${v.toFixed(2)}`;
+  const fmtMoney = (v: number) => `${v < 0 ? "−" : ""}${usd0(Math.abs(Math.round(v)))}`;
+  const fmtPx = (v: number) => usd2(v);
 
   const evalCaption = stats
     ? multi
-      ? `Profile at front expiration · ${stats.evalDTE} DTE · back legs valued via Black-Scholes`
-      : `Profile at expiration · ${stats.evalDTE} DTE`
+      ? t("payoff.captionMulti", { dte: stats.evalDTE })
+      : t("payoff.caption", { dte: stats.evalDTE })
     : "";
 
   return (
@@ -107,7 +110,9 @@ export default function PayoffPanel({
             <div className="pp-name">{name}</div>
             <div className="pp-summary">
               <span className={`pp-tag ${stats.netCredit >= 0 ? "credit" : "debit"}`}>
-                {stats.netCredit >= 0 ? "credit" : "debit"} {fmtMoney(Math.abs(stats.netCredit))}
+                {stats.netCredit >= 0
+                  ? t("payoff.credit", { amount: fmtMoney(Math.abs(stats.netCredit)) })
+                  : t("payoff.debit", { amount: fmtMoney(Math.abs(stats.netCredit)) })}
               </span>
               {evalCaption && <span className="pp-caption">{evalCaption}</span>}
             </div>
@@ -129,29 +134,29 @@ export default function PayoffPanel({
           {/* Stat ribbon */}
           <div className="pp-ribbon">
             <Stat
-              label="Net Entry"
+              label={t("payoff.netEntry")}
               value={fmtMoney(stats.netCredit)}
-              sub={stats.netCredit >= 0 ? "credit received" : "debit paid"}
+              sub={stats.netCredit >= 0 ? t("payoff.received") : t("payoff.paid")}
               color={stats.netCredit >= 0 ? "var(--jade)" : "var(--rust)"}
             />
             <Stat
-              label="Max Profit"
-              value={stats.profitUnbounded ? "Unlimited" : stats.maxP != null ? fmtMoney(stats.maxP) : "—"}
+              label={t("risk.maxProfit")}
+              value={stats.profitUnbounded ? t("risk.unlimited") : stats.maxP != null ? fmtMoney(stats.maxP) : "—"}
               color="var(--jade)"
             />
             <Stat
-              label="Max Loss"
-              value={stats.lossUnbounded ? "Unlimited" : stats.maxL != null ? fmtMoney(stats.maxL) : "—"}
+              label={t("risk.maxLoss")}
+              value={stats.lossUnbounded ? t("risk.unlimited") : stats.maxL != null ? fmtMoney(stats.maxL) : "—"}
               color="var(--rust)"
             />
             <Stat
-              label="Reward : Risk"
+              label={t("payoff.rr")}
               value={stats.rr != null ? `${stats.rr.toFixed(2)} : 1` : "—"}
-              sub={stats.rr != null ? `${(stats.rr * 100).toFixed(0)}% RWR` : "undefined"}
+              sub={stats.rr != null ? `${(stats.rr * 100).toFixed(0)}% RWR` : t("payoff.undefined")}
               color="var(--amber-bright)"
             />
             <Stat
-              label="Breakeven"
+              label={t("payoff.breakeven")}
               value={stats.breakevens.length ? stats.breakevens.map(fmtPx).join(" · ") : "—"}
               color="var(--ink)"
               small
@@ -169,18 +174,18 @@ export default function PayoffPanel({
                 href={modeler.url}
                 target="_blank"
                 rel="noopener noreferrer"
-                title={`Open this ${modeler.structureName} on ${modeler.provider.label} for live Greeks, IV, and probability`}
+                title={t("payoff.verifyTitle", { structure: modeler.structureName, provider: modeler.provider.label })}
               >
-                Verify on {modeler.provider.label} ↗
+                {t("payoff.verify", { provider: modeler.provider.label })}
               </a>
-              <span className="pp-secondop-note">
-                live Greeks · IV · probability — on the real chain
-              </span>
+              <span className="pp-secondop-note">{t("payoff.verifyNote")}</span>
             </div>
           ) : (
             modeler.reason && (
               <div className="pp-secondop pp-secondop-muted">
-                <span className="pp-secondop-note">{modeler.reason}</span>
+                <span className="pp-secondop-note">
+                  {modeler.reasonCode ? t(`modeler.${modeler.reasonCode}` as MessageKey) : modeler.reason}
+                </span>
               </div>
             )
           )}
@@ -188,14 +193,14 @@ export default function PayoffPanel({
           {/* Order ticket */}
           <div className="pp-ticket">
             <div className="pp-ticket-head">
-              <span className="pp-ticket-title">Order Ticket</span>
+              <span className="pp-ticket-title">{t("payoff.ticket")}</span>
               <button
                 type="button"
                 className="pp-copy"
                 onClick={copyTicket}
-                title="Copy this broker-style ticket to your clipboard"
+                title={t("payoff.copyTitle")}
               >
-                {copied ? "copied ✓" : "copy"}
+                {copied ? t("payoff.copied") : t("payoff.copy")}
               </button>
             </div>
             <textarea
@@ -217,25 +222,25 @@ export default function PayoffPanel({
           onClick={() => setPresetsOpen((o) => !o)}
         >
           <span className="pp-presets-chev">{presetsOpen ? "▾" : "▸"}</span>
-          Try an example structure
-          {!presetsOpen && legs.length === 0 && <span className="pp-presets-hint"> · examples to study, not to submit</span>}
+          {t("payoff.try")}
+          {!presetsOpen && legs.length === 0 && <span className="pp-presets-hint">{t("payoff.tryHint")}</span>}
         </button>
         {presetsOpen && (
           <>
             <div className="pp-presets-caption">
-              Examples to study, not to submit. Premiums come from the actual chain — the same numbers you'd see if you tapped these strikes yourself.
+              {t("payoff.presetsCaption")}
             </div>
             <div className="pp-presets-grid">
-              {PRESETS.map((p) => (
+              {PRESETS.map((p, i) => (
                 <button
                   key={p.label}
                   type="button"
                   className="pp-preset"
                   onClick={() => loadPreset(p.label)}
-                  title={p.description}
+                  title={t(`presets.${i}` as MessageKey)}
                 >
                   <span className="pp-preset-label">{p.label}</span>
-                  <span className="pp-preset-desc">{p.description}</span>
+                  <span className="pp-preset-desc">{t(`presets.${i}` as MessageKey)}</span>
                 </button>
               ))}
             </div>
@@ -247,16 +252,16 @@ export default function PayoffPanel({
       {confirmingPreset && (
         <div className="pp-confirm-scrim" onClick={() => setConfirmingPreset(null)}>
           <div className="pp-confirm" onClick={(e) => e.stopPropagation()}>
-            <div className="pp-confirm-title">Replace current legs?</div>
+            <div className="pp-confirm-title">{t("payoff.replaceTitle")}</div>
             <p className="pp-confirm-body">
-              Loading <strong>{confirmingPreset}</strong> will replace your current {legs.length} leg{legs.length === 1 ? "" : "s"} with the preset's structure (premiums pulled from the live chain).
+              <Tx ns={WORDS} k="payoff.replaceBody" vars={{ preset: confirmingPreset, count: legs.length }} components={{ b: <strong /> }} />
             </p>
             <div className="pp-confirm-actions">
               <button type="button" className="pp-confirm-cancel" onClick={() => setConfirmingPreset(null)}>
-                Keep my legs
+                {t("payoff.keep")}
               </button>
               <button type="button" className="pp-confirm-go" onClick={confirmLoadPreset}>
-                Replace with {confirmingPreset}
+                {t("payoff.replace", { preset: confirmingPreset })}
               </button>
             </div>
           </div>

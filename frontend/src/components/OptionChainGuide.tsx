@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import type { OptionChainRow, ProposedLeg, Scenario } from "../types";
 import PayoffPanel from "./PayoffPanel";
+import { Tx } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS } from "../i18n";
+import { usd2 } from "../lib/money";
 
 interface OptionChainGuideProps {
   spot: number;
@@ -50,6 +53,7 @@ export default function OptionChainGuide({
   r = 0.045,
   scenario = null,
 }: OptionChainGuideProps) {
+  const t = useT();
   const [open, setOpen] = useState<boolean>(false);
   const [internalLegs, setInternalLegs] = useState<ProposedLeg[]>([]);
   const [menuAnchor, setMenuAnchor] = useState<MenuAnchor | null>(null);
@@ -179,13 +183,13 @@ export default function OptionChainGuide({
         className="ocg-trigger"
         onClick={() => setOpen((o) => !o)}
         aria-expanded={open}
-        title="Pop up the full option chain — tap a mid to buy / sell / remove"
+        title={t("chain.triggerTitle")}
       >
         <span className="ocg-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
-        Option Chain
+        {t("chain.title")}
         {legs.length > 0 && (
           <span className="ocg-trigger-badge">
-            {legs.length} leg{legs.length === 1 ? "" : "s"}
+            {t("chain.legs", { count: legs.length })}
           </span>
         )}
       </button>
@@ -198,44 +202,37 @@ export default function OptionChainGuide({
                 type="button"
                 className="ocg-close"
                 onClick={() => setOpen(false)}
-                aria-label="Close chain"
-                title="Close (Esc)"
+                aria-label={t("chain.close")}
+                title={t("game.zoom.closeTitle")}
               >
                 ✕
               </button>
             </div>
             <div className="ocg-body">
-              <h3 className="serif ocg-title">Option Chain</h3>
+              <h3 className="serif ocg-title">{t("chain.title")}</h3>
               <p className="ocg-lede">
-                Tap a <strong>Call</strong> or <strong>Put</strong> mid to buy,
-                sell, or remove a contract. The chain's mids and deltas are
-                computed from a Black-Scholes smile anchored by ATM, 25Δ-put,
-                and 25Δ-call volatilities. The IV column reads the smile at each
-                strike — same IV used to price both the call and the put at
-                that strike (the smile is one curve, not two). The row closest
-                to spot (<strong>${spot.toFixed(2)}</strong>) is highlighted as
-                ATM.
+                <Tx ns={WORDS} k="chain.lede" vars={{ spot: usd2(spot) }} components={{ b: <strong /> }} />
               </p>
 
               {groups.map(({ exp, dte, rows, atmStrike }) => (
                 <section key={exp} className="ocg-section">
                   <div className="ocg-section-head">
                     <span className="ocg-exp">{exp}</span>
-                    <span className="ocg-dte">{dte} DTE</span>
+                    <span className="ocg-dte">{t("chain.dte", { dte })}</span>
                   </div>
                   <table className="ocg-table">
                     <thead>
                       <tr>
-                        <th colSpan={2} className="ocg-side ocg-calls">Calls</th>
-                        <th colSpan={2} className="ocg-strike-head">Strike · IV</th>
-                        <th colSpan={2} className="ocg-side ocg-puts">Puts</th>
+                        <th colSpan={2} className="ocg-side ocg-calls">{t("chain.calls")}</th>
+                        <th colSpan={2} className="ocg-strike-head">{t("chain.strikeIv")}</th>
+                        <th colSpan={2} className="ocg-side ocg-puts">{t("chain.puts")}</th>
                       </tr>
                       <tr className="ocg-subhead">
                         <th>ΔC</th>
-                        <th>Mid</th>
-                        <th>Strike</th>
+                        <th>{t("chain.mid")}</th>
+                        <th>{t("chain.strike")}</th>
                         <th>IV</th>
-                        <th>Mid</th>
+                        <th>{t("chain.mid")}</th>
                         <th>ΔP</th>
                       </tr>
                     </thead>
@@ -250,7 +247,7 @@ export default function OptionChainGuide({
                             <td
                               className={`ocg-mid ocg-mid-tap ${callLeg ? `leg-${callLeg.side}` : ""}`}
                               onClick={(e) => openMenu(e, r, "call")}
-                              title={callLeg ? `${callLeg.side === "buy" ? "LONG" : "SHORT"} 1 · click to change` : "Click to buy or sell this call"}
+                              title={callLeg ? t("chain.held", { side: callLeg.side === "buy" ? t("chain.long") : t("chain.short") }) : t("chain.tapCall")}
                             >
                               <span className="ocg-mid-val">{r.call_mid.toFixed(2)}</span>
                               {callLeg && (
@@ -264,7 +261,7 @@ export default function OptionChainGuide({
                             <td
                               className={`ocg-mid ocg-mid-tap ${putLeg ? `leg-${putLeg.side}` : ""}`}
                               onClick={(e) => openMenu(e, r, "put")}
-                              title={putLeg ? `${putLeg.side === "buy" ? "LONG" : "SHORT"} 1 · click to change` : "Click to buy or sell this put"}
+                              title={putLeg ? t("chain.held", { side: putLeg.side === "buy" ? t("chain.long") : t("chain.short") }) : t("chain.tapPut")}
                             >
                               <span className="ocg-mid-val">{r.put_mid.toFixed(2)}</span>
                               {putLeg && (
@@ -285,21 +282,21 @@ export default function OptionChainGuide({
               {/* Legs + net premium footer */}
               <div className="ocg-footer">
                 <div className="ocg-footer-head">
-                  <span className="ocg-footer-title">Proposed structure</span>
+                  <span className="ocg-footer-title">{t("chain.proposed")}</span>
                   {legs.length > 0 && (
                     <button
                       type="button"
                       className="ocg-clear"
                       onClick={() => setLegs([])}
-                      title="Clear all legs"
+                      title={t("chain.clearTitle")}
                     >
-                      Clear
+                      {t("chain.clear")}
                     </button>
                   )}
                 </div>
                 {legs.length === 0 ? (
                   <div className="ocg-footer-empty">
-                    No legs yet. Tap a Call or Put mid above to start building.
+                    {t("chain.noLegs")}
                   </div>
                 ) : (
                   <>
@@ -313,7 +310,7 @@ export default function OptionChainGuide({
                             className={`ocg-leg leg-${l.side}`}
                           >
                             <span className="ocg-leg-side">
-                              {l.side === "buy" ? "BUY" : "SELL"}
+                              {l.side === "buy" ? t("chain.buyCaps") : t("chain.sellCaps")}
                             </span>
                             <span className="ocg-leg-qty">
                               <button
@@ -321,8 +318,8 @@ export default function OptionChainGuide({
                                 className="ocg-qty-btn"
                                 onClick={() => setLegQty(l, l.qty - 1)}
                                 disabled={l.qty <= 1}
-                                aria-label="Decrease contracts"
-                                title={l.qty <= 1 ? "Use Remove to take this leg off" : "One fewer contract"}
+                                aria-label={t("chain.fewer")}
+                                title={l.qty <= 1 ? t("chain.useRemove") : t("chain.oneFewer")}
                               >
                                 −
                               </button>
@@ -336,32 +333,32 @@ export default function OptionChainGuide({
                                   const n = parseInt(e.target.value, 10);
                                   if (Number.isFinite(n) && n >= 1) setLegQty(l, n);
                                 }}
-                                aria-label="Contract quantity"
+                                aria-label={t("chain.qty")}
                               />
                               <button
                                 type="button"
                                 className="ocg-qty-btn"
                                 onClick={() => setLegQty(l, l.qty + 1)}
-                                aria-label="Increase contracts"
-                                title="One more contract"
+                                aria-label={t("chain.more")}
+                                title={t("chain.oneMore")}
                               >
                                 +
                               </button>
                             </span>
                             <span className="ocg-leg-spec">
-                              ${l.strike}{l.type === "call" ? "C" : "P"} · {l.dte} DTE
+                              ${l.strike}{l.type === "call" ? "C" : "P"} · {t("chain.dte", { dte: l.dte })}
                             </span>
                             <span className="ocg-leg-prem">
-                              {l.side === "buy" ? "−" : "+"}${(l.premium * l.qty * 100).toFixed(2)}
+                              {l.side === "buy" ? "−" : "+"}{usd2(l.premium * l.qty * 100)}
                             </span>
                           </li>
                         ))}
                     </ul>
                     <div className="ocg-net">
-                      <span className="ocg-net-label">Net premium</span>
+                      <span className="ocg-net-label">{t("chain.net")}</span>
                       <span className={`ocg-net-val ${isCredit ? "credit" : "debit"}`}>
-                        {isCredit ? "+" : "−"}${Math.abs(netPremium).toFixed(2)}{" "}
-                        <span className="ocg-net-tag">{isCredit ? "credit" : "debit"}</span>
+                        {isCredit ? "+" : "−"}{usd2(Math.abs(netPremium))}{" "}
+                        <span className="ocg-net-tag">{isCredit ? t("chain.credit") : t("chain.debit")}</span>
                       </span>
                     </div>
                   </>
@@ -400,18 +397,18 @@ export default function OptionChainGuide({
               onClick={(e) => e.stopPropagation()}
             >
               <button type="button" onClick={() => applyAction("buy")} className="ocg-menu-btn ocg-menu-buy">
-                Buy
+                {t("chain.buy")}
               </button>
               <button type="button" onClick={() => applyAction("sell")} className="ocg-menu-btn ocg-menu-sell">
-                Sell
+                {t("chain.sell")}
               </button>
               {findLeg(menuAnchor.row, menuAnchor.kind) && (
                 <button type="button" onClick={() => applyAction("remove")} className="ocg-menu-btn ocg-menu-remove">
-                  Remove
+                  {t("chain.remove")}
                 </button>
               )}
               <button type="button" onClick={() => setMenuAnchor(null)} className="ocg-menu-btn ocg-menu-cancel">
-                Cancel
+                {t("chain.cancel")}
               </button>
             </div>
           )}

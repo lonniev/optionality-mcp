@@ -13,6 +13,7 @@ import {
 } from "recharts";
 import type { TradeLeg } from "../types";
 import { legPL } from "../lib/bs";
+import { useT } from "../i18n";
 
 interface PayoffChartProps {
   /// Math-side legs (side: long/short). Use ``proposedToTradeLegs`` at
@@ -49,6 +50,7 @@ export default function PayoffChart({
   breakevens,
   height = 320,
 }: PayoffChartProps) {
+  const t = useT();
   const data = useMemo(() => {
     if (!legs.length) return [] as Array<Record<string, number>>;
     const strikes = [...legs, ...(altLegs ?? [])].map((l) => l.strike).filter((k) => k > 0);
@@ -155,10 +157,10 @@ export default function PayoffChart({
               color: "var(--ink)",
             }}
             labelStyle={{ color: "var(--amber-bright)", fontWeight: 700 }}
-            labelFormatter={(v) => `Underlying  $${Number(v).toFixed(2)}`}
+            labelFormatter={(v) => t("chart.underlying", { price: `$${Number(v).toFixed(2)}` })}
             formatter={(val: unknown, name: unknown) => {
               const v = typeof val === "number" ? val : 0;
-              const label = name === "total" ? "Net P/L" : name === "alt" ? "Alt P/L" : String(name);
+              const label = name === "total" ? t("chart.net") : name === "alt" ? t("chart.alt") : String(name);
               return [fmtMoney(v), label];
             }}
           />
@@ -169,7 +171,7 @@ export default function PayoffChart({
             strokeDasharray="4 4"
             strokeOpacity={0.55}
             label={{
-              value: "spot",
+              value: t("chart.spot"),
               fill: "var(--amber-bright)",
               fontSize: 10,
               position: "top",

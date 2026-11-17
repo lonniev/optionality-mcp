@@ -177,7 +177,9 @@ export type ModelerResult =
   /// Deliberately no link. `reason` is a short, patron-facing sentence
   /// explaining why the position stays in Optionality's own model; null
   /// when there is simply nothing to say (no legs / no ticker yet).
-  | { kind: "unavailable"; reason: string | null };
+  /// `reasonCode` names the same reason, for the page to say it in the
+  /// reader's language.
+  | { kind: "unavailable"; reason: string | null; reasonCode?: "fiction" | "historical" | "noPreset" };
 
 /// The applicability gate. Given the scenario and the trainee's proposed
 /// legs, decide whether an external modeler can rigorously treat this
@@ -193,6 +195,7 @@ export function externalModelerFor(
   if (mode === "fiction") {
     return {
       kind: "unavailable",
+      reasonCode: "fiction",
       reason:
         "Hypothetical underlying — external modelers only quote real, listed chains, so this payoff is Optionality's own.",
     };
@@ -200,6 +203,7 @@ export function externalModelerFor(
   if (mode === "historical") {
     return {
       kind: "unavailable",
+      reasonCode: "historical",
       reason:
         "This scenario is set in the past. External modelers quote today's chain, not the scenario's date — this payoff is Optionality's own reconstruction.",
     };
@@ -214,6 +218,7 @@ export function externalModelerFor(
   if (!slug) {
     return {
       kind: "unavailable",
+      reasonCode: "noPreset",
       reason:
         "No preset for this structure on external modelers — the payoff above already covers it.",
     };

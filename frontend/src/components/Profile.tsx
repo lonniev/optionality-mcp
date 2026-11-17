@@ -20,7 +20,8 @@ import {
   withdrawNsec,
 } from "../lib/mcp";
 import type { Kind0 } from "@tollbooth-dpyc/web";
-import { AccountPage, Wallet } from "@tollbooth-dpyc/web/react";
+import { AccountPage, LanguageChooser, Tx, Wallet } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS } from "../i18n";
 
 /// A panel heading in the site's shape: the small amber tab on the border,
 /// then the serif title.
@@ -34,6 +35,7 @@ function PanelTitle({ label, children }: { label: string; children: ReactNode })
 }
 
 export default function ProfileTab({ npub }: { npub: string }) {
+  const t = useT();
   // The only app-local profile state this page still needs is the nsec-escrow
   // custody flag — it can't live on Nostr, and it drives the Game Persona Key
   // panel. Identity (name/avatar/bio) lives on Nostr.
@@ -56,45 +58,48 @@ export default function ProfileTab({ npub }: { npub: string }) {
       heading={null}
       before={
         <div className="panel account-identity">
-          <span className="panel-label">Profile</span>
-          <h2 className="serif">Your self-sovereign identity.</h2>
-          <p className="account-intro">
-            Your profile lives in your Nostr kind-0 metadata — read from relays and shown in every Nostr
-            client. Edits are signed in your browser and relayed; your key never leaves this device.
-          </p>
+          <span className="panel-label">{t("profile.label")}</span>
+          <h2 className="serif">{t("profile.title")}</h2>
+          <p className="account-intro">{t("profile.intro")}</p>
         </div>
       }
       profile={{ onPublished: mirrorToLeaderboard }}
       usage={false}
       timezone={{
-        heading: <PanelTitle label="Time zone">Every clock, one zone.</PanelTitle>,
-        intro: "Every date on Optionality follows this zone. Local to this browser — nothing here is published or shared.",
+        heading: <PanelTitle label={t("profile.tz.label")}>{t("profile.tz.title")}</PanelTitle>,
+        intro: t("profile.tz.intro"),
         classNames: { select: "tz-select" },
       }}
       theme={{
-        heading: <PanelTitle label="Preferences">How Optionality looks to you.</PanelTitle>,
-        intro: "Local to this browser — nothing here is published or shared.",
+        heading: <PanelTitle label={t("profile.theme.label")}>{t("profile.theme.title")}</PanelTitle>,
+        intro: t("profile.theme.intro"),
         themes: ["dark", "light"],
-        labels: { dark: "🌑 Dark", light: "☀ Light" },
+        labels: { dark: t("profile.theme.dark"), light: t("profile.theme.light") },
         classNames: { root: "theme-toggle", chip: "theme-chip", active: "active" },
       }}
-      between={{ theme: <GamePersonaKeyPanel escrowed={escrowed} onChange={setEscrowed} /> }}
+      between={{
+        theme: (
+          <>
+            <div className="panel tb-host">
+              <span className="panel-label">{t("profile.language.label")}</span>
+              <h2 className="serif">{t("profile.language.title")}</h2>
+              <p className="account-intro">{t("profile.language.intro")}</p>
+              <LanguageChooser classNames={{ root: "theme-toggle", chip: "theme-chip", active: "active" }} />
+            </div>
+            <GamePersonaKeyPanel escrowed={escrowed} onChange={setEscrowed} />
+          </>
+        ),
+      }}
       after={<Wallet />}
       build={{
         heading: (
           <>
-            <span className="panel-label">Build &amp; License</span>
-            <h2 className="serif">Open source, private commerce.</h2>
+            <span className="panel-label">{t("profile.build.label")}</span>
+            <h2 className="serif">{t("profile.build.title")}</h2>
           </>
         ),
         intro: (
-          <>
-            Optionality and Tollbooth-DPYC<sup>™</sup> ship as open source under the Apache
-            License 2.0 — anyone can read the code, fork it, run their own operator. The{" "}
-            <i>services</i> hosted on top of that code are private commerce: each operator
-            sets their own tolls and pricing model; patrons pre-fund a Lightning balance
-            and pay per-call. The protocol is shared; the businesses on it are not.
-          </>
+          <Tx ns={WORDS} k="profile.build.intro" components={{ i: <i /> }} />
         ),
         frontend: {
           version: __APP_VERSION__,
@@ -155,6 +160,7 @@ function GamePersonaKeyPanel({
   escrowed: boolean;
   onChange: (next: boolean) => void;
 }) {
+  const t = useT();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [depositInput, setDepositInput] = useState("");
@@ -165,7 +171,7 @@ function GamePersonaKeyPanel({
   async function handleDeposit(): Promise<void> {
     const nsec = depositInput.trim();
     if (!nsec.startsWith("nsec1")) {
-      setError("That doesn't look like a bech32 nsec1… string.");
+      setError(t("profile.key.notNsec"));
       return;
     }
     setBusy(true);
@@ -176,7 +182,7 @@ function GamePersonaKeyPanel({
         setDepositInput("");
         onChange(true);
       } else {
-        setError(r.error || "Deposit failed.");
+        setError(r.error || t("profile.key.depositFailed"));
       }
     } catch (e) {
       setError((e as Error).message);
@@ -187,7 +193,7 @@ function GamePersonaKeyPanel({
 
   async function handleWithdraw(): Promise<void> {
     if (ackText !== WITHDRAW_ACKNOWLEDGMENT) {
-      setError("Acknowledgment phrase doesn't match exactly.");
+      setError(t("profile.key.ackMismatch"));
       return;
     }
     setBusy(true);
@@ -200,7 +206,7 @@ function GamePersonaKeyPanel({
         setAckText("");
         onChange(false);
       } else {
-        setError(r.error || "Withdrawal failed.");
+        setError(r.error || t("profile.key.withdrawFailed"));
       }
     } catch (e) {
       setError((e as Error).message);
@@ -211,18 +217,15 @@ function GamePersonaKeyPanel({
 
   return (
     <div className="panel" style={{ marginTop: 20 }}>
-      <span className="panel-label">Game Persona Key</span>
-      <h2 className="serif">Nsec custody</h2>
+      <span className="panel-label">{t("profile.key.label")}</span>
+      <h2 className="serif">{t("profile.key.title")}</h2>
       <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16, lineHeight: 1.6 }}>
-        If you generated your npub fresh for Optionality, you can hand the nsec to the operator
-        so the BE signs Nostr DMs on your behalf — no signer extension needed (iPad-friendly).
-        The nsec is encrypted at rest with AES-256-GCM. <b>Don't paste your real Nostr identity
-        here</b> — only fresh game personas.
+        <Tx ns={WORDS} k="profile.key.intro" components={{ b: <b /> }} />
       </p>
 
       {!escrowed && (
         <>
-          <FieldLabel>Deposit a nsec</FieldLabel>
+          <FieldLabel>{t("profile.key.deposit")}</FieldLabel>
           <input
             type="password"
             value={depositInput}
@@ -246,7 +249,7 @@ function GamePersonaKeyPanel({
               onClick={() => void handleDeposit()}
               style={{ opacity: !depositInput.trim() || busy ? 0.5 : 1 }}
             >
-              {busy ? "Encrypting…" : "Deposit"}
+              {busy ? t("profile.key.encrypting") : t("profile.key.depositBtn")}
             </button>
           </div>
         </>
@@ -262,8 +265,7 @@ function GamePersonaKeyPanel({
             fontSize: 13,
             marginBottom: 14,
           }}>
-            ✓ Held by Optionality (encrypted in vault). DMs to other patrons route through the
-            BE signer — no browser extension needed.
+            {t("profile.key.held")}
           </div>
           {!showAck && (
             <div className="actions">
@@ -271,7 +273,7 @@ function GamePersonaKeyPanel({
                 className="btn btn-ghost"
                 onClick={() => { setShowAck(true); setAckText(""); setError(""); }}
               >
-                Withdraw &amp; self-custody
+                {t("profile.key.withdraw")}
               </button>
             </div>
           )}
@@ -286,11 +288,9 @@ function GamePersonaKeyPanel({
                 lineHeight: 1.55,
                 marginBottom: 12,
               }}>
-                Type the phrase below exactly to confirm — the nsec will display once for you to
-                copy, then Optionality forgets it. After withdrawal you'll need a Nostr signer
-                extension (Alby, nos2x) to send DMs.
+                {t("profile.key.ackIntro")}
               </div>
-              <FieldLabel>Acknowledgment</FieldLabel>
+              <FieldLabel>{t("profile.key.ack")}</FieldLabel>
               <input
                 type="text"
                 value={ackText}
@@ -313,7 +313,7 @@ function GamePersonaKeyPanel({
                   onClick={() => { setShowAck(false); setAckText(""); setError(""); }}
                   disabled={busy}
                 >
-                  Cancel
+                  {t("profile.key.cancel")}
                 </button>
                 <button
                   className="btn"
@@ -321,7 +321,7 @@ function GamePersonaKeyPanel({
                   disabled={ackText !== WITHDRAW_ACKNOWLEDGMENT || busy}
                   style={{ opacity: ackText !== WITHDRAW_ACKNOWLEDGMENT || busy ? 0.5 : 1 }}
                 >
-                  {busy ? "Withdrawing…" : "Confirm Withdrawal"}
+                  {busy ? t("profile.key.withdrawing") : t("profile.key.confirm")}
                 </button>
               </div>
             </>
@@ -340,9 +340,7 @@ function GamePersonaKeyPanel({
             marginBottom: 14,
             lineHeight: 1.6,
           }}>
-            <b>Copy your nsec now.</b> Optionality has deleted it from its vault. This is the
-            only time it will be shown. Stash it in a Nostr client (0xchat, Damus, Amber) or a
-            password manager.
+            <Tx ns={WORDS} k="profile.key.copyNow" components={{ b: <b /> }} />
           </div>
           <code style={{
             display: "block",
@@ -364,13 +362,13 @@ function GamePersonaKeyPanel({
                 void navigator.clipboard.writeText(withdrawn).catch(() => {});
               }}
             >
-              Copy
+              {t("profile.key.copy")}
             </button>
             <button
               className="btn btn-ghost"
               onClick={() => setWithdrawn(null)}
             >
-              I've saved it
+              {t("profile.key.saved")}
             </button>
           </div>
         </>

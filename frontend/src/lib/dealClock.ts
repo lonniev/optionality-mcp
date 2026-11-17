@@ -13,8 +13,17 @@ export function fmtClock(totalSeconds: number): string {
 /// estimate; past the estimate we say "wrapping up…" rather than show a
 /// negative or zeroed countdown, because the estimate is a prediction, not a
 /// deadline — the job often finishes a little after it.
-export function etaLabel(elapsedSec: number, expectedSeconds: number): string {
+///
+/// `words` carries the two phrases in the reader's language; English when omitted.
+export function etaLabel(
+  elapsedSec: number,
+  expectedSeconds: number,
+  words: { left: (clock: string) => string; wrapping: string } = {
+    left: (clock) => `~${clock} left`,
+    wrapping: "wrapping up…",
+  },
+): string {
   if (expectedSeconds <= 0) return "";
   const remaining = expectedSeconds - elapsedSec;
-  return remaining > 1 ? `~${fmtClock(remaining)} left` : "wrapping up…";
+  return remaining > 1 ? words.left(fmtClock(remaining)) : words.wrapping;
 }

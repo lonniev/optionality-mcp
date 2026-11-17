@@ -1,6 +1,8 @@
 import type { Evaluation } from "../types";
+import { useT } from "../i18n";
 
 export default function FactsLedger({ evaluation }: { evaluation: Evaluation | null }) {
+  const t = useT();
   const integrated = evaluation?.facts_integrated || [];
   const missed = evaluation?.facts_missed || [];
   const caught = evaluation?.red_herrings_caught || [];
@@ -12,34 +14,34 @@ export default function FactsLedger({ evaluation }: { evaluation: Evaluation | n
 
   return (
     <>
-      <h3 className="serif">Facts Ledger</h3>
+      <h3 className="serif">{t("ledger.title")}</h3>
       <div className="ledger-grid">
         <div className="ledger-col integrated">
-          <div className="ledger-head"><span className="ledger-mark">{"✓"}</span> Facts you integrated</div>
+          <div className="ledger-head"><span className="ledger-mark">{"✓"}</span> {t("ledger.integrated")}</div>
           {integrated.length ? (
             <ul>{integrated.map((f, i) => <li key={i}>{f}</li>)}</ul>
-          ) : <div className="ledger-empty">None — try citing the relevant facts directly.</div>}
+          ) : <div className="ledger-empty">{t("ledger.integratedNone")}</div>}
         </div>
 
         <div className="ledger-col missed">
-          <div className="ledger-head"><span className="ledger-mark">{"○"}</span> Relevant facts you missed</div>
+          <div className="ledger-head"><span className="ledger-mark">{"○"}</span> {t("ledger.missed")}</div>
           {missed.length ? (
             <ul>{missed.map((f, i) => <li key={i}>{f}</li>)}</ul>
-          ) : <div className="ledger-empty">Clean sweep — you addressed the facts that mattered.</div>}
+          ) : <div className="ledger-empty">{t("ledger.missedNone")}</div>}
         </div>
 
         <div className="ledger-col caught">
-          <div className="ledger-head"><span className="ledger-mark">{"⚑"}</span> Red herrings you set aside</div>
+          <div className="ledger-head"><span className="ledger-mark">{"⚑"}</span> {t("ledger.caught")}</div>
           {caught.length ? (
             <ul>{caught.map((f, i) => <li key={i}>{f}</li>)}</ul>
-          ) : <div className="ledger-empty">None noted.</div>}
+          ) : <div className="ledger-empty">{t("ledger.caughtNone")}</div>}
         </div>
 
         <div className="ledger-col followed">
-          <div className="ledger-head"><span className="ledger-mark">{"✕"}</span> Red herrings that pulled your thesis</div>
+          <div className="ledger-head"><span className="ledger-mark">{"✕"}</span> {t("ledger.followed")}</div>
           {followed.length ? (
             <ul>{followed.map((f, i) => <li key={i}>{f}</li>)}</ul>
-          ) : <div className="ledger-empty">None — you kept noise out of the thesis.</div>}
+          ) : <div className="ledger-empty">{t("ledger.followedNone")}</div>}
         </div>
       </div>
     </>

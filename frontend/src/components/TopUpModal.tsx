@@ -1,5 +1,6 @@
 import { checkBalance } from "@tollbooth-dpyc/web";
 import { BalanceAndTopUp } from "@tollbooth-dpyc/web/react";
+import { useT } from "../i18n";
 
 // The shared top-up, in Optionality's sheet. Closing it tells the game the balance.
 
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
+  const t = useT();
   function close() {
     onClose();
     checkBalance().then(
@@ -20,7 +22,7 @@ export default function TopUpModal({ onClose, onBalanceUpdated }: Props) {
   return (
     <div className="opt-scrim opt-topup-scrim" onClick={close}>
       <div className="opt-modal-card opt-topup" onClick={(e) => e.stopPropagation()}>
-        <button type="button" onClick={close} aria-label="Close" className="opt-tap opt-topup-close">×</button>
+        <button type="button" onClick={close} aria-label={t("game.zoom.close")} className="opt-tap opt-topup-close">×</button>
         <BalanceAndTopUp />
       </div>
     </div>

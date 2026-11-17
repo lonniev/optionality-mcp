@@ -1,7 +1,8 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
-import { bootstrapTheme, configureTollbooth } from '@tollbooth-dpyc/web'
+import { bootstrapTheme, configureTollbooth, startLanguage } from '@tollbooth-dpyc/web'
 import App from './App'
+import { registerOptionality } from './i18n'
 import './index.css'
 // The MCP client, sign-in gate and account pieces read who this site is from
 // here. The storage prefix defaults to the slug, so the identity, proof,
@@ -22,6 +23,12 @@ configureTollbooth({
 // The stored pick (dark or light; dark when none) is on <html> before React
 // paints, so a light-theme patron never sees a dark first frame.
 bootstrapTheme('dark')
+
+// Optionality's words, then the reader's language: their choice, else their
+// country's, else English. Optionality draws its own shell, so it starts this
+// itself (the package's AppShell would otherwise).
+void registerOptionality()
+void startLanguage()
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

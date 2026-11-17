@@ -12,6 +12,7 @@
 // "open ws, send ['EVENT', signed_event], wait for OK or timeout, close."
 
 import { nip19 } from "nostr-tools";
+import { tr } from "../i18n";
 
 /// Subset of the NIP-07 interface Optionality uses. The full interface
 /// has more methods (nip44, getRelays, etc.) but we only need these.
@@ -55,7 +56,7 @@ export function hasNip07(): boolean {
 export function npubToHex(npub: string): string {
   const decoded = nip19.decode(npub);
   if (decoded.type !== "npub" || typeof decoded.data !== "string") {
-    throw new Error(`Not a valid npub: ${npub}`);
+    throw new Error(tr("nostr.badNpub", { npub }));
   }
   return decoded.data;
 }
@@ -80,7 +81,7 @@ export async function publishToRelays(
   { timeoutMs = 5000 }: { timeoutMs?: number } = {},
 ): Promise<RelayPublishResult[]> {
   if (relays.length === 0) {
-    throw new Error("No relays configured. Add at least one in Profile → Nostr Relays.");
+    throw new Error(tr("nostr.noRelays"));
   }
   return Promise.all(relays.map((url) => publishToOne(signed, url, timeoutMs)));
 }
@@ -177,8 +178,8 @@ export async function sendNip04DM({
   successCount: number;
 }> {
   const provider = window.nostr;
-  if (!provider) throw new Error("No NIP-07 signer detected. Install Alby, nos2x, or Flamingo.");
-  if (!plaintext.trim()) throw new Error("Message can't be empty.");
+  if (!provider) throw new Error(tr("nostr.noSigner"));
+  if (!plaintext.trim()) throw new Error(tr("nostr.empty"));
 
   const senderHex = await provider.getPublicKey();
   const targetHex = npubToHex(targetNpub);

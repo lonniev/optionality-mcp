@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useT, type MessageKey } from "../i18n";
 
 // Eye candy for the long-running judge_trade call. Sweeps through the
 // six rubric dimensions, lighting each in turn as if the judge were
@@ -16,16 +17,17 @@ import { useEffect, useState } from "react";
 
 interface JudgeDim {
   glyph: string;
-  label: string;
+  /** The message naming the dimension. */
+  label: MessageKey;
 }
 
 const JUDGE_DIMS: ReadonlyArray<JudgeDim> = [
-  { glyph: "📐", label: "Structure" },
-  { glyph: "🎯", label: "Strikes & Tenor" },
-  { glyph: "⚖️", label: "Risk / Reward" },
-  { glyph: "🌍", label: "Macro Context" },
-  { glyph: "🦢", label: "Tail Risk" },
-  { glyph: "🎤", label: "Communication" },
+  { glyph: "📐", label: "game.dimension.strategy_selection" },
+  { glyph: "🎯", label: "game.dimension.strikes_and_tenor" },
+  { glyph: "⚖️", label: "game.dimension.risk_reward" },
+  { glyph: "🌍", label: "game.dimension.macro_integration" },
+  { glyph: "🦢", label: "judge.dim.tail" },
+  { glyph: "🎤", label: "game.dimension.communication" },
 ];
 
 const STEP_MS = 1400;             // Per-dimension dwell time.
@@ -45,6 +47,7 @@ function rowState(index: number, active: number): RowState {
 }
 
 export default function JudgeAnimation() {
+  const t = useT();
   const [active, setActive] = useState<number>(0);
 
   useEffect(() => {
@@ -79,9 +82,9 @@ export default function JudgeAnimation() {
         className="judge-anim-bg"
       />
 
-      <div className="judge-anim-title">Judging your Pitch</div>
+      <div className="judge-anim-title">{t("judge.title")}</div>
       <div className="judge-anim-sub">
-        Weighing six dimensions of the proposal
+        {t("judge.sub")}
       </div>
 
       <div className="judge-anim-rows">
@@ -90,7 +93,7 @@ export default function JudgeAnimation() {
           return (
             <div key={dim.label} className={`judge-anim-row state-${state}`}>
               <div className="judge-anim-glyph" aria-hidden="true">{dim.glyph}</div>
-              <div className="judge-anim-label">{dim.label}</div>
+              <div className="judge-anim-label">{t(dim.label)}</div>
               <div className="judge-anim-meter">
                 <div className="judge-anim-meter-fill" />
               </div>

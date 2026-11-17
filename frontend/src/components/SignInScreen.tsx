@@ -1,9 +1,7 @@
 import { useEffect, useState } from "react";
 import { serviceStatus } from "@tollbooth-dpyc/web";
-import { NpubGate } from "@tollbooth-dpyc/web/react";
-
-/** The site's own words above the sign-in card. */
-const WELCOME = "An agentic options-trading trainer. The Firm composes the opportunity, you write the pitch, a judge scores your discipline.";
+import { LanguageChooser, NpubGate, Tx } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS } from "../i18n";
 
 /**
  * Optionality's sign-in screen: its own frame around the shared gate.
@@ -23,6 +21,7 @@ export default function SignInScreen({
   onGuest: () => void;
   notice?: string;
 }) {
+  const t = useT();
   // The operator's fingerprint, so the patron can check who sent the DM.
   // Non-fatal: without it the gate simply omits the hint.
   const [operatorHash, setOperatorHash] = useState<string>("");
@@ -44,44 +43,37 @@ export default function SignInScreen({
       <div style={STYLES.column}>
         <div style={STYLES.brand}>
           OPTIONALITY
-          <small style={STYLES.brandSub}>Gamified Options Trading Consultant Trainer</small>
+          <small style={STYLES.brandSub}>{t("game.brand.tagline")}</small>
         </div>
 
         <div className="tb-host">
-          <NpubGate onLogin={onLogin} operatorHash={operatorHash || undefined} notice={notice} welcome={WELCOME} />
+          <NpubGate onLogin={onLogin} operatorHash={operatorHash || undefined} notice={notice} welcome={t("signIn.welcome")} />
         </div>
 
         <div style={STYLES.panel}>
-          <p style={STYLES.formHint}>
-            Signing in with an nsec? It stays in this browser to sign each call, and Optionality
-            also keeps an encrypted copy so it can sign your DMs. Withdraw it any time from
-            Profile. For an identity you keep self-custodied, sign in with your npub instead.
-          </p>
+          <p style={STYLES.formHint}>{t("signIn.nsecHint")}</p>
 
           <div style={STYLES.guestDivider}>
             <span style={STYLES.guestDividerLine} />
-            <span style={STYLES.guestDividerLabel}>or</span>
+            <span style={STYLES.guestDividerLabel}>{t("signIn.or")}</span>
             <span style={STYLES.guestDividerLine} />
           </div>
 
           <button onClick={onGuest} style={STYLES.btnGhost}>
-            Continue as Guest
+            {t("signIn.guest")}
           </button>
           <div style={STYLES.footnote}>
-            Guests can browse the chooser, the briefing, and the sample assessment.
+            {t("signIn.guestHint")}
           </div>
 
           <div style={STYLES.brandFootnote}>
-            Optionality<sup>™</sup> is an agentic options-trading game built on{" "}
-            <a
-              href="https://tollbooth-dpyc.com"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={STYLES.brandFootnoteLink}
-            >
-              Tollbooth-DPYC<sup>™</sup>
-            </a>{" "}
-            — Bitcoin Lightning micropayments and Nostr identity for AI agents.
+            <Tx ns={WORDS} k="signIn.footnote" components={{
+              link: <a href="https://tollbooth-dpyc.com" target="_blank" rel="noopener noreferrer" style={STYLES.brandFootnoteLink} />,
+            }} />
+          </div>
+
+          <div className="tb-host" style={STYLES.languages}>
+            <LanguageChooser />
           </div>
         </div>
       </div>
@@ -206,6 +198,11 @@ const STYLES: Record<string, React.CSSProperties> = {
     color: "var(--ink-faint)",
     textAlign: "center",
     lineHeight: 1.55,
+  },
+  languages: {
+    marginTop: 14,
+    display: "flex",
+    justifyContent: "center",
   },
   brandFootnoteLink: {
     color: "var(--amber-bright)",
