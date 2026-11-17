@@ -1,8 +1,9 @@
 import { useEffect, useState } from "react";
 import type { Mode } from "../types";
 import { etaLabel as computeEtaLabel, fmtClock } from "../lib/dealClock";
-import { QuoteScroller } from "@tollbooth-dpyc/web/react";
-import { QUOTES, QUOTES_SOURCE } from "../lib/quotes";
+import { QuoteScroller, Tx, useLanguage } from "@tollbooth-dpyc/web/react";
+import { quotes, QUOTES_SOURCE } from "../lib/quotes";
+import { useT, WORDS } from "../i18n";
 import { quoteStyles } from "../lib/quoteStyles";
 
 /// Full-viewport scene shown while a scenario is being composed (or
@@ -59,9 +60,16 @@ export default function DealAnimation(props: {
     return () => window.clearInterval(id);
   }, [hasStatus]);
 
+  const t = useT();
+  const { language } = useLanguage();
   const status = props.status;
   const elapsedSec = status ? (now - status.startedAt) / 1000 : 0;
-  const etaLabel = status ? computeEtaLabel(elapsedSec, status.expectedSeconds) : "";
+  const etaLabel = status
+    ? computeEtaLabel(elapsedSec, status.expectedSeconds, {
+        left: (clock) => t("clock.left", { clock }),
+        wrapping: t("clock.wrapping"),
+      })
+    : "";
 
   return (
     <div className="deal-anim">
@@ -76,34 +84,33 @@ export default function DealAnimation(props: {
         className="deal-anim-bg"
       />
       <div className="deal-anim-foreground">
-        <QuoteScroller quotes={QUOTES} source={QUOTES_SOURCE} heading={props.loadingMsg} classNames={quoteStyles} />
+        {/* The community corpus is English; other languages read the translated set. */}
+        <QuoteScroller quotes={quotes()} source={language === "en" ? QUOTES_SOURCE : undefined} heading={props.loadingMsg} classNames={quoteStyles} />
 
         {status ? (
           <div className="deal-card" role="status" aria-live="polite">
-            <div className="deal-card-head">The Firm is preparing your assignment</div>
+            <div className="deal-card-head">{t("deal.preparing")}</div>
             <div className="deal-card-name">{status.assignmentName}</div>
 
             <div className="deal-card-meters">
               <div className="deal-meter">
-                <span className="deal-meter-k">Elapsed</span>
+                <span className="deal-meter-k">{t("deal.elapsed")}</span>
                 <span className="deal-meter-v">{fmtClock(elapsedSec)}</span>
               </div>
               {etaLabel && (
                 <div className="deal-meter">
-                  <span className="deal-meter-k">Estimate</span>
+                  <span className="deal-meter-k">{t("deal.estimate")}</span>
                   <span className="deal-meter-v">{etaLabel}</span>
                 </div>
               )}
               <div className="deal-meter">
-                <span className="deal-meter-k">Claim</span>
+                <span className="deal-meter-k">{t("deal.claim")}</span>
                 <span className="deal-meter-v mono">{status.claimId.slice(0, 8)}</span>
               </div>
             </div>
 
             <p className="deal-card-reassure">
-              Take your time — you can leave this page. Your assignment lands in
-              your <strong>Journal</strong> when it's ready, and picks up right
-              where it left off if your connection drops.
+              <Tx ns={WORDS} k="deal.reassure" components={{ b: <strong /> }} />
             </p>
 
             <button
@@ -111,13 +118,13 @@ export default function DealAnimation(props: {
               className="btn deal-card-btn"
               onClick={status.onClaimInJournal}
             >
-              Claim in Journal
+              {t("deal.claimInJournal")}
             </button>
           </div>
         ) : (
           props.mode === "live" && (
             <div className="deal-anim-foot">
-              Live mode searches the web — this can take a few minutes.
+              {t("deal.live")}
             </div>
           )
         )}

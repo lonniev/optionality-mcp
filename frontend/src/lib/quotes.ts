@@ -5,34 +5,17 @@
 // and a failed fetch.
 
 import type { Quote } from "@tollbooth-dpyc/web";
+import { tr, type MessageKey } from "../i18n";
 
 export const QUOTES_SOURCE =
   "https://raw.githubusercontent.com/lonniev/dpyc-community/main/quotes.json";
 
-export const QUOTES: ReadonlyArray<Quote> = [
-  {
-    text:
-      "Sound money is an instrument of protection of civil liberties against " +
-      "despotic inroads on the part of governments.",
-    author: "Ludwig von Mises",
-  },
-  {
-    text:
-      "The curious task of economics is to demonstrate to men how little they " +
-      "really know about what they imagine they can design.",
-    author: "F.A. Hayek",
-  },
-  {
-    text:
-      "The root problem with conventional currency is all the trust that's " +
-      "required to make it work.",
-    author: "Satoshi Nakamoto",
-  },
-  {
-    text:
-      "I don't believe we shall ever have a good money again before we take " +
-      "the thing out of the hands of government.",
-    author: "F.A. Hayek",
-  },
-  { text: "Inflation is taxation without legislation.", author: "Milton Friedman" },
-];
+/** Who said each quote, in order; names stay as they are in every language. */
+const AUTHORS = ["Ludwig von Mises", "F.A. Hayek", "Satoshi Nakamoto", "F.A. Hayek", "Milton Friedman"] as const;
+
+/**
+ * The site's quotes in the reader's language. Call at render, so a change of
+ * language shows at once.
+ */
+export const quotes = (): ReadonlyArray<Quote> =>
+  AUTHORS.map((author, i) => ({ text: tr(`lib.quotes.${i}` as MessageKey), author }));

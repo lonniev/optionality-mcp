@@ -8,12 +8,13 @@
     "prebuild": "node scripts/fetch-anthropic-pricing.mjs",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "verify": "node scripts/verify.mjs"
+    "verify": "node scripts/verify.mjs",
+    "test": "node --experimental-strip-types --test 'src/lib/*.test.ts'"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
     "@tailwindcss/vite": "^4.3.3",
-    "@tollbooth-dpyc/web": "3.9.0",
+    "@tollbooth-dpyc/web": "3.10.0",
     "lucide-react": "^1.59.0",
     "nostr-tools": "^2.25.2",
     "react": "^19.3.1",

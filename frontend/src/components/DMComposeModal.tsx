@@ -21,7 +21,8 @@ import {
 import { getStoredNpub } from "@tollbooth-dpyc/web";
 import { sendPatronDm } from "../lib/mcp";
 import { shortNpub } from "@tollbooth-dpyc/web";
-import { Avatar } from "@tollbooth-dpyc/web/react";
+import { Avatar, Tx } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS } from "../i18n";
 
 interface Props {
   target: { npub: string; displayName?: string | null; avatar?: string | null };
@@ -43,6 +44,7 @@ type Stage =
 const MAX_MESSAGE = 2000;
 
 export default function DMComposeModal({ target, relays, escrowed, onClose }: Props) {
+  const t = useT();
   const [text, setText] = useState<string>("");
   const [stage, setStage] = useState<Stage>({ kind: "compose" });
   const [nip07] = useState<boolean>(() => hasNip07());
@@ -78,7 +80,7 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
             eventId: "<server-signed>",
           });
         } else {
-          setStage({ kind: "error", message: r.error || "DM send failed." });
+          setStage({ kind: "error", message: r.error || t("dm.failed") });
         }
         return;
       }
@@ -99,19 +101,19 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
     }
   }
 
-  const displayName = target.displayName || "Anonymous";
+  const displayName = target.displayName || t("game.lb.anonymous");
   const isSelfDM = target.npub === getStoredNpub();
 
   return (
     <div className="opt-scrim" style={STYLES.scrim} onClick={() => stage.kind !== "sending" && onClose()}>
       <div className="opt-modal-card" style={STYLES.card} onClick={(e) => e.stopPropagation()}>
-        <div style={STYLES.head}>{isSelfDM ? "Send DM to Yourself" : "Send DM"}</div>
+        <div style={STYLES.head}>{isSelfDM ? t("dm.titleSelf") : t("dm.title")}</div>
 
         <div style={STYLES.recipient}>
           <Avatar value={target.avatar} size={44} />
           <div style={{ minWidth: 0, flex: 1 }}>
             <div style={{ fontFamily: "Fraunces, serif", fontSize: 17, color: "var(--amber-bright)" }}>
-              {displayName}{isSelfDM ? " (you)" : ""}
+              {displayName}{isSelfDM ? t("dm.you") : ""}
             </div>
             <div style={{ fontSize: 11, color: "var(--ink-faint)", fontFamily: "JetBrains Mono, monospace" }}>
               {shortNpub(target.npub)}
@@ -121,8 +123,7 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
 
         {isSelfDM && (
           <div style={STYLES.selfNote}>
-            Self-DM: the message lands in your own Nostr client's inbox. Useful for
-            verifying your NIP-07 signer + relay path end-to-end without pinging a peer.
+            {t("dm.selfNote")}
           </div>
         )}
 
@@ -132,9 +133,9 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
 
         {signingMode === "nip07" && relays.length === 0 && (
           <div style={STYLES.warn}>
-            The shared relay set is still loading — close this and try again in a moment.
+            {t("dm.loading")}
             <div style={STYLES.actions}>
-              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>Close</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>{t("dm.close")}</button>
             </div>
           </div>
         )}
@@ -146,7 +147,7 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
               value={text}
               onChange={(e) => setText(e.target.value)}
               maxLength={MAX_MESSAGE}
-              placeholder="Type a single message — recipient sees it in their Nostr client."
+              placeholder={t("dm.placeholder")}
               style={STYLES.textarea}
               autoFocus
             />
@@ -154,35 +155,27 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
 
             <p style={STYLES.fine}>
               {signingMode === "escrow" ? (
-                <>
-                  Signed by Optionality with your escrowed nsec (in operator-managed
-                  storage). DM appears on Nostr authored by your npub. Withdraw the
-                  key any time in <b>Profile → Game Persona Key</b>.
-                </>
+                <Tx ns={WORDS} k="dm.escrowNote" components={{ b: <b /> }} />
               ) : (
-                <>
-                  Signed locally by your NIP-07 extension (your nsec never reaches
-                  Optionality). Published to <b>{relays.length}</b>{" "}
-                  relay{relays.length === 1 ? "" : "s"} from the shared DPYC set.
-                </>
+                <Tx ns={WORDS} k="dm.nip07Note" vars={{ count: relays.length }} components={{ b: <b /> }} />
               )}
             </p>
 
             <div style={STYLES.actions}>
-              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>Cancel</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>{t("dm.cancel")}</button>
               <button
                 onClick={() => void handleSend()}
                 disabled={!text.trim()}
                 style={{ ...STYLES.btnPrimary, ...(!text.trim() ? STYLES.btnDisabled : {}) }}
               >
-                Sign &amp; Send
+                {t("dm.send")}
               </button>
             </div>
           </>
         )}
 
         {stage.kind === "sending" && (
-          <div style={STYLES.spinner}>Encrypting, signing, broadcasting…</div>
+          <div style={STYLES.spinner}>{t("dm.sending")}</div>
         )}
 
         {stage.kind === "sent" && (
@@ -193,16 +186,16 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
               color: stage.successCount > 0 ? "var(--jade)" : "var(--rust)",
               marginBottom: 12,
             }}>
-              {stage.successCount > 0 ? "✓ Sent" : "✗ Not Accepted"}
+              {stage.successCount > 0 ? t("dm.sent") : t("dm.notAccepted")}
               {stage.results.length > 0 && (
                 <span style={{ fontSize: 12, color: "var(--ink-faint)", marginLeft: 8, letterSpacing: "0.1em" }}>
-                  {stage.successCount} / {stage.results.length} relays
+                  {t("dm.relays", { ok: stage.successCount, total: stage.results.length })}
                 </span>
               )}
             </div>
             {stage.results.length > 0 && (
               <details style={{ marginBottom: 12 }}>
-                <summary style={STYLES.detailsHead}>Per-relay results</summary>
+                <summary style={STYLES.detailsHead}>{t("dm.perRelay")}</summary>
                 <div style={{ marginTop: 8 }}>
                   {stage.results.map((r) => (
                     <div key={r.url} style={STYLES.relayRow}>
@@ -218,16 +211,14 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
             )}
             <p style={STYLES.fine}>
               {stage.results.length > 0 ? (
-                <>
-                  Event id <code style={{ fontSize: 10, color: "var(--ink-faint)" }}>{stage.eventId.slice(0, 16)}…</code>
-                  {" "}— the recipient sees this in any Nostr client that subscribes to one of these relays.
-                </>
+                <Tx ns={WORDS} k="dm.eventNote" vars={{ id: stage.eventId.slice(0, 16) }}
+                  components={{ id: <code style={{ fontSize: 10, color: "var(--ink-faint)" }} /> }} />
               ) : (
-                <>The DM is on its way via Optionality's relay pool. The recipient will see it in their Nostr client.</>
+                t("dm.serverNote")
               )}
             </p>
             <div style={STYLES.actions}>
-              <button onClick={onClose} className="opt-tap" style={STYLES.btnPrimary}>Done</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnPrimary}>{t("dm.done")}</button>
             </div>
           </>
         )}
@@ -236,12 +227,12 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
           <>
             <div style={STYLES.errorMsg}>{stage.message}</div>
             <div style={STYLES.actions}>
-              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>Close</button>
+              <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>{t("dm.close")}</button>
               <button
                 onClick={() => setStage({ kind: "compose" })}
                 className="opt-tap" style={STYLES.btnPrimary}
               >
-                Try Again
+                {t("dm.tryAgain")}
               </button>
             </div>
           </>
@@ -252,32 +243,31 @@ export default function DMComposeModal({ target, relays, escrowed, onClose }: Pr
 }
 
 function NoSignerNotice({ onClose }: { onClose: () => void }) {
+  const t = useT();
   return (
     <>
       <div style={STYLES.warn}>
-        <b>Install a Nostr signer extension</b> to send DMs. Optionality never sees your nsec —
-        the extension signs the DM in its own sandbox and the encrypted message goes straight
-        to relays.
+        <Tx ns={WORDS} k="dm.install" components={{ b: <b /> }} />
       </div>
       <div style={STYLES.signerGrid}>
         <SignerLink
           name="Alby"
           url="https://getalby.com"
-          blurb="Browser extension + iOS / Android. Includes a Lightning wallet too."
+          blurb={t("dm.alby")}
         />
         <SignerLink
           name="nos2x"
           url="https://github.com/fiatjaf/nos2x"
-          blurb="Minimal Chrome / Firefox extension. NIP-07 only, no wallet."
+          blurb={t("dm.nos2x")}
         />
         <SignerLink
           name="Flamingo"
           url="https://www.flamingo.me"
-          blurb="iOS / desktop wrapper around your nsec; exposes NIP-07 to web pages."
+          blurb={t("dm.flamingo")}
         />
       </div>
       <div style={STYLES.actions}>
-        <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>Close</button>
+        <button onClick={onClose} className="opt-tap" style={STYLES.btnGhost}>{t("dm.close")}</button>
       </div>
     </>
   );

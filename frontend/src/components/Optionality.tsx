@@ -62,27 +62,33 @@ import {
   upsertPending,
 } from "../lib/pendingDeals";
 import { etaLabel as computeEtaLabel, fmtClock } from "../lib/dealClock";
+import { useT, WORDS, type MessageKey, type Translate } from "../i18n";
+import { usd0 } from "../lib/money";
+import { dimensionLabel, statusLabel } from "../lib/labels";
+import { Tx } from "@tollbooth-dpyc/web/react";
 
 
 /// Sortable column headers. `key` matches the wheel's `sort_col` whitelist
 /// (list_journal); the caret and actions columns aren't sortable.
-const JOURNAL_SORT_HEADERS: { key: string; label: string; align?: "right" }[] = [
-  { key: "symbol", label: "Symbol" },
-  { key: "historicity", label: "Historicity" },
-  { key: "difficulty", label: "Difficulty" },
-  { key: "created", label: "Created" },
-  { key: "updated", label: "Updated" },
-  { key: "grade", label: "Grade", align: "right" },
-  { key: "score", label: "Score", align: "right" },
-  { key: "status", label: "Status" },
+const JOURNAL_SORT_HEADERS: { key: string; align?: "right" }[] = [
+  { key: "symbol" },
+  { key: "historicity" },
+  { key: "difficulty" },
+  { key: "created" },
+  { key: "updated" },
+  { key: "grade", align: "right" },
+  { key: "score", align: "right" },
+  { key: "status" },
 ];
 
-const JOURNAL_GROUP_OPTIONS: { val: string; label: string }[] = [
-  { val: "none", label: "None" },
-  { val: "historicity", label: "Historicity" },
-  { val: "difficulty", label: "Difficulty" },
-  { val: "symbol", label: "Symbol" },
-];
+/// A Journal column's name, in the reader's language.
+const columnLabel = (t: Translate, key: string): string => t(`game.journal.col.${key}` as MessageKey);
+
+const JOURNAL_GROUP_OPTIONS: string[] = ["none", "historicity", "difficulty", "symbol"];
+
+/// A Journal grouping's name, in the reader's language.
+const groupOptionLabel = (t: Translate, val: string): string =>
+  val === "none" ? t("game.journal.group.none") : columnLabel(t, val);
 
 /// Compact date+time for the Created / Updated columns.
 function fmtJournalDate(iso: string | undefined, zone: string): string {
@@ -95,9 +101,11 @@ function fmtJournalDate(iso: string | undefined, zone: string): string {
 
 /// Display label for a group header. Symbol keys pass through; the
 /// lowercase enum keys (mode / difficulty) get Title-cased.
-function fmtGroupLabel(groupBy: string, key: string): string {
+function fmtGroupLabel(t: Translate, groupBy: string, key: string): string {
   if (!key) return "—";
   if (groupBy === "symbol") return key;
+  if (groupBy === "historicity") return modeLabel(t, key);
+  if (groupBy === "difficulty") return difficultyLabel(t, key);
   return key.charAt(0).toUpperCase() + key.slice(1);
 }
 
@@ -131,29 +139,30 @@ function MaterialIcon({ path, size = 18 }: { path: string; size?: number }) {
 /// friendlier labels for the Usage panel. Keys are the
 /// "<slug>_<capability>" strings the wheel writes to today_usage.
 /// Unmapped tools fall back to a humanized version of the capability.
-const TOOL_DISPLAY_NAMES: Record<string, string> = {
-  optionality_deal_scenario: "Trade Scenario",
-  optionality_judge_trade: "Pitch Review",
-  optionality_ask_tip: "Clue Request",
-  optionality_save_draft: "Save Draft",
-  optionality_purchase_credits: "Top Up",
-  optionality_check_payment: "Payment Check",
-  optionality_check_balance: "Balance Check",
-  optionality_check_price: "Price Preview",
-  optionality_get_leaderboard: "Leaderboard",
-  optionality_get_my_rank: "My Rank",
-  optionality_get_journal: "Journal Lookup",
-  optionality_list_journal: "Journal List",
-  optionality_delete_journal: "Journal Delete",
-  optionality_set_display_name: "Display Name",
-  optionality_get_api_usage_stats: "API Usage",
-  optionality_account_statement: "Account Statement",
-  optionality_request_npub_proof: "Sign-In (request)",
-  optionality_receive_npub_proof: "Sign-In (verify)",
-};
+const NAMED_TOOLS = new Set([
+  "deal_scenario",
+  "judge_trade",
+  "ask_tip",
+  "save_draft",
+  "purchase_credits",
+  "check_payment",
+  "check_balance",
+  "check_price",
+  "get_leaderboard",
+  "get_my_rank",
+  "get_journal",
+  "list_journal",
+  "delete_journal",
+  "set_display_name",
+  "get_api_usage_stats",
+  "account_statement",
+  "request_npub_proof",
+  "receive_npub_proof",
+]);
 
-function displayToolName(rawKey: string): string {
-  if (TOOL_DISPLAY_NAMES[rawKey]) return TOOL_DISPLAY_NAMES[rawKey];
+function displayToolName(t: Translate, rawKey: string): string {
+  const capability = rawKey.startsWith("optionality_") ? rawKey.slice("optionality_".length) : rawKey;
+  if (NAMED_TOOLS.has(capability)) return t(`game.tool.${capability}` as MessageKey);
   // Strip the operator-slug prefix and Title-Case the capability.
   const stripped = rawKey.startsWith("optionality_") ? rawKey.slice("optionality_".length) : rawKey;
   return stripped
@@ -182,7 +191,7 @@ function priceFor(model: string): { input: number; output: number } {
 }
 
 function fmt$(n: number) {
-  return n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+  return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
 }
 import ModeIcon from "./ModeIcon";
 import DifficultyAvatar from "./DifficultyAvatar";
@@ -227,46 +236,35 @@ function storageKey(npub: string): string {
 /// npub-scoped (see ./lib/sessionKey) so an identity switch can't seat one
 /// patron's scenario in another's Pit.
 
-const DIFFICULTIES: DifficultyDef[] = [
-  {
-    id: "apprentice",
-    label: "Apprentice",
-    blurb: "Clean directional setups. Vanilla macro backdrop.",
-  },
-  {
-    id: "journeyman",
-    label: "Journeyman",
-    blurb: "Volatility regime matters. Earnings, Fed days, single catalysts.",
-  },
-  {
-    id: "adept",
-    label: "Adept",
-    blurb: "Multi-factor. Cross-asset correlations. Skew and term structure.",
-  },
-  {
-    id: "sovereign",
-    label: "Sovereign",
-    blurb: "Regime-change era. Monetary debasement, geopolitics, tail hedging.",
-  },
-];
+const DIFFICULTY_IDS: DifficultyDef["id"][] = ["apprentice", "journeyman", "adept", "sovereign"];
 
-const MODES: ModeDef[] = [
-  {
-    id: "historical",
-    label: "Historical Fiction",
-    blurb: "Anchored to a real moment in market history. Macro real; numbers calibrated.",
-  },
-  {
-    id: "fiction",
-    label: "Fiction",
-    blurb: "Pure invention. Near-future hypotheticals, counterfactuals, speculative regimes.",
-  },
-  {
-    id: "live",
-    label: "Live Events",
-    blurb: "Grounded in today's actual market via web search. Real ticker, real catalyst, now.",
-  },
-];
+/// The personas, in the reader's language.
+const difficultiesIn = (t: Translate): DifficultyDef[] =>
+  DIFFICULTY_IDS.map((id) => ({
+    id,
+    label: t(`game.difficulty.${id}.label` as MessageKey),
+    blurb: t(`game.difficulty.${id}.blurb` as MessageKey),
+  }));
+
+/// A persona's name; an id this page doesn't know shows as sent.
+function difficultyLabel(t: Translate, id: string): string {
+  return [...DIFFICULTY_IDS, "mulligan"].includes(id as DifficultyDef["id"]) ? t(`game.difficulty.${id}.label` as MessageKey) : id;
+}
+
+const MODE_IDS: ModeDef["id"][] = ["historical", "fiction", "live"];
+
+/// The historicities, in the reader's language.
+const modesIn = (t: Translate): ModeDef[] =>
+  MODE_IDS.map((id) => ({
+    id,
+    label: t(`game.mode.${id}.label` as MessageKey),
+    blurb: t(`game.mode.${id}.blurb` as MessageKey),
+  }));
+
+/// A historicity's name; an id this page doesn't know shows as sent.
+function modeLabel(t: Translate, id: string): string {
+  return MODE_IDS.includes(id as ModeDef["id"]) ? t(`game.mode.${id}.label` as MessageKey) : id;
+}
 
 /// Curated sector chips the patron can constrain the dealer to. Each
 /// has a rich options-trading story — concentrated catalysts, distinctive
@@ -274,30 +272,24 @@ const MODES: ModeDef[] = [
 /// with. "" = no constraint, dealer picks freely. The full string is
 /// passed verbatim to the dealer prompt so it can be a free-text label
 /// (e.g., "luxury goods", "uranium miners") via the inline override.
-const SECTORS: ReadonlyArray<{ id: string; label: string; glyph: string }> = [
-  { id: "", label: "Any", glyph: "🎲" },
-  { id: "biotech", label: "Biotech", glyph: "🧬" },
-  { id: "semis", label: "Semis", glyph: "💾" },
-  { id: "mega-cap tech", label: "Mega Tech", glyph: "🤖" },
-  { id: "banks", label: "Banks", glyph: "🏦" },
-  { id: "energy", label: "Energy", glyph: "🛢️" },
-  { id: "miners", label: "Miners", glyph: "⛏️" },
-  { id: "consumer discretionary", label: "Consumer", glyph: "🛍️" },
-  { id: "homebuilders", label: "Homebuilders", glyph: "🏗️" },
-  { id: "defense", label: "Defense", glyph: "🛡️" },
-  { id: "airlines", label: "Airlines", glyph: "✈️" },
-  { id: "crypto-adjacent equities", label: "Crypto Equities", glyph: "₿" },
-  { id: "index / ETF", label: "Index/ETF", glyph: "📈" },
+/// `id` is what the dealer is sent (English, by design); `name` keys the label.
+const SECTORS: ReadonlyArray<{ id: string; name: string; glyph: string }> = [
+  { id: "", name: "any", glyph: "🎲" },
+  { id: "biotech", name: "biotech", glyph: "🧬" },
+  { id: "semis", name: "semis", glyph: "💾" },
+  { id: "mega-cap tech", name: "megaTech", glyph: "🤖" },
+  { id: "banks", name: "banks", glyph: "🏦" },
+  { id: "energy", name: "energy", glyph: "🛢️" },
+  { id: "miners", name: "miners", glyph: "⛏️" },
+  { id: "consumer discretionary", name: "consumer", glyph: "🛍️" },
+  { id: "homebuilders", name: "homebuilders", glyph: "🏗️" },
+  { id: "defense", name: "defense", glyph: "🛡️" },
+  { id: "airlines", name: "airlines", glyph: "✈️" },
+  { id: "crypto-adjacent equities", name: "crypto", glyph: "₿" },
+  { id: "index / ETF", name: "index", glyph: "📈" },
 ];
 
-const DIMENSION_LABELS: Record<string, string> = {
-  strategy_selection: "Structure",
-  strikes_and_tenor: "Strikes & Tenor",
-  risk_reward: "Risk / Reward",
-  macro_integration: "Macro Context",
-  tail_risk: "Tail Awareness",
-  communication: "Communication",
-};
+
 
 // ============================================================
 //  Prompts and Claude API calls are server-side now (mcp/src/optionality_mcp/
@@ -818,6 +810,9 @@ interface OptionalityProps {
 }
 
 export default function Optionality({ onSignOut }: OptionalityProps = {}) {
+  const t = useT();
+  const MODES = modesIn(t);
+  const DIFFICULTIES = difficultiesIn(t);
   // Hash-routed tab. Browser back/forward and refresh restore the view.
   // `setTab` is user-initiated and adds a history entry; `replaceTab` is
   // for system-initiated bounces (auto-route, guest guard) and doesn't.
@@ -991,7 +986,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       .catch(() => {});
   }
   const zoomableStyle: React.CSSProperties = { cursor: "zoom-in" };
-  const zoomableTitle = "Tap to read this in a larger font";
+  const zoomableTitle = t("game.zoom.title");
   useEffect(() => {
     if (!confirmingDiscard) return;
     const onKey = (e: KeyboardEvent) => {
@@ -1138,7 +1133,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       setDifficulty(only.difficulty);
       if (typeof only.maxLossUsd === "number") setMaxLossInput(String(only.maxLossUsd));
       if (typeof only.sector === "string") setSector(only.sector);
-      setLoadingMsg("Reading the tape");
+      setLoadingMsg("game.loading.tape");
       setFocusedClaim(only.claimCheck);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -1184,8 +1179,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             setFocusedClaim(null);
             setError(
               e instanceof ClaimCheckError && e.code === "expired"
-                ? "That assignment aged out before you returned — no fare was charged. Deal a fresh one."
-                : "Couldn't recover that assignment. " + (e as Error).message,
+                ? t("game.error.agedOut")
+                : t("game.error.recover", { message: (e as Error).message }),
             );
           }
         } finally {
@@ -1292,7 +1287,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     setAnswer("");
     setScenario(null);
     setEntryId(null);
-    setLoadingMsg(mode === "live" ? "Reading the tape" : "Tapping the wire");
+    setLoadingMsg(mode === "live" ? "game.loading.tape" : "game.loading.wire");
     const startedAt = Date.now();
     const me = getStoredNpub();
     try {
@@ -1321,7 +1316,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         onSignOut?.();
         return;
       }
-      setError("Could not start scenario. " + (e as Error).message);
+      setError(t("game.error.start", { message: (e as Error).message }));
     } finally {
       startingRef.current = false;
     }
@@ -1352,23 +1347,23 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     setDifficulty(pd.difficulty);
     if (typeof pd.maxLossUsd === "number") setMaxLossInput(String(pd.maxLossUsd));
     if (typeof pd.sector === "string") setSector(pd.sector);
-    setLoadingMsg("Reading the tape");
+    setLoadingMsg("game.loading.tape");
     setFocusedClaim(pd.claimCheck);
     setTab("play");
   }
 
   async function submitTrade(): Promise<void> {
     if (!answer.trim()) {
-      setError("Type your trade first.");
+      setError(t("game.error.typeFirst"));
       return;
     }
     if (!entryId) {
-      setError("No active scenario — deal a new one first.");
+      setError(t("game.error.noScenario"));
       return;
     }
     setError("");
     setLoading(true);
-    setLoadingMsg("Judging your Pitch");
+    setLoadingMsg("game.loading.judging");
     try {
       const result = await judgeTrade(entryId, answer);
       if (result.error) throw new Error(result.error);
@@ -1407,13 +1402,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       // and send them back to deal a fresh, properly-journaled scenario.
       if (e instanceof ClaimCheckError && e.code === "journal_entry_not_found") {
         nextRound();
-        setError(
-          "That scenario is no longer in your journal, so it can't be judged — " +
-            "deal a fresh one to pitch. No fare was charged.",
-        );
+        setError(t("game.error.notInJournal"));
         return;
       }
-      setError("Evaluation failed. " + (e as Error).message);
+      setError(t("game.error.evaluation", { message: (e as Error).message }));
     } finally {
       setLoading(false);
     }
@@ -1436,7 +1428,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   }
 
   async function handleSaveDraft(): Promise<void> {
-    if (!entryId) { setError("No active scenario to save against."); return; }
+    if (!entryId) { setError(t("game.error.noScenarioToSave")); return; }
     setError("");
     setSavingDraft(true);
     try {
@@ -1445,7 +1437,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       setDraftSavedAt(Date.now());
     } catch (e) {
       if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
-      setError("Save failed. " + (e as Error).message);
+      setError(t("game.error.save", { message: (e as Error).message }));
     } finally {
       setSavingDraft(false);
     }
@@ -1454,7 +1446,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   async function handleAskTip(): Promise<void> {
     const q = tipQuestion.trim();
     if (!q) return;
-    if (!entryId) { setError("Accept a challenge before asking for a clue."); return; }
+    if (!entryId) { setError(t("game.error.acceptFirst")); return; }
     setError("");
     setTipAsking(true);
     try {
@@ -1465,7 +1457,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       setTipQuestion("");
     } catch (e) {
       if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
-      setError("Clue request failed. " + (e as Error).message);
+      setError(t("game.error.clue", { message: (e as Error).message }));
     } finally {
       setTipAsking(false);
     }
@@ -1552,9 +1544,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     }
     lines.push("");
     lines.push("— Clue conversation —");
-    for (const t of tips) {
-      lines.push(`Q: ${t.question}`);
-      lines.push(`A: ${t.answer}`);
+    for (const tip of tips) {
+      lines.push(`Q: ${tip.question}`);
+      lines.push(`A: ${tip.answer}`);
       lines.push("");
     }
     lines.push("(Paste this into your own Claude.ai session to keep exploring.)");
@@ -1661,7 +1653,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       <>
         {detail.trade_proposal && (
           <>
-            <h3 className="serif">Your trade</h3>
+            <h3 className="serif">{t("game.entry.yourTrade")}</h3>
             <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12 }}>
               <RichText text={detail.trade_proposal} />
             </div>
@@ -1669,7 +1661,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         )}
         {detail.evaluation?.headline && (
           <>
-            <h3 className="serif">Headline</h3>
+            <h3 className="serif">{t("game.entry.headline")}</h3>
             <div style={{ fontFamily: "Fraunces, serif", fontStyle: "italic", color: "var(--ink)", marginBottom: 12 }}>
               &ldquo;<RichText inline text={detail.evaluation.headline} />&rdquo;
             </div>
@@ -1680,7 +1672,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         )}
         {(detail.evaluation?.trade_legs && detail.evaluation.trade_legs.length > 0) && (
           <>
-            <h3 className="serif">Risk Profile</h3>
+            <h3 className="serif">{t("game.entry.riskProfile")}</h3>
             <RiskProfileChart
               legs={detail.evaluation.trade_legs}
               altLegs={detail.evaluation.alt_trade_legs}
@@ -1690,13 +1682,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
         )}
         {detail.evaluation?.alternative_trade && (
           <>
-            <h3 className="serif">Alternative</h3>
+            <h3 className="serif">{t("game.entry.alternative")}</h3>
             <div className="alt-trade"><RichText text={detail.evaluation.alternative_trade} /></div>
           </>
         )}
         {detail.evaluation?.deeper_context && (
           <>
-            <h3 className="serif">Deeper context</h3>
+            <h3 className="serif">{t("game.entry.deeper")}</h3>
             <div className="deeper"><RichText text={detail.evaluation.deeper_context} /></div>
           </>
         )}
@@ -1705,27 +1697,27 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             <button
               className="btn"
               onClick={() => { void replayJournalEntry(detail.id); }}
-              title="Reissue this scenario as a mulligan — same setup, fresh pitch"
+              title={t("game.entry.redoTitle")}
             >
-              Redo Again
+              {t("game.entry.redo")}
             </button>
             <button
               className={`btn ${detail.is_shared ? "" : "btn-ghost"}`}
               onClick={() => { void toggleShareEntry(detail.id, !!detail.is_shared); }}
               disabled={!!sharingInFlight[detail.id]}
               title={detail.is_shared
-                ? "Currently shared on your Leaderboard row — click to make private"
-                : "Share this pitch on your Leaderboard row so peers can compare"}
+                ? t("game.entry.sharedTitle")
+                : t("game.entry.shareTitle")}
             >
               {sharingInFlight[detail.id]
                 ? "…"
                 : detail.is_shared
-                ? "✓ Shared"
-                : "Share"}
+                ? t("game.entry.shared")
+                : t("game.entry.share")}
             </button>
             {detail.is_shared && (
               <span style={{ fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                Visible to all
+                {t("game.entry.visibleToAll")}
               </span>
             )}
           </div>
@@ -1736,16 +1728,16 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               className="btn"
               onClick={() => { resumeOpenEntry(detail); }}
               title={detail.trade_proposal
-                ? "You have a saved draft — resume in The Pit to finish and pitch it. No new deal, no charge."
-                : "Resume this open scenario in The Pit to pitch a trade and get a review. No new deal, no charge."}
+                ? t("game.entry.resumeDraftTitle")
+                : t("game.entry.resumeTitle")}
             >
-              🙋 Resume
+              {t("game.entry.resume")}
             </button>
           </div>
         )}
         {!detail.evaluation && detail.status !== "evaluated" && detail.status !== "open" && (
           <div style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic" }}>
-            {`Entry status: ${detail.status}. No pitch review available.`}
+            {t("game.entry.noReview", { status: detail.status })}
           </div>
         )}
       </>
@@ -1765,7 +1757,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
     setEntryId(null);
     setTab("play");
     setLoading(true);
-    setLoadingMsg("Reissuing the scenario");
+    setLoadingMsg("game.loading.reissuing");
     try {
       const result = await dealScenario("historical", "mulligan", undefined, entryId);
       if (result.error) throw new Error(result.error);
@@ -1781,7 +1773,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       setTimeout(() => answerRef.current?.focus(), 100);
     } catch (e) {
       if (e instanceof ProofRequiredError) { onSignOut?.(); return; }
-      setError("Replay failed. " + (e as Error).message);
+      setError(t("game.error.replay", { message: (e as Error).message }));
     } finally {
       setLoading(false);
     }
@@ -1795,7 +1787,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   /// renders inside an expanded entry), so this is synchronous.
   function resumeOpenEntry(detail: JournalDetail): void {
     if (!detail.scenario) {
-      setError("This entry has no scenario to resume.");
+      setError(t("game.error.nothingToResume"));
       return;
     }
     setError("");
@@ -2049,13 +2041,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
       <header className="header">
         <div className="brand">
           OPTIONALITY
-          <small>Gamified Options Trading Consultant Trainer</small>
+          <small>{t("game.brand.tagline")}</small>
         </div>
         <div className="stats">
-          <div>Sessions<b>{stats.played}</b></div>
-          <div>Avg Score<b>{stats.avg}</b></div>
-          <div>Best<b>{stats.best}</b></div>
-          <div>Streak<b>{stats.streak}</b></div>
+          <div>{t("game.stats.sessions")}<b>{stats.played}</b></div>
+          <div>{t("game.stats.avg")}<b>{stats.avg}</b></div>
+          <div>{t("game.stats.best")}<b>{stats.best}</b></div>
+          <div>{t("game.stats.streak")}<b>{stats.streak}</b></div>
           {/* Persistent balance + Top Up. Always reachable for signed-in
               patrons (mirrors eXcalibur's Nav wallet affordance) so a
               zero balance always has a one-click recovery path, not just
@@ -2065,21 +2057,21 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               type="button"
               className={`balance-chip${currentBalance === 0 ? " zero" : ""}`}
               onClick={() => setTopUpOpen(true)}
-              title="Top Up — buy sats over Bitcoin Lightning"
+              title={t("game.balance.title")}
             >
-              Balance
+              {t("game.balance.label")}
               <b>
                 {currentBalance === null ? "—" : currentBalance.toLocaleString()}
-                <small> sats</small>
+                <small>{t("game.balance.sats")}</small>
               </b>
-              <span className="balance-chip-cta">＋ Top Up</span>
+              <span className="balance-chip-cta">{t("game.balance.topUp")}</span>
             </button>
           )}
           {onSignOut && (
             <button
               onClick={onSignOut}
-              title="Sign out — clear stored npub and proof token"
-              aria-label="Sign out"
+              title={t("game.signOut.title")}
+              aria-label={t("game.signOut.label")}
               className="tap-icon"
               style={{
                 background: "transparent",
@@ -2105,10 +2097,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             patrons whose balance is zero. Stays available afterwards
             so seasoned patrons can find a refresher. */}
         <button className={`tab ${tab === "welcome" ? "active" : ""}`} onClick={() => setTab("welcome")}>
-          <MaterialIcon path={MI_WAVE} size={24} /><span>Welcome</span>
+          <MaterialIcon path={MI_WAVE} size={24} /><span>{t("game.tab.welcome")}</span>
         </button>
         <button className={`tab ${tab === "play" ? "active" : ""}`} onClick={() => setTab("play")}>
-          <MaterialIcon path={MI_PERSON} size={24} /><span>The Pit</span>
+          <MaterialIcon path={MI_PERSON} size={24} /><span>{t("game.tab.play")}</span>
         </button>
         {/* Sample Assessment tab — visible for guests AND for signed-in
             patrons who've run their balance to zero. Acts as both
@@ -2117,46 +2109,38 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             balance is positive again. */}
         {(guest || currentBalance === 0) && (
           <button className={`tab ${tab === "sample" ? "active" : ""}`} onClick={() => setTab("sample")}>
-            <MaterialIcon path={MI_EYE} size={24} /><span>See Assessment</span>
+            <MaterialIcon path={MI_EYE} size={24} /><span>{t("game.tab.sample")}</span>
           </button>
         )}
         {!guest && (
           <>
             <button className={`tab ${tab === "journal" ? "active" : ""}`} onClick={() => setTab("journal")}>
-              <MaterialIcon path={MI_BOOKS} size={24} /><span>Journal</span>
+              <MaterialIcon path={MI_BOOKS} size={24} /><span>{t("game.tab.journal")}</span>
             </button>
             <button className={`tab ${tab === "leaderboard" ? "active" : ""}`} onClick={() => setTab("leaderboard")}>
-              <MaterialIcon path={MI_BARCHART} size={24} /><span>Leaderboard</span>
+              <MaterialIcon path={MI_BARCHART} size={24} /><span>{t("game.tab.leaderboard")}</span>
             </button>
             <button className={`tab ${tab === "usage" ? "active" : ""}`} onClick={() => setTab("usage")}>
-              <MaterialIcon path={MI_MONEY} size={24} /><span>Usage</span>
+              <MaterialIcon path={MI_MONEY} size={24} /><span>{t("game.tab.usage")}</span>
             </button>
             <button className={`tab ${tab === "profile" ? "active" : ""}`} onClick={() => setTab("profile")}>
-              <MaterialIcon path={MI_GEAR} size={24} /><span>Profile</span>
+              <MaterialIcon path={MI_GEAR} size={24} /><span>{t("game.tab.profile")}</span>
             </button>
           </>
         )}
       </div>
 
       <div className="container">
-        <Suspense fallback={<div className="loading" style={{ display: "block", padding: "20px 0" }}>Opening the floor</div>}>
+        <Suspense fallback={<div className="loading" style={{ display: "block", padding: "20px 0" }}>{t("game.openingFloor")}</div>}>
         {guest && (
           <div className="panel" style={{ borderLeft: "3px solid var(--amber)", background: "rgba(212,163,91,0.04)" }}>
-            <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>Guest pass</div>
+            <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>{t("game.guest.label")}</div>
             <div style={{ fontSize: 14, color: "var(--ink)", lineHeight: 1.6 }}>
               <b>
-                Welcome Guest Trader{" "}
-                <code style={{ color: "var(--amber-bright)", fontFamily: "JetBrains Mono, monospace" }}>
-                  {getGuestId()}
-                </code>.
+                <Tx ns={WORDS} k="game.guest.welcome" vars={{ id: getGuestId() }}
+                  components={{ id: <code style={{ color: "var(--amber-bright)", fontFamily: "JetBrains Mono, monospace" }} /> }} />
               </b>{" "}
-              The site is live but you only can use the free services until you buy some DPYC tokens.
-              Visit the <b>Usage</b> tab to see your account and to buy tokens.
-              Getting a Challenge, asking for clues, Getting Assessed — these all are paid services but the
-              fees are tiny: just a few sats each. Once you have your Nostr credentials, you can Top Up
-              here and then work your challenges, save your work in progress, message peers on the
-              Leaderboard — and hopefully become more proficient about pitching options trades to
-              professional audiences. Welcome.
+              <Tx ns={WORDS} k="game.guest.body" components={{ b: <b /> }} />
               {onSignOut && (
                 <>
                   {" "}
@@ -2172,7 +2156,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       font: "inherit",
                     }}
                   >
-                    Sign in to play →
+                    {t("game.guest.signIn")}
                   </button>
                 </>
               )}
@@ -2183,33 +2167,27 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
           <>
             {!scenario && !loading && (
               <div className="panel">
-                <span className="panel-label">Briefing</span>
-                <h2 className="serif">The desk is open.</h2>
-                <p className="briefing-prose">
-                  The Firm presents an opportunity: a moment in markets — perhaps real, perhaps invented, perhaps unfolding right now.
-                  You&apos;ll see a date, a macro backdrop, an asset, a catalyst, key levels, and the constraints of your book.
-                  Read it like a courtroom brief. Then write your trade — structure, strikes, expiry, sizing, and your reasoning, in your own words.
-                </p>
+                <span className="panel-label">{t("game.briefing.label")}</span>
+                <h2 className="serif">{t("game.briefing.title")}</h2>
+                <p className="briefing-prose">{t("game.briefing.prose")}</p>
 
                 <div className="briefing-rule">
                   <span className="rule-mark">§</span>
                   <div>
-                    <b>Integration is rewarded.</b> A strong answer accounts for the political, monetary, and cross-asset facts The Firm put in front of you. The more relevant facts you weave into your thesis, the higher you score — particularly on the Macro Context dimension.
+                    <Tx ns={WORDS} k="game.briefing.integration" components={{ b: <b /> }} />
                   </div>
                 </div>
 
                 <div className="briefing-rule warn">
                   <span className="rule-mark">⚑</span>
                   <div>
-                    <b>Red herrings are planted.</b> The Firm will embed one or two facts that are perfectly true but immaterial to the ideal trade — real-world noise that a trader could reasonably notice and overweight. A skew note may be color, not catalyst. A headline may already be in the tape. A disclosed position may be stale. They aren&apos;t traps in the sense of falsehood; they&apos;re traps in the sense of relevance. Building your thesis on one will cost you points; recognizing it as noise and setting it aside earns you them.
+                    <Tx ns={WORDS} k="game.briefing.herrings" components={{ b: <b /> }} />
                   </div>
                 </div>
 
-                <p className="briefing-coda">
-                  Choose your historicity. Choose your persona. Accept the challenge.
-                </p>
+                <p className="briefing-coda">{t("game.briefing.coda")}</p>
 
-                <div style={{ fontSize: 10, color: "var(--ivory)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 20, marginBottom: 8, fontStyle: "italic" }}>Historicity</div>
+                <div style={{ fontSize: 10, color: "var(--ivory)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 20, marginBottom: 8, fontStyle: "italic" }}>{t("game.chooser.historicity")}</div>
                 <div className="difficulty-grid">
                   {MODES.map((m) => (
                     <button
@@ -2226,7 +2204,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   ))}
                 </div>
 
-                <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>Persona</div>
+                <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>{t("game.chooser.persona")}</div>
                 <div className="difficulty-grid">
                   {DIFFICULTIES.map((d) => (
                     <button
@@ -2243,9 +2221,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   ))}
                 </div>
 
-                <div style={{ fontSize: 10, color: "var(--rust)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>Risk Envelope</div>
+                <div style={{ fontSize: 10, color: "var(--rust)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>{t("game.chooser.risk")}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
-                  <label style={{ fontSize: 12, color: "var(--ink-soft)" }}>Max loss per trade:</label>
+                  <label style={{ fontSize: 12, color: "var(--ink-soft)" }}>{t("game.chooser.maxLoss")}</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <span style={{ color: "var(--ink-faint)", fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}>$</span>
                     <input
@@ -2253,7 +2231,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       inputMode="numeric"
                       min={0}
                       step={50}
-                      placeholder="optional"
+                      placeholder={t("game.chooser.optional")}
                       value={maxLossInput}
                       className="opt-tap"
                       onChange={(e) => setMaxLossInput(e.target.value)}
@@ -2286,7 +2264,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         cursor: "pointer",
                       }}
                     >
-                      ${v.toLocaleString()}
+                      {usd0(v)}
                     </button>
                   ))}
                   {maxLossInput && (
@@ -2303,15 +2281,15 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         textDecoration: "underline",
                       }}
                     >
-                      clear
+                      {t("game.chooser.clear")}
                     </button>
                   )}
                 </div>
                 <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4, fontStyle: "italic" }}>
-                  Optional. When set, The Firm sizes the opportunity&apos;s account and constraints so a well-chosen structure fits your envelope. The judge will score down trades whose worst case exceeds it.
+                  {t("game.chooser.maxLossHint")}
                 </div>
 
-                <div style={{ fontSize: 10, color: "var(--rust)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>Sector Focus</div>
+                <div style={{ fontSize: 10, color: "var(--rust)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>{t("game.chooser.sector")}</div>
                 <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                   {SECTORS.map((s) => {
                     const active = (sector || "") === s.id;
@@ -2321,7 +2299,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         type="button"
                         className="opt-tap"
                         onClick={() => setSector(s.id)}
-                        title={s.id ? `Limit the dealer to ${s.label}` : "Let the dealer pick any sector"}
+                        title={s.id ? t("game.chooser.sectorLimit", { sector: t(`game.sector.${s.name}` as MessageKey) }) : t("game.chooser.sectorAny")}
                         style={{
                           background: active ? "var(--amber-glow)" : "transparent",
                           border: `1px solid ${active ? "var(--amber)" : "var(--panel-edge)"}`,
@@ -2337,16 +2315,16 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         }}
                       >
                         <span aria-hidden="true" style={{ fontSize: 13 }}>{s.glyph}</span>
-                        <span>{s.label}</span>
+                        <span>{t(`game.sector.${s.name}` as MessageKey)}</span>
                       </button>
                     );
                   })}
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, flexWrap: "wrap" }}>
-                  <label style={{ fontSize: 11, color: "var(--ink-faint)" }}>or type a custom sector:</label>
+                  <label style={{ fontSize: 11, color: "var(--ink-faint)" }}>{t("game.chooser.customSector")}</label>
                   <input
                     type="text"
-                    placeholder="e.g. luxury goods"
+                    placeholder={t("game.chooser.customExample")}
                     value={SECTORS.some((s) => s.id === sector) ? "" : sector}
                     className="opt-tap"
                     onChange={(e) => setSector(e.target.value)}
@@ -2375,12 +2353,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         textDecoration: "underline",
                       }}
                     >
-                      clear
+                      {t("game.chooser.clear")}
                     </button>
                   )}
                 </div>
                 <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4, fontStyle: "italic" }}>
-                  Optional. The Firm picks the underlying from the chosen sector and tailors the catalyst, relevant facts, and red herrings to its dynamics.
+                  {t("game.chooser.sectorHint")}
                 </div>
 
                 <div className="actions">
@@ -2389,9 +2367,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       className="btn btn-ghost"
                       onClick={() => setTopUpOpen(true)}
                       style={{ marginRight: "auto" }}
-                      title="Buy sats from the operator via Bitcoin Lightning"
+                      title={t("game.topUp.title")}
                     >
-                      Top Up
+                      {t("game.topUp.label")}
                     </button>
                   )}
                   {dealPrice !== null && dealPrice > 0 && (
@@ -2401,7 +2379,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       letterSpacing: "0.1em",
                       textTransform: "uppercase",
                     }}>
-                      Toll
+                      {t("game.toll.label")}
                       <span style={{
                         marginLeft: 8,
                         fontFamily: "Fraunces, serif",
@@ -2411,29 +2389,29 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         letterSpacing: 0,
                         textTransform: "none",
                       }}>
-                        {dealPrice} sat{dealPrice === 1 ? "" : "s"}
+                        {t("game.sats", { count: dealPrice })}
                       </span>
                       <span style={{ marginLeft: 6, color: "var(--ink-faint)", fontSize: 10 }}>
-                        ({difficulty} × {MODES.find((m) => m.id === mode)?.label.toLowerCase()})
+                        ({difficultyLabel(t, difficulty)} × {modeLabel(t, mode)})
                       </span>
                     </div>
                   )}
                   {dealPrice === -1 && (
                     <div style={{ fontSize: 11, color: "var(--ink-faint)", fontStyle: "italic" }}>
-                      Pricing model has no multipliers yet — run reset_pricing_model on this operator.
+                      {t("game.toll.noModel")}
                     </div>
                   )}
                   {guest ? (
                     <button
                       className="btn"
                       onClick={onSignOut}
-                      title="Sign in with your Nostr identity to deal a Trade Scenario"
+                      title={t("game.signInToPlayTitle")}
                     >
-                      Sign In to Play
+                      {t("game.signInToPlay")}
                     </button>
                   ) : (
                     <button className="btn" onClick={onBeChallenged}>
-                      {preparing.length > 0 ? "Deal Another" : "Be Challenged"}
+                      {preparing.length > 0 ? t("game.deal.another") : t("game.deal.challenge")}
                     </button>
                   )}
                 </div>
@@ -2447,24 +2425,24 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       type="button"
                       className="deal-guard-live"
                       onClick={watchLatestPreparing}
-                      title="Return to the Reading-the-Tape screen for your latest scenario"
+                      title={t("game.deal.watchTitle")}
                     >
                       <span className="deal-guard-dot" aria-hidden="true" />
-                      {preparing.length} scenario{preparing.length === 1 ? "" : "s"} already being
-                      prepared — Watch ›
+                      {t("game.deal.preparing", { count: preparing.length })}
                     </button>
                     {confirmDealAnother && (
                       <div className="deal-guard-confirm">
                         <span>
-                          Deal another? Each scenario is a separate
-                          {dealPrice !== null && dealPrice > 0 ? ` ${dealPrice}-sat` : ""} toll.
+                          {dealPrice !== null && dealPrice > 0
+                            ? t("game.deal.confirmPriced", { price: dealPrice })
+                            : t("game.deal.confirm")}
                         </span>
                         <div className="deal-guard-actions">
                           <button className="btn" onClick={() => void generateScenario()}>
-                            Yes, deal another
+                            {t("game.deal.yes")}
                           </button>
                           <button className="btn btn-ghost" onClick={() => setConfirmDealAnother(false)}>
-                            Not yet
+                            {t("game.deal.notYet")}
                           </button>
                         </div>
                       </div>
@@ -2489,7 +2467,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 brief synchronous replay. The deal overlay is driven by
                 focusedClaim (not `loading`) so it can persist across the
                 minutes-long wait and be re-opened from the Preparation table. */}
-            {loading && loadingMsg === "Judging your Pitch" ? (
+            {loading && loadingMsg === "game.loading.judging" ? (
               // Full-viewport immersive scene — see JudgeAnimation.
               <JudgeAnimation />
             ) : (() => {
@@ -2501,28 +2479,26 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 // makes the multi-minute wait bearable and walk-away-safe.
                 return (
                   <DealAnimation
-                    loadingMsg={loadingMsg}
+                    loadingMsg={t(loadingMsg as MessageKey)}
                     mode={focused.mode}
                     status={{
                       claimId: focused.claimCheck,
                       startedAt: focused.startedAt,
                       expectedSeconds: focused.expectedSeconds,
-                      assignmentName: `${MODES.find((m) => m.id === focused.mode)?.label ?? focused.mode} · ${
-                        DIFFICULTIES.find((d) => d.id === focused.difficulty)?.label ?? focused.difficulty
-                      }`,
+                      assignmentName: `${modeLabel(t, focused.mode)} · ${difficultyLabel(t, focused.difficulty)}`,
                       onClaimInJournal: claimInJournal,
                     }}
                   />
                 );
               }
               // A synchronous replay (mulligan) — brief plain animation.
-              return loading ? <DealAnimation loadingMsg={loadingMsg} mode={mode} /> : null;
+              return loading ? <DealAnimation loadingMsg={t(loadingMsg as MessageKey)} mode={mode} /> : null;
             })()}
 
             {scenario && !loading && (
               <div className="panel">
                 <span className="panel-label">
-                  {scenario.asset?.ticker} · {MODES.find((m) => m.id === (scenario.mode || mode))?.label} · {difficulty}
+                  {scenario.asset?.ticker} · {modeLabel(t, scenario.mode || mode)} · {difficultyLabel(t, difficulty)}
                   {scenario.sector && <> · <span style={{ color: "var(--rust)" }}>{scenario.sector}</span></>}
                 </span>
 
@@ -2538,21 +2514,21 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       className="scenario-quote"
                       style={zoomableStyle}
                       title={zoomableTitle}
-                      onClick={() => openZoom("Macro Backdrop", scenario.macro_backdrop)}
+                      onClick={() => openZoom(t("game.card.macro"), scenario.macro_backdrop)}
                     >{scenario.macro_backdrop}</div>
 
                     <div className="data-row" style={{ justifyContent: "center" }}>
-                      <div className="data-cell"><label>Spot</label><b>${scenario.asset?.spot}</b></div>
-                      <div className="data-cell"><label>IV 30d</label><b>{scenario.asset?.iv_30d}%</b></div>
-                      <div className="data-cell"><label>IV Rank</label><b>{scenario.asset?.iv_rank}</b></div>
+                      <div className="data-cell"><label>{t("game.card.spot")}</label><b>${scenario.asset?.spot}</b></div>
+                      <div className="data-cell"><label>{t("game.card.iv30")}</label><b>{scenario.asset?.iv_30d}%</b></div>
+                      <div className="data-cell"><label>{t("game.card.ivRank")}</label><b>{scenario.asset?.iv_rank}</b></div>
                     </div>
                     {scenario.asset?.skew_note && (
                       <div
                         style={{ fontSize: 12, color: "var(--ink-soft)", marginBottom: 12, cursor: "zoom-in" }}
                         title={zoomableTitle}
-                        onClick={() => openZoom("Skew Note", scenario.asset?.skew_note)}
+                        onClick={() => openZoom(t("game.card.skewNote"), scenario.asset?.skew_note)}
                       >
-                        <span style={{ color: "var(--ink-faint)", textTransform: "uppercase", letterSpacing: "0.15em", fontSize: 10 }}>Skew · </span>
+                        <span style={{ color: "var(--ink-faint)", textTransform: "uppercase", letterSpacing: "0.15em", fontSize: 10 }}>{t("game.card.skew")}</span>
                         {scenario.asset.skew_note}
                       </div>
                     )}
@@ -2584,30 +2560,30 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       </div>
                     )}
 
-                    <h3 className="serif">Catalyst</h3>
+                    <h3 className="serif">{t("game.card.catalyst")}</h3>
                     <div
                       style={{ color: "var(--ink-soft)", fontSize: 13, cursor: "zoom-in" }}
                       title={zoomableTitle}
-                      onClick={() => openZoom("Catalyst", scenario.catalyst)}
+                      onClick={() => openZoom(t("game.card.catalyst"), scenario.catalyst)}
                     >{scenario.catalyst}</div>
 
-                    <h3 className="serif">Key Levels</h3>
+                    <h3 className="serif">{t("game.card.keyLevels")}</h3>
                     <div
                       style={{ color: "var(--ink-soft)", fontSize: 13, cursor: "zoom-in" }}
                       title={zoomableTitle}
-                      onClick={() => openZoom("Key Levels", scenario.key_levels)}
+                      onClick={() => openZoom(t("game.card.keyLevels"), scenario.key_levels)}
                     >{scenario.key_levels}</div>
 
-                    <h3 className="serif">Constraints</h3>
+                    <h3 className="serif">{t("game.card.constraints")}</h3>
                     <div
                       style={{ color: "var(--ink-soft)", fontSize: 13, cursor: "zoom-in" }}
                       title={zoomableTitle}
-                      onClick={() => openZoom("Constraints", scenario.constraints)}
+                      onClick={() => openZoom(t("game.card.constraints"), scenario.constraints)}
                     >{scenario.constraints}</div>
 
                     {Array.isArray(scenario.sources) && scenario.sources.length > 0 && (
                       <>
-                        <h3 className="serif">Sources</h3>
+                        <h3 className="serif">{t("game.card.sources")}</h3>
                         <ul style={{ listStyle: "none", padding: 0, fontSize: 12, color: "var(--ink-soft)" }}>
                           {scenario.sources.map((s, i) => (
                             <li key={i} style={{ padding: "3px 0 3px 14px", position: "relative" }}>
@@ -2636,8 +2612,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           type="button"
                           onClick={handleSaveDraft}
                           disabled={savingDraft || !answer.trim()}
-                          title="Persist this draft to your Journal entry so it survives a page reload — keep working without losing your pitch"
-                          aria-label="Save draft"
+                          title={t("game.pitch.saveTitle")}
+                          aria-label={t("game.pitch.save")}
                           className="tap-icon"
                           style={{
                             background: "transparent",
@@ -2654,8 +2630,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         <button
                           type="button"
                           onClick={() => setConfirmingDiscard(true)}
-                          title="Discard this scenario and pick a new one — the scenario fee is non-refundable, so you'll be asked to confirm"
-                          aria-label="Discard scenario"
+                          title={t("game.pitch.discardTitle")}
+                          aria-label={t("game.pitch.discard")}
                           className="tap-icon"
                           style={{
                             background: "transparent",
@@ -2674,7 +2650,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       className="question"
                       style={zoomableStyle}
                       title={zoomableTitle}
-                      onClick={() => openZoom("The Question", scenario.the_question)}
+                      onClick={() => openZoom(t("game.card.question"), scenario.the_question)}
                     >→ {scenario.the_question}</div>
 
                     {!evaluation && (
@@ -2688,15 +2664,15 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             ref={answerRef}
                             value={answer}
                             onChange={(e) => setAnswer(e.target.value)}
-                            placeholder="e.g. Sell the 30-day 95/90 put spread for 1.20 credit, sized to risk 0.5% of NAV. The Fed's hawkish hold puts a floor under the dollar but the equity is bid on insider buying; collecting premium below the 200d feels asymmetric…"
+                            placeholder={t("game.pitch.placeholder")}
                             style={{ paddingRight: 56 }}
                           />
                           <button
                             type="button"
                             onClick={submitTrade}
                             disabled={loading || !answer.trim()}
-                            title="Present your trade — submit to the senior PM for review and a graded pitch audit"
-                            aria-label="Present pitch"
+                            title={t("game.pitch.presentTitle")}
+                            aria-label={t("game.pitch.present")}
                           className="tap-icon"
                             style={{
                               position: "absolute",
@@ -2717,7 +2693,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         </div>
                         {draftSavedAt && !savingDraft && (
                           <div style={{ fontSize: 11, color: "var(--jade)", marginTop: 8, letterSpacing: "0.1em" }}>
-                            ✓ Draft saved {formatTime(new Date(draftSavedAt).toISOString(), zone)}
+                            {t("game.pitch.saved", { time: formatTime(new Date(draftSavedAt).toISOString(), zone) })}
                           </div>
                         )}
                         {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
@@ -2725,10 +2701,10 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         {/* Ask-a-Clue — inline Q&A on the scenario card. */}
                         <div style={{ marginTop: 22, borderTop: "1px solid var(--panel-edge)", paddingTop: 14 }}>
                           <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>
-                            Ask for a Clue
+                            {t("game.clue.heading")}
                           </div>
                           <div style={{ fontSize: 12, color: "var(--ink-faint)", marginBottom: 8, fontStyle: "italic" }}>
-                            Ask what you like for a small fee. e.g. <span style={{ color: "var(--ink-soft)" }}>"What do you mean by Call Skew?"</span>
+                            <Tx ns={WORDS} k="game.clue.hint" components={{ q: <span style={{ color: "var(--ink-soft)" }} /> }} />
                           </div>
 
                           {tips.length > 0 && (
@@ -2751,9 +2727,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                   type="button"
                                   onClick={handleCopyTips}
                                   title={tipsCopied
-                                    ? "Copied to clipboard"
-                                    : "Copy this clue conversation to your clipboard, to continue in your own Claude.ai session"}
-                                  aria-label="Copy conversation to clipboard"
+                                    ? t("game.clue.copied")
+                                    : t("game.clue.copyTitle")}
+                                  aria-label={t("game.clue.copy")}
                           className="tap-icon"
                                   style={{
                                     background: "transparent",
@@ -2785,13 +2761,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                   scrollBehavior: "smooth",
                                 }}
                               >
-                                {tips.map((t, i) => (
+                                {tips.map((tip, i) => (
                                   <div key={i} style={{ marginBottom: 10, padding: "8px 10px", background: "var(--bg-soft)", borderLeft: "2px solid var(--bronze)" }}>
                                     <div style={{ fontSize: 12, color: "var(--ink-soft)", fontStyle: "italic", marginBottom: 4 }}>
-                                      Q · {t.question}
+                                      {t("game.clue.q", { question: tip.question })}
                                     </div>
                                     <RichText
-                                      text={t.answer}
+                                      text={tip.answer}
                                       style={{ fontSize: 13, color: "var(--ink)" }}
                                     />
                                   </div>
@@ -2808,7 +2784,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             <textarea
                               value={tipQuestion}
                               onChange={(e) => setTipQuestion(e.target.value)}
-                              placeholder="Type your question…"
+                              placeholder={t("game.clue.placeholder")}
                               style={{ minHeight: 60, paddingRight: 56 }}
                             />
                             <button
@@ -2816,9 +2792,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                               onClick={handleAskTip}
                               disabled={tipAsking || !tipQuestion.trim()}
                               title={tipAsking
-                                ? "Asking the clue desk…"
-                                : "Send this question — small clue fee applies"}
-                              aria-label="Send clue question"
+                                ? t("game.clue.asking")
+                                : t("game.clue.sendTitle")}
+                              aria-label={t("game.clue.send")}
                           className="tap-icon"
                               style={{
                                 position: "absolute",
@@ -2848,18 +2824,18 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
             {evaluation && !loading && (
               <div className="panel">
-                <span className="panel-label">Pitch Review</span>
+                <span className="panel-label">{t("game.review.label")}</span>
                 <div className="score-banner">
                   <div className="grade">{evaluation.letter_grade}</div>
-                  <div className="score">Overall<b>{evaluation.overall_score} / 100</b></div>
+                  <div className="score">{t("game.review.overall")}<b>{evaluation.overall_score} / 100</b></div>
                   <div className="headline">&ldquo;<RichText inline text={evaluation.headline} />&rdquo;</div>
                 </div>
 
-                <h3 className="serif">By Dimension</h3>
+                <h3 className="serif">{t("game.review.byDimension")}</h3>
                 <div className="dim-grid">
                   {Object.entries(evaluation.dimensions || {}).map(([k, v]) => (
                     <div className="dim-card" key={k}>
-                      <div className="dim-name">{DIMENSION_LABELS[k] || k}</div>
+                      <div className="dim-name">{dimensionLabel(t, k)}</div>
                       <div className="dim-score">{v.score}<span style={{ fontSize: 12, color: "var(--ink-faint)" }}> / 20</span></div>
                       <div className="dim-fb"><RichText text={v.feedback} /></div>
                     </div>
@@ -2868,36 +2844,36 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
                 <FactsLedger evaluation={evaluation} />
 
-                <h3 className="serif">Risk Profile</h3>
+                <h3 className="serif">{t("game.entry.riskProfile")}</h3>
                 <RiskProfileChart
                   legs={evaluation.trade_legs}
                   altLegs={evaluation.alt_trade_legs}
                   scenario={scenario}
                 />
 
-                <h3 className="serif">What you got right</h3>
+                <h3 className="serif">{t("game.review.right")}</h3>
                 <ul className="bullet-list good">
                   {(evaluation.what_you_got_right || []).map((b, i) => <li key={i}><RichText inline text={b} /></li>)}
                 </ul>
 
-                <h3 className="serif">What to sharpen</h3>
+                <h3 className="serif">{t("game.review.sharpen")}</h3>
                 <ul className="bullet-list bad">
                   {(evaluation.what_to_improve || []).map((b, i) => <li key={i}><RichText inline text={b} /></li>)}
                 </ul>
 
-                <h3 className="serif">An alternative the house would have taken</h3>
+                <h3 className="serif">{t("game.review.alternative")}</h3>
                 <div className="alt-trade"><RichText text={evaluation.alternative_trade || ""} /></div>
 
-                <h3 className="serif">Deeper context</h3>
+                <h3 className="serif">{t("game.entry.deeper")}</h3>
                 <div className="deeper"><RichText text={evaluation.deeper_context || ""} /></div>
 
                 <div className="actions" style={{ marginTop: 22 }}>
                   <button
                     className="btn"
                     onClick={nextRound}
-                    title="Back to the scenario picker"
+                    title={t("game.review.replayTitle")}
                   >
-                    🔁 Replay
+                    {t("game.review.replay")}
                   </button>
                 </div>
               </div>
@@ -2919,25 +2895,21 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
         {tab === "usage" && (
           <div className="panel">
-            <span className="panel-label">DPYC Ledger</span>
-            <h2 className="serif">Sats balance & MCP tool usage</h2>
-            <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
-              Your balance at Optionality MCP, what the last 30 days spent and bought, and the
-              tools the sats went to. Tolls are deducted at call time; the operator's accounting
-              flushes to Neon after each settle.
-            </p>
+            <span className="panel-label">{t("game.ledger.label")}</span>
+            <h2 className="serif">{t("game.ledger.title")}</h2>
+            <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>{t("game.ledger.intro")}</p>
             <UsageSummary
               heading=""
-              toolsHeading="MCP tool usage — last 30 days"
-              empty="No paid tool calls in the last 30 days."
-              renderRow={(t) => (
+              toolsHeading={t("game.ledger.tools")}
+              empty={t("game.ledger.empty")}
+              renderRow={(row) => (
                 <>
                   <span className="usage-tool">
-                    {displayToolName(t.tool)}
-                    <span className="usage-raw">{t.tool}</span>
+                    {displayToolName(t, row.tool)}
+                    <span className="usage-raw">{row.tool}</span>
                   </span>
-                  <span className="usage-calls">{t.calls.toLocaleString()}</span>
-                  <span className="usage-sats">{t.sats.toLocaleString()}</span>
+                  <span className="usage-calls">{row.calls.toLocaleString()}</span>
+                  <span className="usage-sats">{row.sats.toLocaleString()}</span>
                 </>
               )}
               classNames={{
@@ -2957,7 +2929,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               }}
             />
             <PatronFundingStatus
-              heading="Account health"
+              heading={t("game.ledger.health")}
               classNames={{
                 root: "tb-host funding",
                 header: "usage-header funding-header",
@@ -3021,30 +2993,25 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               <RefreshButton
                 onRefresh={loadApiUsage}
                 busy={apiUsageLoading}
-                label="Refresh API usage"
+                label={t("game.ai.refresh")}
                 icon={<MaterialIcon path={MI_REFRESH} size={30} />}
                 classNames={{ root: "icon-btn usage-refresh" }}
               />
-              <span className="panel-label">Usage</span>
-              <h2 className="serif">AI usage & what it cost</h2>
-              <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
-                Optionality calls a model for every scenario, clue, and verdict. This is what
-                {" "}your tool calls have spent in tokens — and what the provider actually billed
-                {" "}the operator for them. Your toll covers this plus operator overhead.
-                {" "}No hidden margin.
-              </p>
+              <span className="panel-label">{t("game.ai.label")}</span>
+              <h2 className="serif">{t("game.ai.title")}</h2>
+              <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>{t("game.ai.intro")}</p>
               <p style={{ color: "var(--ink-faint)", fontSize: 10, marginTop: -10, marginBottom: 16 }}>
                 {anyEstimated
-                  ? `Figures marked "est." predate per-call cost reporting and are inferred from published rates (fetched ${PRICING_FETCHED_AT.slice(0, 10)}); the rest are what the provider billed.`
-                  : "Costs are the provider's own per-call figures, not an estimate."}
+                  ? t("game.ai.estimated", { date: PRICING_FETCHED_AT.slice(0, 10) })
+                  : t("game.ai.reported")}
               </p>
 
               {apiUsageLoading && apiUsage === null && (
-                <div className="loading" style={{ display: "block", padding: "20px 0" }}>Tallying the receipts</div>
+                <div className="loading" style={{ display: "block", padding: "20px 0" }}>{t("game.ai.tallying")}</div>
               )}
 
               {apiUsage !== null && models.length === 0 && (
-                <div className="empty">No model calls recorded yet. Accept a challenge.</div>
+                <div className="empty">{t("game.ai.none")}</div>
               )}
 
               {apiUsage !== null && models.length > 0 && (
@@ -3057,14 +3024,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     return (
                       <div key={i} style={{ background: "var(--bg-soft)", border: "1px solid var(--panel-edge)", padding: "12px 14px", marginBottom: 8 }}>
                         <div style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 12, color: "var(--ink-soft)", marginBottom: 6 }}>
-                          {m.model || "unknown"}
+                          {m.model || t("game.ai.unknown")}
                         </div>
                         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(120px, 1fr))", gap: 12, fontSize: 12 }}>
-                          <div><span style={{ color: "var(--ink-faint)" }}>Runs:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.runs}</span></div>
-                          <div><span style={{ color: "var(--ink-faint)" }}>Input:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.total_input_tokens.toLocaleString()}</span></div>
-                          <div><span style={{ color: "var(--ink-faint)" }}>Output:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.total_output_tokens.toLocaleString()}</span></div>
-                          <div><span style={{ color: "var(--ink-faint)" }}>Cost{c.reported ? "" : " (est.)"}:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>${fmt$(cost)}</span></div>
-                          <div><span style={{ color: "var(--ink-faint)" }}>Per call:</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>${fmt$(perRun)}</span></div>
+                          <div><span style={{ color: "var(--ink-faint)" }}>{t("game.ai.runs")}</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.runs}</span></div>
+                          <div><span style={{ color: "var(--ink-faint)" }}>{t("game.ai.input")}</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.total_input_tokens.toLocaleString()}</span></div>
+                          <div><span style={{ color: "var(--ink-faint)" }}>{t("game.ai.output")}</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>{m.total_output_tokens.toLocaleString()}</span></div>
+                          <div><span style={{ color: "var(--ink-faint)" }}>{c.reported ? t("game.ai.cost") : t("game.ai.costEst")}</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--amber-bright)" }}>${fmt$(cost)}</span></div>
+                          <div><span style={{ color: "var(--ink-faint)" }}>{t("game.ai.perCall")}</span>{" "}<span style={{ fontFamily: "JetBrains Mono, monospace", color: "var(--ink)" }}>${fmt$(perRun)}</span></div>
                         </div>
                       </div>
                     );
@@ -3074,44 +3041,41 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 18 }}>
                     <div style={{ background: "rgba(212,163,91,0.06)", border: "1px solid var(--amber)", padding: 16 }}>
                       <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
-                        {anyEstimated ? "AI cost (part est.)" : "AI cost billed"}
+                        {anyEstimated ? t("game.ai.costPartEst") : t("game.ai.costBilled")}
                       </div>
                       <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500 }}>
                         ${fmt$(totalCostUsd)}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
-                        {totalTokens.toLocaleString()} tokens across {totalRuns} model calls
+                        {t("game.ai.tokens", { tokens: totalTokens.toLocaleString(), calls: totalRuns.toLocaleString() })}
                       </div>
                     </div>
                     <div style={{ background: "rgba(212,163,91,0.06)", border: "1px solid var(--amber)", padding: 16 }}>
                       <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
-                        Cost per call
+                        {t("game.ai.costPerCall")}
                       </div>
                       <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--amber-bright)", fontWeight: 500 }}>
                         ${fmt$(avgCostUsd)}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
-                        averaged over every scenario, clue and verdict
+                        {t("game.ai.averaged")}
                       </div>
                     </div>
                     <div style={{ background: "rgba(107,142,107,0.06)", border: "1px solid var(--jade)", padding: 16 }}>
                       <div style={{ fontSize: 10, color: "var(--jade)", letterSpacing: "0.2em", textTransform: "uppercase", marginBottom: 4 }}>
-                        Equivalent in sats
+                        {t("game.ai.sats")}
                       </div>
                       <div style={{ fontFamily: "Fraunces, serif", fontSize: 28, color: "var(--ivory-bright)", fontWeight: 500 }}>
                         {estimatedSats.toLocaleString()}
                       </div>
                       <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 4 }}>
-                        at ~${btcPriceUsd.toLocaleString()}/BTC
+                        {t("game.ai.atRate", { rate: usd0(btcPriceUsd) })}
                       </div>
                     </div>
                   </div>
 
                   <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 18, fontStyle: "italic", lineHeight: 1.6 }}>
-                    Operator passes the AI cost through to patrons via Lightning micropayments.
-                    {" "}This view is the raw transparency — you see what each scenario, tip, and
-                    {" "}verdict actually cost, plus a sats equivalent at a fixed ${btcPriceUsd.toLocaleString()}/BTC
-                    {" "}reference rate (a yardstick for comparison, not today's spot).
+                    {t("game.ai.footnote", { rate: usd0(btcPriceUsd) })}
                   </div>
                 </>
               )}
@@ -3121,25 +3085,16 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
         {tab === "leaderboard" && (
           <div className="panel">
-            <span className="panel-label">Leaderboard</span>
-            <h2 className="serif">Sovereign traders, sorted by skill</h2>
+            <span className="panel-label">{t("game.lb.label")}</span>
+            <h2 className="serif">{t("game.lb.title")}</h2>
             <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16 }}>
-              <code style={{ color: "var(--amber-bright)" }}>weighted = raw_score × current_price(mode, difficulty)</code>.
-              The pricing model is the single dial: a hard, expensive pitch scored well
-              outranks a cheap one scored well. When the operator retunes a multiplier
-              (mulligan, sovereign, anything), the next leaderboard recompute reflects the
-              new weights for every entry — no snapshot to drift. Default sort is the
-              weighted average; raw scores available too.
+              <code style={{ color: "var(--amber-bright)" }}>weighted = raw_score × current_price(mode, difficulty)</code>.{" "}
+              {t("game.lb.intro")}
             </p>
 
             <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
               {(["weighted_avg", "weighted_best", "avg", "best", "streak", "played"] as const).map((s) => {
-                const label =
-                  s === "weighted_avg" ? "Weighted Avg" :
-                  s === "weighted_best" ? "Weighted Best" :
-                  s === "avg" ? "Raw Avg" :
-                  s === "best" ? "Raw Best" :
-                  s === "streak" ? "Streak" : "Played";
+                const label = t(`game.lb.sort.${s}` as MessageKey);
                 return (
                   <button
                     key={s}
@@ -3158,12 +3113,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 disabled={leaderboardLoading}
                 style={{ padding: "8px 14px", fontSize: 10, marginLeft: "auto" }}
               >
-                {leaderboardLoading ? "Loading…" : "Refresh"}
+                {leaderboardLoading ? t("game.lb.loading") : t("game.lb.refresh")}
               </button>
             </div>
 
             {leaderboardLoading && leaderboard === null && (
-              <div className="loading" style={{ display: "block", padding: "20px 0" }}>Reading the tape</div>
+              <div className="loading" style={{ display: "block", padding: "20px 0" }}>{t("game.loading.tape")}</div>
             )}
 
             {/* Defensive: wheel returns {success:false, error_code, error}
@@ -3172,13 +3127,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 the error to the user instead of crashing the tab. */}
             {leaderboard !== null && !Array.isArray((leaderboard as unknown as { rows?: unknown }).rows) && (
               <div className="error">
-                Leaderboard didn't load.{" "}
-                {((leaderboard as unknown as { error?: string }).error) || "Unknown error."}
+                {t("game.lb.failed", { error: ((leaderboard as unknown as { error?: string }).error) || t("game.lb.unknownError") })}
               </div>
             )}
 
             {leaderboard !== null && Array.isArray(leaderboard.rows) && leaderboard.rows.length === 0 && (
-              <div className="empty">No judged trades yet. Be the first.</div>
+              <div className="empty">{t("game.lb.empty")}</div>
             )}
 
             {leaderboard !== null && Array.isArray(leaderboard.rows) && leaderboard.rows.length > 0 && (
@@ -3186,12 +3140,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <div className="history-row lb-row lb-head" style={{ color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase" }}>
                   <div>#</div>
                   <div></div>
-                  <div>Trader</div>
-                  <div style={{ textAlign: "right" }} title="Weighted average — raw score × difficulty multiplier">W·Avg</div>
-                  <div style={{ textAlign: "right" }} title="Weighted best single pitch">W·Best</div>
-                  <div style={{ textAlign: "right" }} title="Raw average across all evaluated pitches">Avg</div>
-                  <div style={{ textAlign: "right" }}>Streak</div>
-                  <div style={{ textAlign: "right" }}>Played</div>
+                  <div>{t("game.lb.trader")}</div>
+                  <div style={{ textAlign: "right" }} title={t("game.lb.wavgTitle")}>{t("game.lb.wavg")}</div>
+                  <div style={{ textAlign: "right" }} title={t("game.lb.wbestTitle")}>{t("game.lb.wbest")}</div>
+                  <div style={{ textAlign: "right" }} title={t("game.lb.avgTitle")}>{t("game.lb.avg")}</div>
+                  <div style={{ textAlign: "right" }}>{t("game.lb.streak")}</div>
+                  <div style={{ textAlign: "right" }}>{t("game.lb.played")}</div>
                 </div>
                 {leaderboard.rows.map((row: LeaderboardRow, i: number) => {
                   const isYou = row.npub === getStoredNpub();
@@ -3209,7 +3163,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         alignItems: "center",
                         cursor: "pointer",
                       }}
-                      title="Click to see this trader's shared pitches"
+                      title={t("game.lb.rowTitle")}
                     >
                       <div style={{ color: "var(--amber)", fontFamily: "Fraunces, serif", fontSize: 16 }}>
                         <span style={{ display: "inline-block", marginRight: 4, transform: isExpanded ? "rotate(90deg)" : "none", transition: "transform 180ms ease", fontSize: 10, color: "var(--ink-faint)" }}>▶</span>
@@ -3234,8 +3188,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                           })}
                           title={
                             isYou
-                              ? "DM yourself — test the relay path"
-                              : `DM ${row.display_name || shortNpub(row.npub)}`
+                              ? t("game.lb.dmSelf")
+                              : t("game.lb.dm", { name: row.display_name || shortNpub(row.npub) })
                           }
                         >
                           <Avatar value={row.avatar} size={40} />
@@ -3243,33 +3197,33 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       </div>
                       <div className="lb-name" style={{ minWidth: 0 }}>
                         <div style={{ color: "var(--ink)" }}>
-                          {row.display_name || "Anonymous"}
+                          {row.display_name || t("game.lb.anonymous")}
                           {isYou && (
-                            <span style={{ marginLeft: 6, fontSize: 10, color: "var(--amber)", letterSpacing: "0.15em" }}>YOU</span>
+                            <span style={{ marginLeft: 6, fontSize: 10, color: "var(--amber)", letterSpacing: "0.15em" }}>{t("game.lb.you")}</span>
                           )}
                         </div>
                         <div className="h-date lb-npub" style={{ fontFamily: "JetBrains Mono, monospace" }}>
-                          {shortNpub(row.npub)}{row.last_played_at ? `  ·  last: ${formatDate(row.last_played_at, zone)}` : ""}
+                          {shortNpub(row.npub)}{row.last_played_at ? t("game.lb.last", { date: formatDate(row.last_played_at, zone) }) : ""}
                         </div>
                       </div>
                       <div className="lb-break" />
                       <div className="h-score lb-stat" style={{ color: "var(--amber-bright)", fontWeight: 600 }}>
-                        <span className="lb-label">W·Avg</span>
+                        <span className="lb-label">{t("game.lb.wavg")}</span>
                         {row.weighted_avg != null ? Number(row.weighted_avg).toFixed(1) : "—"}
                       </div>
                       <div className="h-score lb-stat">
-                        <span className="lb-label">W·Best</span>
+                        <span className="lb-label">{t("game.lb.wbest")}</span>
                         {row.weighted_best != null ? Number(row.weighted_best).toFixed(1) : "—"}
                       </div>
-                      <div className="h-score lb-stat" style={{ color: "var(--ink-faint)" }}><span className="lb-label">Avg</span>{row.avg_score}</div>
-                      <div className="h-score lb-stat"><span className="lb-label">Streak</span>{row.longest_streak ?? row.current_streak}</div>
-                      <div className="h-score lb-stat"><span className="lb-label">Played</span>{row.total_played}</div>
+                      <div className="h-score lb-stat" style={{ color: "var(--ink-faint)" }}><span className="lb-label">{t("game.lb.avg")}</span>{row.avg_score}</div>
+                      <div className="h-score lb-stat"><span className="lb-label">{t("game.lb.streak")}</span>{row.longest_streak ?? row.current_streak}</div>
+                      <div className="h-score lb-stat"><span className="lb-label">{t("game.lb.played")}</span>{row.total_played}</div>
                     </div>
 
                     {isExpanded && (
                       <div style={{ background: "var(--bg-soft)", borderLeft: "2px solid var(--amber)", padding: "12px 16px 16px 22px", marginBottom: 6 }}>
                         {sharedLoading && (
-                          <div className="loading" style={{ display: "block", padding: "12px 0" }}>Fetching shared pitches</div>
+                          <div className="loading" style={{ display: "block", padding: "12px 0" }}>{t("game.lb.fetching")}</div>
                         )}
                         {sharedError && (
                           <div className="error" style={{ marginTop: 4 }}>{sharedError}</div>
@@ -3277,14 +3231,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         {!sharedLoading && !sharedError && Array.isArray(shared) && shared.length === 0 && (
                           <div style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic", padding: "8px 0" }}>
                             {isYou
-                              ? "You haven't shared any pitches yet. Open one of your evaluated journal entries and tap Share."
-                              : "This trader hasn't shared any pitches yet."}
+                              ? t("game.lb.youNone")
+                              : t("game.lb.theyNone")}
                           </div>
                         )}
                         {Array.isArray(shared) && shared.length > 0 && (
                           <>
                             <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.25em", textTransform: "uppercase", marginBottom: 10 }}>
-                              {isYou ? "Your shared pitches" : "Shared pitches"} · {shared.length}
+                              {isYou ? t("game.lb.yourShared", { count: shared.length }) : t("game.lb.shared", { count: shared.length })}
                             </div>
                             {shared.map((s) => {
                               const open = expandedSharedTrade === s.id;
@@ -3298,7 +3252,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                     <div>
                                       <div style={{ color: "var(--ink)" }}>
                                         <span style={{ color: "var(--ink-faint)", marginRight: 8, fontSize: 10 }}>{open ? "▼" : "▶"}</span>
-                                        {s.ticker || "—"} <span style={{ color: "var(--ink-faint)", fontSize: 11 }}>· {s.mode} · {s.difficulty}</span>
+                                        {s.ticker || "—"} <span style={{ color: "var(--ink-faint)", fontSize: 11 }}>· {modeLabel(t, s.mode)} · {difficultyLabel(t, s.difficulty)}</span>
                                       </div>
                                       <div className="h-date">{s.created_at ? formatDateTime(s.created_at, zone) : ""}</div>
                                     </div>
@@ -3310,7 +3264,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                     <div style={{ padding: "10px 16px 14px", background: "var(--bg)" }}>
                                       {s.trade_proposal && (
                                         <>
-                                          <h3 className="serif">Their pitch</h3>
+                                          <h3 className="serif">{t("game.lb.theirPitch")}</h3>
                                           <div style={{ color: "var(--ink-soft)", fontSize: 13, marginBottom: 12 }}>
                                             <RichText text={s.trade_proposal} />
                                           </div>
@@ -3318,7 +3272,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                       )}
                                       {s.evaluation?.headline && (
                                         <>
-                                          <h3 className="serif">Headline</h3>
+                                          <h3 className="serif">{t("game.entry.headline")}</h3>
                                           <div style={{ fontFamily: "Fraunces, serif", fontStyle: "italic", color: "var(--ink)", marginBottom: 12 }}>
                                             &ldquo;<RichText inline text={s.evaluation.headline} />&rdquo;
                                           </div>
@@ -3329,7 +3283,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                                       )}
                                       {s.evaluation?.alternative_trade && (
                                         <>
-                                          <h3 className="serif">House alternative</h3>
+                                          <h3 className="serif">{t("game.lb.houseAlt")}</h3>
                                           <div className="alt-trade"><RichText text={s.evaluation.alternative_trade} /></div>
                                         </>
                                       )}
@@ -3354,36 +3308,35 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
         {tab === "journal" && (
           <div className="panel">
-            <span className="panel-label">Journal</span>
-            <h2 className="serif">Your study room</h2>
+            <span className="panel-label">{t("game.journal.label")}</span>
+            <h2 className="serif">{t("game.journal.title")}</h2>
             <p style={{ color: "var(--ink-soft)", fontSize: 14, marginTop: 6, marginBottom: 16 }}>
-              Welcome to your study room{patronDisplayName ? `, ${patronDisplayName}` : ""}. Here you can
-              review your prior proposals, reread your assessments, and pick up and resume any pitches
-              that you started but had to set aside.
+              {patronDisplayName ? t("game.journal.introNamed", { name: patronDisplayName }) : t("game.journal.intro")}
             </p>
 
             {preparing.length > 0 && (
               <div className="prep-section">
                 <div className="prep-head">
                   <span className="prep-dot" aria-hidden="true" />
-                  Scenarios in Preparation · {preparing.length}
+                  {t("game.prep.heading", { count: preparing.length })}
                 </div>
                 <div className="prep-list">
                   {[...preparing]
                     .sort((a, b) => b.startedAt - a.startedAt)
                     .map((pd) => {
                       const elapsed = (prepNow - pd.startedAt) / 1000;
-                      const eta = computeEtaLabel(elapsed, pd.expectedSeconds);
-                      const name = `${MODES.find((m) => m.id === pd.mode)?.label ?? pd.mode} · ${
-                        DIFFICULTIES.find((d) => d.id === pd.difficulty)?.label ?? pd.difficulty
-                      }`;
+                      const eta = computeEtaLabel(elapsed, pd.expectedSeconds, {
+                        left: (clock) => t("clock.left", { clock }),
+                        wrapping: t("clock.wrapping"),
+                      });
+                      const name = `${modeLabel(t, pd.mode)} · ${difficultyLabel(t, pd.difficulty)}`;
                       return (
                         <button
                           key={pd.claimCheck}
                           type="button"
                           className="prep-row"
                           onClick={() => watchPreparing(pd)}
-                          title="Return to the Reading-the-Tape screen for this scenario"
+                          title={t("game.prep.rowTitle")}
                         >
                           <span className="prep-name">
                             {name}
@@ -3394,14 +3347,13 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             {eta && <span className="prep-eta">{eta}</span>}
                             <span className="prep-claim">{pd.claimCheck.slice(0, 8)}</span>
                           </span>
-                          <span className="prep-cta">Watch ›</span>
+                          <span className="prep-cta">{t("game.prep.watch")}</span>
                         </button>
                       );
                     })}
                 </div>
                 <div className="prep-note">
-                  The Firm is composing these in the background — you can leave and come back. When one
-                  is ready it drops out of this list and appears below as an open entry to claim.
+                  {t("game.prep.note")}
                 </div>
                 <style>{`
                   .prep-section { margin: 4px 0 22px; padding: 14px 16px 12px; border: 1px solid var(--amber); border-radius: 10px; background: color-mix(in srgb, var(--amber) 8%, transparent); }
@@ -3425,7 +3377,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             )}
 
             {journalLoading && journalEntries.length === 0 && (
-              <div className="loading" style={{ display: "block", padding: "20px 0" }}>Pulling sessions</div>
+              <div className="loading" style={{ display: "block", padding: "20px 0" }}>{t("game.journal.pulling")}</div>
             )}
 
             {journalError && (
@@ -3435,32 +3387,32 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             {!journalLoading && journalEntries.length === 0 && !journalError && (
               <div className="empty">
                 {preparing.length > 0
-                  ? "No finished sessions yet — your scenario is still being prepared above."
-                  : "No sessions yet. Deal your first Trade Scenario."}
+                  ? t("game.journal.emptyPreparing")
+                  : t("game.journal.empty")}
               </div>
             )}
 
             {journalEntries.length > 0 && (
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", marginBottom: 12 }}>
-                <span style={{ fontSize: 11, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Group by</span>
+                <span style={{ fontSize: 11, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>{t("game.journal.groupBy")}</span>
                 {JOURNAL_GROUP_OPTIONS.map((g) => (
                   <button
-                    key={g.val}
-                    className={`btn ${journalGroupBy === g.val ? "" : "btn-ghost"}`}
+                    key={g}
+                    className={`btn ${journalGroupBy === g ? "" : "btn-ghost"}`}
                     style={{ padding: "4px 10px", fontSize: 12 }}
-                    onClick={() => applyJournalGroupBy(g.val)}
+                    onClick={() => applyJournalGroupBy(g)}
                   >
-                    {g.label}
+                    {groupOptionLabel(t, g)}
                   </button>
                 ))}
                 {journalGroupBy !== "none" && (
                   <button
                     className="btn btn-ghost"
                     style={{ padding: "4px 10px", fontSize: 12 }}
-                    title="Flip the order of the groups"
+                    title={t("game.journal.flipGroups")}
                     onClick={() => { setExpandedEntryId(null); setJournalGroupSort((d) => (d === "asc" ? "desc" : "asc")); setJournalPage(0); }}
                   >
-                    Groups {journalGroupSort === "asc" ? "▲" : "▼"}
+                    {journalGroupSort === "asc" ? t("game.journal.groupsAsc") : t("game.journal.groupsDesc")}
                   </button>
                 )}
               </div>
@@ -3470,7 +3422,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 cards), so the same sort is picked here instead. */}
             {journalEntries.length > 0 && (
               <div className="journal-sort-picker">
-                <label htmlFor="journal-sort" style={{ fontSize: 11, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Sort by</label>
+                <label htmlFor="journal-sort" style={{ fontSize: 11, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>{t("game.journal.sortBy")}</label>
                 <select
                   id="journal-sort"
                   value={journalSortCol}
@@ -3480,17 +3432,17 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   }}
                 >
                   {JOURNAL_SORT_HEADERS.map((h) => (
-                    <option key={h.key} value={h.key}>{h.label}</option>
+                    <option key={h.key} value={h.key}>{columnLabel(t, h.key)}</option>
                   ))}
                 </select>
                 <button
                   className="btn btn-ghost"
                   style={{ padding: "4px 12px", fontSize: 12 }}
-                  title="Flip the sort direction"
-                  aria-label={journalSortDir === "asc" ? "Sorted ascending — flip to descending" : "Sorted descending — flip to ascending"}
+                  title={t("game.journal.flipSort")}
+                  aria-label={journalSortDir === "asc" ? t("game.journal.sortedAsc") : t("game.journal.sortedDesc")}
                   onClick={() => applyJournalSort(journalSortCol, journalSortDir === "asc" ? "desc" : "asc")}
                 >
-                  {journalSortDir === "asc" ? "▲ Asc" : "▼ Desc"}
+                  {journalSortDir === "asc" ? t("game.journal.asc") : t("game.journal.desc")}
                 </button>
               </div>
             )}
@@ -3507,7 +3459,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       <SortHeader
                         key={h.key}
                         as="div"
-                        label={h.label}
+                        label={columnLabel(t, h.key)}
                         col={h.key}
                         activeCol={journalSortCol}
                         dir={journalSortDir}
@@ -3534,11 +3486,11 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         {showGroupHeader && (
                           <div style={{ display: "flex", alignItems: "baseline", gap: 10, padding: "12px 14px 4px", borderTop: i === 0 ? "none" : "1px solid var(--panel-edge)" }}>
                             <span style={{ fontFamily: "Fraunces, serif", color: "var(--amber-bright)", fontSize: 15 }}>
-                              {fmtGroupLabel(journalGroupBy, row.group_key ?? "")}
+                              {fmtGroupLabel(t, journalGroupBy, row.group_key ?? "")}
                             </span>
                             <span style={{ fontSize: 11, color: "var(--ink-faint)" }}>
-                              {agg ? `${agg.count} ${agg.count === 1 ? "session" : "sessions"}` : ""}
-                              {agg?.avg_score != null ? ` · avg ${Math.round(agg.avg_score)}` : ""}
+                              {agg ? t("game.journal.sessions", { count: agg.count }) : ""}
+                              {agg?.avg_score != null ? t("game.journal.avg", { score: Math.round(agg.avg_score) }) : ""}
                             </span>
                           </div>
                         )}
@@ -3555,25 +3507,25 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         >
                           <div className="j-caret" style={{ color: "var(--ink-faint)" }}>{expanded ? "▾" : "▸"}</div>
                           <div className="h-ticker j-ticker">{row.ticker || "—"}</div>
-                          <div className="j-mode" style={{ color: "var(--ink-soft)" }}>{row.mode}</div>
-                          <div className="j-diff" style={{ color: "var(--ink-soft)" }}>{row.difficulty}</div>
-                          <div className="j-created" style={{ color: "var(--ink-faint)", fontSize: 11 }}><span className="j-label">Created</span>{fmtJournalDate(row.created_at, zone)}</div>
-                          <div className="j-updated" style={{ color: "var(--ink-faint)", fontSize: 11 }}><span className="j-label">Updated</span>{fmtJournalDate(row.updated_at, zone)}</div>
+                          <div className="j-mode" style={{ color: "var(--ink-soft)" }}>{modeLabel(t, row.mode)}</div>
+                          <div className="j-diff" style={{ color: "var(--ink-soft)" }}>{difficultyLabel(t, row.difficulty)}</div>
+                          <div className="j-created" style={{ color: "var(--ink-faint)", fontSize: 11 }}><span className="j-label">{columnLabel(t, "created")}</span>{fmtJournalDate(row.created_at, zone)}</div>
+                          <div className="j-updated" style={{ color: "var(--ink-faint)", fontSize: 11 }}><span className="j-label">{columnLabel(t, "updated")}</span>{fmtJournalDate(row.updated_at, zone)}</div>
                           <div className="h-grade j-grade" style={{ fontSize: 16 }}>{row.letter_grade ?? "—"}</div>
                           <div className="h-score j-score">{row.score != null ? row.score : "—"}</div>
                           <div className="j-break b1" />
                           <div className="j-status">
-                            <span style={{ fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{row.status}</span>
+                            <span style={{ fontSize: 10, color: "var(--ink-faint)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{statusLabel(t, row.status)}</span>
                             {row.is_shared && (
-                              <span style={{ marginLeft: 6, fontSize: 9, color: "var(--amber)", letterSpacing: "0.12em", textTransform: "uppercase" }}>· shared</span>
+                              <span style={{ marginLeft: 6, fontSize: 9, color: "var(--amber)", letterSpacing: "0.12em", textTransform: "uppercase" }}>{t("game.journal.sharedTag")}</span>
                             )}
                           </div>
                           <div className="j-act" style={{ textAlign: "right" }}>
                             <button
                               className="j-del"
                               onClick={(e) => { e.stopPropagation(); setDeletingEntry(row); }}
-                              title="Delete this session — permanent"
-                              aria-label="Delete session"
+                              title={t("game.journal.deleteTitle")}
+                              aria-label={t("game.journal.delete")}
                             >
                               <MaterialIcon path={MI_DELETE} size={16} />
                             </button>
@@ -3583,7 +3535,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         {expanded && (
                           <div className="journal-detail" style={{ padding: "10px 14px 20px", background: "var(--bg-soft)" }}>
                             {detailLoading && (
-                              <div className="loading" style={{ display: "block", padding: "16px 0" }}>Loading entry</div>
+                              <div className="loading" style={{ display: "block", padding: "16px 0" }}>{t("game.journal.loadingEntry")}</div>
                             )}
                             {detail && renderEntryDetail(detail)}
                           </div>
@@ -3652,17 +3604,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 22, color: "var(--amber-bright)", marginBottom: 14 }}>
-              Discard this scenario?
+              {t("game.discard.title")}
             </div>
-            <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.6, marginBottom: 22 }}>
-              Discarding allows you to choose a new scenario. Unfortunately, because each
-              scenario involves monetized external LLM processing, your fee for the scenario you
-              have cannot be refunded. Are you sure you want to give up on this scenario and
-              choose another?
-            </p>
+            <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.6, marginBottom: 22 }}>{t("game.discard.body")}</p>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button className="btn btn-ghost" onClick={() => setConfirmingDiscard(false)}>
-                Keep this scenario
+                {t("game.discard.keep")}
               </button>
               <button
                 className="btn"
@@ -3671,7 +3618,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                   nextRound();
                 }}
               >
-                Discard &amp; choose another
+                {t("game.discard.confirm")}
               </button>
             </div>
           </div>
@@ -3706,15 +3653,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ fontFamily: "'Fraunces', Georgia, serif", fontSize: 22, color: "var(--amber-bright)", marginBottom: 14 }}>
-              Delete this session — gone gone?
+              {t("game.delete.title")}
             </div>
             <p style={{ fontSize: 13, color: "var(--ink-soft)", lineHeight: 1.6, marginBottom: 22 }}>
-              You're about to permanently delete your{" "}
-              <strong style={{ color: "var(--ink)" }}>{deletingEntry.ticker || "this"}</strong>{" "}
-              session{deletingEntry.letter_grade ? ` (graded ${deletingEntry.letter_grade})` : ""}.
-              The scenario, your pitch, the review, the score, and any leaderboard standing it
-              earned are <strong style={{ color: "var(--ink)" }}>erased for good</strong> — this
-              cannot be undone, and there is no recovering it later.
+              <Tx ns={WORDS} k={deletingEntry.letter_grade ? "game.delete.bodyGraded" : "game.delete.body"}
+                vars={{ ticker: deletingEntry.ticker || t("game.delete.this"), grade: deletingEntry.letter_grade ?? "" }}
+                components={{ b: <strong style={{ color: "var(--ink)" }} /> }} />
             </p>
             <div style={{ display: "flex", gap: 10, justifyContent: "flex-end", flexWrap: "wrap" }}>
               <button
@@ -3722,14 +3666,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 onClick={() => setDeletingEntry(null)}
                 disabled={deleteInFlight}
               >
-                Keep it
+                {t("game.delete.keep")}
               </button>
               <button
                 className="btn"
                 onClick={() => { void confirmDeleteEntry(); }}
                 disabled={deleteInFlight}
               >
-                {deleteInFlight ? "Deleting…" : "Delete forever"}
+                {deleteInFlight ? t("game.delete.deleting") : t("game.delete.confirm")}
               </button>
             </div>
           </div>
@@ -3788,8 +3732,8 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <button
                   type="button"
                   onClick={handleCopyZoomed}
-                  title={zoomedCopied ? "Copied to clipboard" : "Copy this text to your clipboard"}
-                  aria-label="Copy text to clipboard"
+                  title={zoomedCopied ? t("game.clue.copied") : t("game.zoom.copyTitle")}
+                  aria-label={t("game.zoom.copy")}
                           className="tap-icon"
                   style={{
                     background: "transparent",
@@ -3806,9 +3750,9 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <button
                   type="button"
                   onClick={() => setZoomedText(null)}
-                  title="Close (Esc)"
+                  title={t("game.zoom.closeTitle")}
                   className="tap-icon"
-                  aria-label="Close"
+                  aria-label={t("game.zoom.close")}
                   style={{
                     background: "transparent",
                     border: "none",

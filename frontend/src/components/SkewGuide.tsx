@@ -8,6 +8,8 @@
 // curve degrades to flat IV at iv30d and the lede says so plainly.
 
 import { useEffect, useMemo, useState } from "react";
+import { Tx } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS } from "../i18n";
 
 interface SkewGuideProps {
   ticker: string;
@@ -57,6 +59,7 @@ function roundTo(v: number, step: number): number {
 }
 
 export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut, iv25dCall }: SkewGuideProps) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [widthMult, setWidthMult] = useState<1 | 2>(1);
 
@@ -198,15 +201,15 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
   const rankPct = hasRank ? Math.round(ivRank as number) : null;
   const levelRead = (() => {
     if (rankPct == null) {
-      return `This scenario didn't supply an IV Rank, so judge the level off ATM IV (${ivPct}%) and your own sense of whether that's high for ${ticker}.`;
+      return t("skew.level.none", { iv: ivPct, ticker });
     }
     if (rankPct >= 67) {
-      return `IV Rank ${rankPct} — premium is rich (expensive) versus ${ticker}'s own trailing range. That's a seller's green light: options across the board are well-paid right now. Skew then tells you which strike to sell.`;
+      return t("skew.level.rich", { rank: rankPct, ticker });
     }
     if (rankPct >= 34) {
-      return `IV Rank ${rankPct} — premium is middling: not a fat pitch, not a famine. Lean on the scenario's own catalysts and let skew decide where the relative value sits.`;
+      return t("skew.level.mid", { rank: rankPct });
     }
-    return `IV Rank ${rankPct} — premium is cheap versus ${ticker}'s own range. Thin reward for sellers; the whole curve is low, so be choosier even where skew looks inviting.`;
+    return t("skew.level.cheap", { rank: rankPct, ticker });
   })();
 
   // Verdict reads the *actual* curve rather than a synthesized shape.
@@ -217,17 +220,17 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
   // (long/short strike IVs they're staring at).
   const verdict = (() => {
     if (!hasSmile) {
-      return `This scenario didn't supply 25Δ smile anchors, so the curve here is flat IV at ${ivPct}% ATM — purely the level, not the shape. Read the scenario's skew_note for the regime story.`;
+      return t("skew.verdict.flat", { iv: ivPct });
     }
     if (fear >= 4) {
       return gap > 0.6
-        ? `Reverse smirk (put-bid). The put you buy (${fmtK(longStrike)}) is meaningfully richer in vol than the one you sell (${fmtK(shortStrike)}) — skew eats into your credit, but the wing pays for fear. Sell below the steepest part for real cushion.`
-        : `Reverse smirk (put-bid). Up near spot the skew is gentle; both legs carry similar vol, so the credit is clean — but you're closer to the money, so cushion is thinner. The classic trade-off.`;
+        ? t("skew.verdict.smirkWide", { long: fmtK(longStrike), short: fmtK(shortStrike) })
+        : t("skew.verdict.smirkNarrow");
     }
     if (fear <= -2) {
-      return `Forward skew — the call wing is the rich one here. For a put spread on ${ticker} that's friendly: the puts you trade sit on the cheaper, flatter side. The danger this curve prices is an upside spike, not a collapse.`;
+      return t("skew.verdict.forward", { ticker });
     }
-    return `Roughly symmetric: both wings carry similar IV. ATM not a deep valley nor heavily biased — read for spot or event positioning rather than counting on skew to pay for a wing.`;
+    return t("skew.verdict.symmetric");
   })();
 
   const C = {
@@ -246,7 +249,7 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
         aria-expanded={open}
       >
         <span className="sg-chevron" aria-hidden="true">{open ? "▾" : "▸"}</span>
-        Skew Guide
+        {t("skew.trigger")}
       </button>
 
       {open && (
@@ -257,41 +260,28 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
                 type="button"
                 className="sg-close"
                 onClick={() => setOpen(false)}
-                aria-label="Close guide"
+                aria-label={t("skew.close")}
               >
                 ✕
               </button>
             </div>
             <div className="sg-body">
-          <h3 className="serif sg-title">Guide to Skew</h3>
+          <h3 className="serif sg-title">{t("skew.title")}</h3>
           <p className="sg-lede">
-            Implied volatility is not one number — it's a <em>curve</em> across strikes, a map of
-            where the market is paying up for fear. For a premium seller it shows where the
-            insurance is <em>richest</em> — and throughout this guide <strong>rich means
-            expensive</strong> (a high premium): good to <em>sell</em>, bad to buy. It never means
-            the option's holder gets rich.{" "}
+            <Tx ns={WORDS} k="skew.lede" components={{ em: <em />, b: <strong /> }} />{" "}
             {hasSmile ? (
-              <>
-                The curve below is the <em>literal</em> smile this scenario prices — anchored to{" "}
-                <strong>{ticker}</strong>{name ? ` (${name})` : ""} at spot{" "}
-                <strong>${fmtK(spot)}</strong>, ATM 30-day IV <strong>{ivPct}%</strong>, 25Δ-put IV{" "}
-                <strong>{Math.round(iv25dPut as number)}%</strong>, and 25Δ-call IV{" "}
-                <strong>{Math.round(iv25dCall as number)}%</strong>. It is the same smile the option
-                chain prices each strike from.
-              </>
+              <Tx ns={WORDS} k="skew.lede.smile"
+                vars={{ who: name ? `${ticker} (${name})` : ticker, spot: `$${fmtK(spot)}`, iv: ivPct, put: Math.round(iv25dPut as number), call: Math.round(iv25dCall as number) }}
+                components={{ em: <em />, b: <strong /> }} />
             ) : (
-              <>
-                This scenario was dealt before the structured smile anchors were captured, so the
-                curve below shows flat IV at <strong>{ivPct}%</strong> across all strikes —{" "}
-                <em>level only, no shape</em>. Read the scenario's skew_note for the regime story.
-              </>
+              <Tx ns={WORDS} k="skew.lede.flat" vars={{ iv: ivPct }} components={{ em: <em />, b: <strong /> }} />
             )}
           </p>
 
           {/* interactive panel */}
           <div className="sg-panel">
             <div className="sg-chartwrap">
-              <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={`Implied volatility skew curve for ${ticker}`}>
+              <svg viewBox={`0 0 ${W} ${H}`} role="img" aria-label={t("skew.aria", { ticker })}>
                 {/* grid */}
                 <g>
                   {ivLines.map((v) => (
@@ -329,14 +319,14 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
                       <line x1={xP} y1={yP} x2={xC} y2={yC} stroke={C.gold} strokeWidth={1.6} strokeDasharray="5 4" opacity={0.9} />
                       <path d={diamond(xP, yP)} fill="var(--panel)" stroke={C.put} strokeWidth={2} />
                       <path d={diamond(xC, yC)} fill="var(--panel)" stroke={C.call} strokeWidth={2} />
-                      <text x={xP} y={yP - 11} textAnchor="middle" className="sg-axis" fill={C.put}>25Δ put</text>
-                      <text x={xC} y={yC + 20} textAnchor="middle" className="sg-axis" fill={C.call}>25Δ call</text>
+                      <text x={xP} y={yP - 11} textAnchor="middle" className="sg-axis" fill={C.put}>{t("skew.put25")}</text>
+                      <text x={xC} y={yC + 20} textAnchor="middle" className="sg-axis" fill={C.call}>{t("skew.call25")}</text>
                       {/* Magnitude chip parked over the put wing (open
                           space on the left), clear of the busy center. */}
                       <g transform={`translate(${xP} ${yP - 34})`}>
                         <rect x={-37} y={-13} width={74} height={16} rx={8} fill="var(--panel)" stroke={C.gold} strokeWidth={1} opacity={0.96} />
                         <text x={0} y={-2} textAnchor="middle" className="sg-tick" fill={C.goldSoft}>
-                          25Δ {sign}{fear.toFixed(1)} pts
+                          {t("skew.chip", { value: `${sign}${fear.toFixed(1)}` })}
                         </text>
                       </g>
                     </g>
@@ -355,7 +345,7 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
                       <line x1={x} y1={y} x2={x} y2={H - M.b} stroke={color} strokeWidth={1} opacity={0.35} strokeDasharray="2 3" />
                       <circle cx={x} cy={y} r={6} fill={color} stroke="var(--panel)" strokeWidth={2} />
                       <text x={x} y={y - 12} textAnchor="middle" className="sg-axis" fill={color}>
-                        {label} {fmtK(k)}
+                        {t(label === "long" ? "skew.leg.long" : "skew.leg.short", { strike: fmtK(k) })}
                       </text>
                     </g>
                   );
@@ -374,26 +364,26 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
                     </text>
                   ))}
                   <line x1={xK(spot)} y1={M.t} x2={xK(spot)} y2={H - M.b} stroke="var(--ink-faint)" strokeWidth={1} strokeDasharray="3 4" opacity={0.8} />
-                  <text x={xK(spot)} y={M.t - 8} textAnchor="middle" className="sg-axis" fill="var(--ink-soft)">SPOT</text>
-                  <text x={M.l + PLOT_W / 2} y={H - 6} textAnchor="middle" className="sg-axis">STRIKE</text>
+                  <text x={xK(spot)} y={M.t - 8} textAnchor="middle" className="sg-axis" fill="var(--ink-soft)">{t("skew.axis.spot")}</text>
+                  <text x={M.l + PLOT_W / 2} y={H - 6} textAnchor="middle" className="sg-axis">{t("skew.axis.strike")}</text>
                   <text x={14} y={M.t + PLOT_H / 2} textAnchor="middle" className="sg-axis" transform={`rotate(-90 14 ${M.t + PLOT_H / 2})`}>
-                    IMPLIED VOLATILITY
+                    {t("skew.axis.iv")}
                   </text>
                 </g>
               </svg>
             </div>
 
             <div className="sg-legend">
-              <span><i className="sg-dot" style={{ background: C.gold }} />IV curve</span>
-              <span><i className="sg-dot" style={{ background: C.put }} />short put (sold)</span>
-              <span><i className="sg-dot" style={{ background: C.call }} />long put (bought)</span>
-              <span><i className="sg-diamond" />25Δ wings (skew)</span>
-              <span><i className="sg-dot" style={{ background: "var(--ink-faint)" }} />spot ≈ ${fmtK(spot)}</span>
+              <span><i className="sg-dot" style={{ background: C.gold }} />{t("skew.legend.curve")}</span>
+              <span><i className="sg-dot" style={{ background: C.put }} />{t("skew.legend.short")}</span>
+              <span><i className="sg-dot" style={{ background: C.call }} />{t("skew.legend.long")}</span>
+              <span><i className="sg-diamond" />{t("skew.legend.wings")}</span>
+              <span><i className="sg-dot" style={{ background: "var(--ink-faint)" }} />{t("skew.legend.spot", { spot: `$${fmtK(spot)}` })}</span>
             </div>
 
             <div className="sg-slider-row">
               <label>
-                Short strike (the put you sell) — drag to walk it down the curve
+                {t("skew.slider")}
                 <span className="sg-widthbtns">
                   {([1, 2] as Array<1 | 2>).map((mult) => (
                     <button
@@ -402,7 +392,7 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
                       className={`sg-wbtn ${widthMult === mult ? "active" : ""}`}
                       onClick={() => setWidthMult(mult)}
                     >
-                      ${fmtK(step * mult)} wide
+                      {t("skew.wide", { width: `$${fmtK(step * mult)}` })}
                     </button>
                   ))}
                 </span>
@@ -418,10 +408,10 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
             </div>
 
             <div className="sg-readout">
-              <div className="sg-stat"><div className="lab">Short put IV</div><div className="val put">{(sIV * 100).toFixed(1)}%</div></div>
-              <div className="sg-stat"><div className="lab">Long put IV</div><div className="val call">{(lIV * 100).toFixed(1)}%</div></div>
-              <div className="sg-stat"><div className="lab">Skew gap (leg-to-leg)</div><div className="val">{(gap >= 0 ? "+" : "") + gap.toFixed(1)} pts</div></div>
-              <div className="sg-stat"><div className="lab">25Δ skew (fear gauge)</div><div className="val">{(fear >= 0 ? "+" : "") + fear.toFixed(1)} pts</div></div>
+              <div className="sg-stat"><div className="lab">{t("skew.read.shortIv")}</div><div className="val put">{(sIV * 100).toFixed(1)}%</div></div>
+              <div className="sg-stat"><div className="lab">{t("skew.read.longIv")}</div><div className="val call">{(lIV * 100).toFixed(1)}%</div></div>
+              <div className="sg-stat"><div className="lab">{t("skew.read.gap")}</div><div className="val">{t("skew.pts", { value: (gap >= 0 ? "+" : "") + gap.toFixed(1) })}</div></div>
+              <div className="sg-stat"><div className="lab">{t("skew.read.fear")}</div><div className="val">{t("skew.pts", { value: (fear >= 0 ? "+" : "") + fear.toFixed(1) })}</div></div>
             </div>
 
             <div className="sg-verdict">{verdict}</div>
@@ -429,33 +419,23 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
 
           {/* three shapes */}
           <div className="sg-grid2">
-            <div className="sg-card put-c">
-              <div className="sg-cardtag">Equities &amp; indices — the default</div>
-              <h4 className="serif">Reverse skew (smirk)</h4>
-              <p>IV climbs as strikes fall. <span className="put-t">OTM puts are the most expensive options on the board.</span> The market is permanently bid for crash protection — hedging demand lifts downside IV. This is the world bull put spreads live in.</p>
-            </div>
-            <div className="sg-card">
-              <div className="sg-cardtag">FX, single names, pre-event</div>
-              <h4 className="serif">Volatility smile</h4>
-              <p>Both wings lift; ATM is the cheap valley. The market fears a <em>big move either way</em> with no strong lean — classic ahead of binary events (earnings, FOMC, a CPI print) where gap risk is two-sided.</p>
-            </div>
-            <div className="sg-card call-c">
-              <div className="sg-cardtag">Commodities — oil, gas, grains</div>
-              <h4 className="serif">Forward skew</h4>
-              <p>IV climbs as strikes <em>rise</em>. <span className="call-t">OTM calls are the most expensive options on the board</span> because the feared shock is to the <em>upside</em> — a supply disruption that spikes price. Energy names live closer to this regime.</p>
-            </div>
-            <div className="sg-card">
-              <div className="sg-cardtag">The number to actually watch</div>
-              <h4 className="serif">25-delta skew</h4>
-              <p>Steepness = <strong>IV of the 25Δ put minus IV of the 25Δ call</strong>. A widening gap = fear bidding up the put wing (stress). A flattening gap = complacency. The cleanest read on "how scared is this name right now."</p>
-            </div>
+            {([["reverse", "sg-card put-c"], ["smile", "sg-card"], ["forward", "sg-card call-c"], ["delta", "sg-card"]] as const).map(([card, cls]) => (
+              <div key={card} className={cls}>
+                <div className="sg-cardtag">{t(`skew.card.${card}.tag`)}</div>
+                <h4 className="serif">{t(`skew.card.${card}.title`)}</h4>
+                <p>
+                  <Tx ns={WORDS} k={`skew.card.${card}.body`} components={{
+                    em: <em />, b: <strong />, put: <span className="put-t" />, call: <span className="call-t" />,
+                  }} />
+                </p>
+              </div>
+            ))}
           </div>
 
           {/* the selling lens */}
-          <h4 className="serif sg-h">Why it matters when you sell premium</h4>
+          <h4 className="serif sg-h">{t("skew.sell.title")}</h4>
           <p className="sg-p">
-            You're not buying insurance — you're underwriting it. But a seller is really asking{" "}
-            <strong>two separate questions</strong>, and <em>skew only answers the second one.</em>
+            <Tx ns={WORDS} k="skew.sell.intro" components={{ em: <em />, b: <strong /> }} />
           </p>
 
           {/* the two questions — the frame that resolves "is steep skew
@@ -463,96 +443,68 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
               shape (skew) says which strike and which structure. */}
           <table className="sg-table sg-2q">
             <thead>
-              <tr><th>The question</th><th>Answered by</th><th>On this card</th></tr>
+              <tr><th>{t("skew.q.head.question")}</th><th>{t("skew.q.head.answered")}</th><th>{t("skew.q.head.card")}</th></tr>
             </thead>
             <tbody>
               <tr>
-                <td>“Is premium <em>rich</em> at all right now?”</td>
-                <td><strong>IV level + IV Rank</strong> — how high the whole curve sits</td>
-                <td>IV 30d {ivPct}%{hasRank ? `, IV Rank ${rankPct}` : ""}</td>
+                <td><Tx ns={WORDS} k="skew.q.rich" components={{ em: <em /> }} /></td>
+                <td><Tx ns={WORDS} k="skew.q.richBy" components={{ b: <strong /> }} /></td>
+                <td>{hasRank ? t("skew.q.cardRank", { iv: ivPct, rank: rankPct ?? "" }) : t("skew.q.card", { iv: ivPct })}</td>
               </tr>
               <tr>
-                <td>“<em>Which strike</em>, and with what structure, do I keep the most of it?”</td>
-                <td><strong>Skew</strong> — the <em>shape</em> of the curve across strikes</td>
-                <td>the curve above</td>
+                <td><Tx ns={WORDS} k="skew.q.which" components={{ em: <em /> }} /></td>
+                <td><Tx ns={WORDS} k="skew.q.whichBy" components={{ em: <em />, b: <strong /> }} /></td>
+                <td>{t("skew.q.curve")}</td>
               </tr>
             </tbody>
           </table>
 
           <p className="sg-p">
-            <strong>Level is what pays you. Skew just decides how that pay is spread across
-            strikes — and which structure captures it versus hands it back.</strong> A rich
-            (expensive) curve means options everywhere are well-paid; skew is your actuarial table
-            for where the overpaying concentrates.
+            <Tx ns={WORDS} k="skew.levelPays" components={{ b: <strong /> }} />
           </p>
 
           {/* live level read — pulls IV Rank into the guide so the
               go/no-go isn't left implicit on the scenario card. */}
           <div className={`sg-level ${hasRank ? (rankPct! >= 67 ? "go" : rankPct! >= 34 ? "mid" : "no") : "mid"}`}>
-            <div className="sg-ruleh">Step 1 · The level read (go / no-go)</div>
+            <div className="sg-ruleh">{t("skew.step1")}</div>
             {levelRead}
           </div>
 
           <div className="sg-rule">
-            <div className="sg-ruleh">Step 2 · The shape read — and the spread wrinkle</div>
-            Once the level says “play,” skew says <em>how</em>. The two seller structures use skew
-            in opposite ways:
+            <div className="sg-ruleh">{t("skew.step2")}</div>
+            <Tx ns={WORDS} k="skew.step2.intro" components={{ em: <em /> }} />
             <ul className="sg-ul">
-              <li>
-                <strong>Cash-secured put</strong> (sell one put outright): a steep put skew is a
-                pure <em>tailwind</em> — you collect the single richest, most fear-bid option on
-                the board and keep all of it.
-              </li>
-              <li>
-                <strong>Bull put spread</strong> (sell the higher put, buy the lower one): here
-                steep skew is a <em>tax</em>. The put you <strong>buy</strong> sits higher on the
-                curve than the one you <strong>sell</strong>, so you pay rich and collect cheap —
-                the steeper the skew, the smaller your net credit. That shrunk credit is the price
-                of a capped, defined risk. Watch the <strong>skew gap</strong> readout do exactly
-                this as you walk the short strike down.
-              </li>
+              <li><Tx ns={WORDS} k="skew.step2.csp" components={{ em: <em />, b: <strong /> }} /></li>
+              <li><Tx ns={WORDS} k="skew.step2.bps" components={{ em: <em />, b: <strong /> }} /></li>
             </ul>
           </div>
 
           <p className="sg-p">
-            So <span className="sg-gold">“fear = opportunity”</span> and the spread wrinkle aren't a
-            contradiction: a fear-bid put wing means <em>elevated absolute premium</em> (good — you
-            collect more), while the <em>tilt</em> of that wing is what a spread gives back for its
-            risk cap. Your edge in either structure is the same: sell where the market's priced fear
-            is <strong>richer than your own belief that price will hold</strong>.
+            <Tx ns={WORDS} k="skew.fearOpportunity" components={{ gold: <span className="sg-gold" />, em: <em />, b: <strong /> }} />
           </p>
 
           {/* checklist */}
-          <h4 className="serif sg-h">A practical reading checklist</h4>
+          <h4 className="serif sg-h">{t("skew.check.title")}</h4>
           <table className="sg-table">
             <thead>
-              <tr><th>What you see</th><th>What it means</th><th>Seller's move</th></tr>
+              <tr><th>{t("skew.check.see")}</th><th>{t("skew.check.means")}</th><th>{t("skew.check.move")}</th></tr>
             </thead>
             <tbody>
-              <tr><td>High IV Rank + steep put skew</td><td>Premium rich (expensive) AND the richness sits in the puts</td><td>The textbook seller's setup — rich wing to sell, and the level says it's well-paid</td></tr>
-              <tr><td>Steep put skew</td><td>Crash fear expensively priced</td><td>Put premium is fat — put your short strike <em>below</em> the steepest part of the ramp, so you collect fear-bid premium at a strike price still has room to avoid</td></tr>
-              <tr><td>Flat skew</td><td>Complacency</td><td>Thin premium, little cushion priced in — be choosier</td></tr>
-              <tr><td>Skew steepening fast</td><td>Stress building</td><td>IV expanding — the entry window is opening</td></tr>
-              <tr><td>Smile forming</td><td>Binary event ahead</td><td>Two-sided gap risk — don't be short through it</td></tr>
-              <tr><td>Forward skew (energy)</td><td>Upside shock feared</td><td>Calls are the expensive wing; puts relatively cheap to sell</td></tr>
+              {([0, 1, 2, 3, 4, 5] as const).map((i) => (
+                <tr key={i}>
+                  <td>{t(`skew.check.${i}.see`)}</td>
+                  <td>{t(`skew.check.${i}.means`)}</td>
+                  <td><Tx ns={WORDS} k={`skew.check.${i}.move`} components={{ em: <em /> }} /></td>
+                </tr>
+              ))}
             </tbody>
           </table>
 
           <div className="sg-foot">
             {hasSmile ? (
-              <>
-                Curve is the literal three-anchor smile this scenario prices: ATM IV{" "}
-                {ivPct}%, 25Δ-put IV {Math.round(iv25dPut as number)}%, 25Δ-call IV{" "}
-                {Math.round(iv25dCall as number)}%, anchored at {ticker} spot ${fmtK(spot)}. The
-                option chain tables price each strike from this same smile. Implied vol is the
-                market's forward guess, not a forecast — read it as sentiment priced.
-              </>
+              t("skew.foot.smile", { iv: ivPct, put: Math.round(iv25dPut as number), call: Math.round(iv25dCall as number), ticker, spot: `$${fmtK(spot)}` })
             ) : (
-              <>
-                This scenario predates the structured smile anchors, so the curve is flat IV at{" "}
-                {ivPct}% across all strikes (level, not shape). Read the scenario's skew_note for
-                the regime story until a fresh scenario is dealt.
-              </>
+              t("skew.foot.flat", { iv: ivPct })
             )}
           </div>
             </div>

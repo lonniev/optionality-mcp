@@ -12,11 +12,13 @@ import { DebugPanel } from "@tollbooth-dpyc/web/react";
 import SignInScreen from "./components/SignInScreen";
 import { isGuestMode, setGuestMode } from "./lib/guest";
 import { escrowNsec } from "./lib/mcp";
+import { useT } from "./i18n";
 
 // The game is its own chunk, fetched once the patron is past the sign-in gate.
 const Optionality = lazy(() => import("./components/Optionality"));
 
 export default function App() {
+  const t = useT();
   const [authed, setAuthed] = useState<boolean>(() => isGuestMode() || isLoggedIn());
   const [notice, setNotice] = useState("");
 
@@ -53,9 +55,9 @@ export default function App() {
     () =>
       onProofExpired(() => {
         handleSignOut();
-        setNotice("Your sign-in lapsed while you were away. Sign in again to carry on.");
+        setNotice(t("app.lapsed"));
       }),
-    [handleSignOut],
+    [handleSignOut, t],
   );
 
   // DebugPanel renders in both states so a stuck deal *or* a sign-in bounce is
@@ -65,7 +67,7 @@ export default function App() {
   return (
     <>
       {authed ? (
-        <Suspense fallback={<div className="loading" style={{ display: "block", padding: "20px 0" }}>Opening the floor</div>}>
+        <Suspense fallback={<div className="loading" style={{ display: "block", padding: "20px 0" }}>{t("game.openingFloor")}</div>}>
           <Optionality onSignOut={handleSignOut} />
         </Suspense>
       ) : (

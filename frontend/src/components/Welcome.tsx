@@ -16,6 +16,13 @@
 import { useEffect, useState } from "react";
 import { getGuestId } from "../lib/guest";
 import { checkPrice, shortNpub } from "@tollbooth-dpyc/web";
+import { Tx } from "@tollbooth-dpyc/web/react";
+import { useT, WORDS } from "../i18n";
+
+import { usd2 } from "../lib/money";
+
+/// US cents as dollars in the reader's number format.
+const usdOfCents = (cents: number): string => usd2(cents / 100);
 
 interface Props {
   onTopUp: () => void;
@@ -34,6 +41,7 @@ interface PriceQuote {
 }
 
 export default function Welcome({ onTopUp, onSeeAssessment, isGuest, npub, displayName }: Props) {
+  const t = useT();
   // Live pricing from the BE — null until the lookup completes; -1
   // sentinel if the lookup failed and we should avoid quoting numbers.
   const [prices, setPrices] = useState<PriceQuote | null | -1>(null);
@@ -106,15 +114,15 @@ export default function Welcome({ onTopUp, onSeeAssessment, isGuest, npub, displ
           greetingName = shortNpub(npub);
           greetingMono = true;
         } else if (isGuest) {
-          greetingName = `Guest ${getGuestId()}`;
+          greetingName = t("welcome.guestName", { id: getGuestId() });
           greetingMono = true;
         } else {
-          greetingName = "Anonymous Visitor";
+          greetingName = t("welcome.anonymous");
         }
         const showNpubLine = !isGuest && !!npub && !!displayName;
         return (
           <div className="panel" style={{ borderLeft: "3px solid var(--amber)" }}>
-            <span className="panel-label">Welcome</span>
+            <span className="panel-label">{t("welcome.label")}</span>
             <div style={{
               fontSize: 13,
               color: "var(--ink)",
@@ -122,144 +130,58 @@ export default function Welcome({ onTopUp, onSeeAssessment, isGuest, npub, displ
               marginBottom: 4,
               lineHeight: 1.5,
             }}>
-              Welcome,{" "}
-              {greetingMono ? (
-                <code style={{
-                  color: "var(--amber-bright)",
-                  fontFamily: "JetBrains Mono, monospace",
-                  fontSize: 12,
-                }}>{greetingName}</code>
-              ) : (
-                <b style={{ color: "var(--amber-bright)" }}>{greetingName}</b>
-              )}
-              .
+              <Tx ns={WORDS} k="welcome.greeting" vars={{ name: greetingName }} components={{
+                name: greetingMono
+                  ? <code style={{ color: "var(--amber-bright)", fontFamily: "JetBrains Mono, monospace", fontSize: 12 }} />
+                  : <b style={{ color: "var(--amber-bright)" }} />,
+              }} />
               {showNpubLine && (
-                <>
-                  {" "}Signed in as{" "}
-                  <code style={{
-                    color: "var(--amber-bright)",
-                    fontFamily: "JetBrains Mono, monospace",
-                    fontSize: 12,
-                  }}>{shortNpub(npub!)}</code>.
-                </>
+                <Tx ns={WORDS} k="welcome.signedInAs" vars={{ npub: shortNpub(npub!) }} components={{
+                  npub: <code style={{ color: "var(--amber-bright)", fontFamily: "JetBrains Mono, monospace", fontSize: 12 }} />,
+                }} />
               )}
             </div>
         <h2 className="serif" style={{ marginTop: 4, fontSize: 28 }}>
-          Why Optionality.
+          {t("welcome.why")}
         </h2>
-        <p className="briefing-prose" style={{ marginTop: 8 }}>
-          Optionality™ is gamified, scenario-based learning for individuals
-          training to become fluent options traders. It stays outside the
-          usual curriculum — pricing mathematics and platform mechanics — and
-          engages the trainee with narratives that ask for a clear, actionable
-          trade and the reasoning behind it.
-        </p>
-        <p className="briefing-prose">
-          You're unfamiliar with the jargon and tongue-tied when challenged
-          to describe your strategy and your current trade ideas. You seek
-          to learn how to see the larger world situation and to make cogent
-          trade proposals under duress. But your ideas are fuzzy, you chase
-          big payoffs, and you can't say — before a situation — what you
-          would do in the situation. Optionality™ helps you learn sound
-          strategies, incorporate world affairs, and sharpen your skill at
-          describing your strategies.
-        </p>
-        <p className="briefing-prose">
-          Optionality™, in the role of your investment-house Firm, uses
-          modern AI services to present you with challenging simulated
-          world scenarios that offer you a chance to think — and then to
-          present your trade. The Firm's auditors objectively grade your
-          proposal on structure choice, strikes &amp; tenor, risk/reward,
-          macro integration, and tail risk — feedback meant to help you
-          improve your narrative proposals. Over time, you become able to
-          rapidly and effectively conceive, present, and execute wiser trades.
-        </p>
+        <p className="briefing-prose" style={{ marginTop: 8 }}>{t("welcome.why1")}</p>
+        <p className="briefing-prose">{t("welcome.why2")}</p>
+        <p className="briefing-prose">{t("welcome.why3")}</p>
           </div>
         );
       })()}
 
       <div className="panel">
-        <span className="panel-label">Game Play</span>
-        <h3 className="serif">A round</h3>
+        <span className="panel-label">{t("welcome.play.label")}</span>
+        <h3 className="serif">{t("welcome.play.round")}</h3>
         <ol className="briefing-prose" style={{ paddingLeft: 18, lineHeight: 1.8 }}>
-          <li>
-            <b>Be Challenged.</b> Pick a historicity (historical / fiction / live), a persona
-            (apprentice → sovereign), and optionally a max-loss envelope. The toll scales
-            with how hard your selection is.
-          </li>
-          <li>
-            <b>Read the scenario.</b> Asset, spot, IV, skew, key levels, the catalyst,
-            the constraints of your book — and a couple of embedded red herrings to
-            see if you can spot what's noise vs what's load-bearing.
-          </li>
-          <li>
-            <b>Pitch the Trade.</b> Free-text. Specify the structure, strikes, tenor,
-            sizing, and your reasoning.
-          </li>
-          <li>
-            <b>Read the review.</b> Headline classification, five-dimension score,
-            facts-integrated ledger, alternative trade the house would have run,
-            risk-profile chart, and deeper context.
-          </li>
-          <li>
-            <b>Mulligan a past scenario</b> from your Journal when you want a second
-            look. Same setup, fresh pitch, journaled separately.
-          </li>
+          {(["welcome.play.1", "welcome.play.2", "welcome.play.3", "welcome.play.4", "welcome.play.5"] as const).map((key) => (
+            <li key={key}><Tx ns={WORDS} k={key} components={{ b: <b /> }} /></li>
+          ))}
         </ol>
 
-        <h3 className="serif" style={{ marginTop: 20 }}>The toll</h3>
+        <h3 className="serif" style={{ marginTop: 20 }}>{t("welcome.toll")}</h3>
         {prices && prices !== -1 ? (
           <>
-            <p className="briefing-prose">
-              Optionality™ uses fair usage-based pricing. Don't use it and
-              you pay nothing — there's no subscription, and no KYC. Pricing
-              tracks what each scenario actually costs to compose and grade:
-              simpler ones use fewer LLM tokens; more demanding ones — live
-              tape with web-search grounding, sovereign-level difficulty —
-              use more. Even the most complex scenario carries a fee of only
-              a few hundred sats.
-            </p>
-            <p className="briefing-prose">
-              The operator sets every multiplier directly, and you can
-              inspect each one yourself via the <b>Usage</b> tab once you
-              have a balance. Right now, pulled from the live pricing
-              model — not a marketing brochure:
-            </p>
+            <p className="briefing-prose">{t("welcome.toll.fair")}</p>
+            <p className="briefing-prose"><Tx ns={WORDS} k="welcome.toll.inspect" components={{ b: <b /> }} /></p>
             <ul className="briefing-prose" style={{ paddingLeft: 22, lineHeight: 1.7, marginBottom: 12 }}>
-              <li>
-                Simplest scenario (fiction × apprentice):{" "}
-                <b>{prices.cheap} sat{prices.cheap === 1 ? "" : "s"}</b>
-              </li>
-              <li>
-                Most demanding scenario (live tape × sovereign with full
-                web-search grounding):{" "}
-                <b>{prices.expensive} sat{prices.expensive === 1 ? "" : "s"}</b>
-              </li>
-              <li>
-                Pitch audit:{" "}
-                <b>{prices.pitch} sat{prices.pitch === 1 ? "" : "s"}</b>
-              </li>
+              <li><Tx ns={WORDS} k="welcome.toll.cheap" vars={{ price: t("game.sats", { count: prices.cheap }) }} components={{ b: <b /> }} /></li>
+              <li><Tx ns={WORDS} k="welcome.toll.expensive" vars={{ price: t("game.sats", { count: prices.expensive }) }} components={{ b: <b /> }} /></li>
+              <li><Tx ns={WORDS} k="welcome.toll.pitch" vars={{ price: t("game.sats", { count: prices.pitch }) }} components={{ b: <b /> }} /></li>
             </ul>
             {startSats !== null && startCents !== null && (
               <p className="briefing-prose">
-                A session of ~30 graded rounds at mid-difficulty runs
-                roughly {startSats.toLocaleString()} sats — about{" "}
-                {startCents}¢ in BTC. Top Up buys sats via a Lightning
-                invoice; Wallet of Satoshi, Phoenix, Mutiny, or any
-                Lightning wallet works.
+                {t("welcome.toll.session", { sats: startSats.toLocaleString(), usd: usdOfCents(startCents) })}
               </p>
             )}
           </>
         ) : (
           <p className="briefing-prose">
-            Optionality™ uses fair usage-based pricing — don't use it and
-            you pay nothing. Difficulty and mode scale the toll; you can
-            inspect every multiplier on the <b>Usage</b> tab once you have
-            a balance. Top Up buys sats via a Lightning invoice — Wallet
-            of Satoshi, Phoenix, Mutiny, or any Lightning wallet works.{" "}
+            <Tx ns={WORDS} k="welcome.toll.fallback" components={{ b: <b /> }} />{" "}
             {prices === -1 && (
               <span style={{ color: "var(--ink-faint)", fontStyle: "italic" }}>
-                (Couldn't reach the pricing model just now to quote specific numbers.)
+                {t("welcome.toll.unreachable")}
               </span>
             )}
           </p>
@@ -267,82 +189,42 @@ export default function Welcome({ onTopUp, onSeeAssessment, isGuest, npub, displ
       </div>
 
       <div className="panel">
-        <span className="panel-label">The economy</span>
-        <h3 className="serif">Optionality runs on Tollbooth-DPYC<sup>™</sup></h3>
+        <span className="panel-label">{t("welcome.economy.label")}</span>
+        <h3 className="serif">{t("welcome.economy.title")}</h3>
         <p className="briefing-prose">
-          Optionality is an agentic options-trading game built on{" "}
-          <a
-            href="https://tollbooth-dpyc.com"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "var(--amber-bright)", textDecoration: "none", fontWeight: 500 }}
-          >
-            Tollbooth-DPYC<sup>™</sup> →
-          </a>{" "}
-          — a Bitcoin Lightning + Nostr stack for monetized AI services. The
-          governance, certified operators, and community registry live in the open at{" "}
-          <a
-            href="https://github.com/lonniev/dpyc-community"
-            target="_blank"
-            rel="noopener noreferrer"
-            style={{ color: "var(--amber-bright)", textDecoration: "none", fontWeight: 500 }}
-          >
-            github.com/lonniev/dpyc-community →
-          </a>.
-          Three properties worth naming:
+          <Tx ns={WORDS} k="welcome.economy.intro" components={{
+            dpyc: <a href="https://tollbooth-dpyc.com" target="_blank" rel="noopener noreferrer" style={{ color: "var(--amber-bright)", textDecoration: "none", fontWeight: 500 }} />,
+            community: <a href="https://github.com/lonniev/dpyc-community" target="_blank" rel="noopener noreferrer" style={{ color: "var(--amber-bright)", textDecoration: "none", fontWeight: 500 }} />,
+          }} />
         </p>
         <ul className="briefing-prose" style={{ paddingLeft: 20, lineHeight: 1.7 }}>
-          <li>
-            <b>Sovereign identity.</b> You sign in with a Nostr keypair, not an email +
-            password. Your nsec is the only credential; no KYC, no platform-issued
-            account. Optionality holds an encrypted copy only if you ask it to (Profile →
-            Game Persona Key), and you can withdraw it any time.
-          </li>
-          <li>
-            <b>Dynamic pricing without redeploys.</b> The operator's tool prices are
-            stored in a pricing model — not in code. Multipliers for difficulty and
-            mode get tuned live (you can verify yourself via the Usage tab). The same
-            mechanism the leaderboard uses to weight scores.
-          </li>
-          <li>
-            <b>Sound money.</b> Fiat-rail micropayments are economically dead — the
-            interchange fees alone exceed a 1-sat toll. Bitcoin Lightning makes
-            tolling per AI-tool-call trivial. The economic model — pre-funded
-            Lightning balances, per-call atomic settlement, no custodian holding
-            your spend off-chain — is what makes services like Optionality work
-            at all.
-          </li>
+          {(["welcome.economy.identity", "welcome.economy.pricing", "welcome.economy.money"] as const).map((key) => (
+            <li key={key}><Tx ns={WORDS} k={key} components={{ b: <b /> }} /></li>
+          ))}
         </ul>
       </div>
 
       <div className="panel" style={{ background: "var(--bg-soft)" }}>
-        <h3 className="serif" style={{ marginTop: 0 }}>Ready?</h3>
+        <h3 className="serif" style={{ marginTop: 0 }}>{t("welcome.ready")}</h3>
         <p className="briefing-prose">
           {isGuest ? (
-            <>
-              Look around — the <b>See Assessment</b> tab shows a full graded round
-              so you can see what the game ships before joining. When you want to
-              start pitching trades for real, sign in with a Nostr identity
-              {startCents !== null ? <> and top up about {startCents}¢ in BTC.</> : "."}
-            </>
+            startCents !== null
+              ? <Tx ns={WORDS} k="welcome.ready.guestPriced" vars={{ usd: usdOfCents(startCents) }} components={{ b: <b /> }} />
+              : <Tx ns={WORDS} k="welcome.ready.guest" components={{ b: <b /> }} />
           ) : (
-            <>
-              Look around — the <b>See Assessment</b> tab shows a full graded round
-              so you can see what the game ships before you put sats on the table.
-              When you want to start pitching trades for real:
-            </>
+            <Tx ns={WORDS} k="welcome.ready.patron" components={{ b: <b /> }} />
           )}
         </p>
         <div className="actions">
           <button className="btn btn-ghost" onClick={onSeeAssessment}>
-            See Assessment
+            {t("welcome.seeAssessment")}
           </button>
           <button className="btn" onClick={onTopUp}>
             {isGuest
-              ? "Sign In to Play"
+              ? t("welcome.signInToPlay")
               : startCents !== null
-                ? `Top Up — ~${startCents}¢ to start`
-                : "Top Up"}
+                ? t("welcome.topUpPriced", { usd: usdOfCents(startCents) })
+                : t("welcome.topUp")}
           </button>
         </div>
       </div>

@@ -3,6 +3,8 @@ import type { Scenario, TradeLeg } from "../types";
 import { summarizePayoff } from "../lib/payoff";
 import LegTable from "./LegTable";
 import PayoffChart from "./PayoffChart";
+import { useT } from "../i18n";
+import { usd0, usd2 } from "../lib/money";
 
 interface Props {
   legs?: TradeLeg[];
@@ -17,6 +19,7 @@ interface Props {
 /// across the holding period via BSM), an optional overlay of the
 /// judge's alt trade, and a stat row with max P/L + breakevens.
 export default function RiskProfileChart({ legs, altLegs, scenario }: Props) {
+  const t = useT();
   const safeLegs: TradeLeg[] = Array.isArray(legs) ? legs.filter((l) => l && l.strike && l.type) : [];
   const safeAlt: TradeLeg[] = Array.isArray(altLegs) ? altLegs.filter((l) => l && l.strike && l.type) : [];
 
@@ -41,7 +44,7 @@ export default function RiskProfileChart({ legs, altLegs, scenario }: Props) {
   if (!safeLegs.length) {
     return (
       <div style={{ color: "var(--ink-faint)", fontSize: 12, fontStyle: "italic", padding: "12px 0" }}>
-        No structured trade legs were parsed — chart unavailable. (Naked stock/bond positions and unparseable trades skip the chart.)
+        {t("risk.noLegs")}
       </div>
     );
   }
@@ -51,8 +54,8 @@ export default function RiskProfileChart({ legs, altLegs, scenario }: Props) {
       <div className="chart-controls">
         <div>
           <label>
-            Days into trade: {daysElapsed}d{" "}
-            {daysElapsed === 0 ? "(entry)" : daysElapsed >= maxDte ? "(expiration)" : ""}
+            {t("risk.days", { days: daysElapsed })}{" "}
+            {daysElapsed === 0 ? t("risk.entry") : daysElapsed >= maxDte ? t("risk.expiration") : ""}
           </label>
           <input
             type="range"
@@ -69,7 +72,7 @@ export default function RiskProfileChart({ legs, altLegs, scenario }: Props) {
               checked={showAlt}
               onChange={(e) => setShowAlt(e.target.checked)}
             />
-            <span>Overlay alternative trade</span>
+            <span>{t("risk.overlay")}</span>
           </label>
         )}
       </div>
@@ -88,38 +91,38 @@ export default function RiskProfileChart({ legs, altLegs, scenario }: Props) {
       {stats && (
         <div className="data-row" style={{ marginTop: 16 }}>
           <div className="data-cell">
-            <label>Max Profit</label>
+            <label>{t("risk.maxProfit")}</label>
             <b style={{ color: "var(--jade)" }}>
-              {stats.profitUnbounded ? "Unlimited" : stats.maxP != null ? `+$${stats.maxP.toFixed(0)}` : "—"}
+              {stats.profitUnbounded ? t("risk.unlimited") : stats.maxP != null ? `+${usd0(stats.maxP)}` : "—"}
             </b>
           </div>
           <div className="data-cell">
-            <label>Max Loss</label>
+            <label>{t("risk.maxLoss")}</label>
             <b style={{ color: "var(--rust)" }}>
-              {stats.lossUnbounded ? "Unlimited" : stats.maxL != null ? `−$${Math.abs(stats.maxL).toFixed(0)}` : "—"}
+              {stats.lossUnbounded ? t("risk.unlimited") : stats.maxL != null ? `−${usd0(Math.abs(stats.maxL))}` : "—"}
             </b>
           </div>
           <div className="data-cell">
-            <label>Breakeven{stats.breakevens.length > 1 ? "s" : ""}</label>
+            <label>{t("risk.breakeven", { count: Math.max(1, stats.breakevens.length) })}</label>
             <b>
               {stats.breakevens.length
-                ? stats.breakevens.map((b) => "$" + b.toFixed(2)).join(", ")
+                ? stats.breakevens.map((b) => usd2(b)).join(", ")
                 : "—"}
             </b>
           </div>
           <div className="data-cell">
-            <label>IV used</label>
+            <label>{t("risk.iv")}</label>
             <b>{(iv * 100).toFixed(0)}%</b>
           </div>
           <div className="data-cell">
-            <label>r assumed</label>
+            <label>{t("risk.r")}</label>
             <b>{(r * 100).toFixed(2)}%</b>
           </div>
         </div>
       )}
 
       <div style={{ fontSize: 11, color: "var(--ink-faint)", marginTop: 10, fontStyle: "italic" }}>
-        Black-Scholes with no dividends. Risk-free rate held at 4.5%. Vol held constant at scenario IV — real vol-of-vol effects not modeled. Per-leg qty as parsed; multiplier of 100 shares assumed.
+        {t("risk.footnote")}
       </div>
 
       <details style={{ marginTop: 10 }}>
@@ -130,11 +133,11 @@ export default function RiskProfileChart({ legs, altLegs, scenario }: Props) {
           letterSpacing: "0.15em",
           textTransform: "uppercase",
         }}>
-          Parsed Legs
+          {t("risk.parsed")}
         </summary>
         <div style={{ marginTop: 8 }}>
-          <LegTable legs={safeLegs} label="Your trade" />
-          {safeAlt.length > 0 && <LegTable legs={safeAlt} label="Alt trade" />}
+          <LegTable legs={safeLegs} label={t("risk.yours")} />
+          {safeAlt.length > 0 && <LegTable legs={safeAlt} label={t("risk.alt")} />}
         </div>
       </details>
     </div>

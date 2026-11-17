@@ -265,16 +265,16 @@ interface PresetLegSpec {
   exp: ExpAnchor;
 }
 
+/// `label` names the structure (English, as the industry writes it). Its
+/// one-line description is the message `presets.<index>`, in PRESETS order.
 interface PresetDef {
   label: string;
-  description: string;
   specs: PresetLegSpec[];
 }
 
 export const PRESETS: PresetDef[] = [
   {
     label: "Bull Put Spread",
-    description: "Short OTM put + long lower put. Bullish credit spread.",
     specs: [
       { side: "sell", type: "put", strikeMult: 0.97, exp: "near" },
       { side: "buy", type: "put", strikeMult: 0.92, exp: "near" },
@@ -282,7 +282,6 @@ export const PRESETS: PresetDef[] = [
   },
   {
     label: "Bear Call Spread",
-    description: "Short OTM call + long higher call. Bearish credit spread.",
     specs: [
       { side: "sell", type: "call", strikeMult: 1.03, exp: "near" },
       { side: "buy", type: "call", strikeMult: 1.08, exp: "near" },
@@ -290,7 +289,6 @@ export const PRESETS: PresetDef[] = [
   },
   {
     label: "Iron Condor",
-    description: "Both wings short, both wings long beyond. Wide range-bound.",
     specs: [
       { side: "sell", type: "put", strikeMult: 0.96, exp: "near" },
       { side: "buy", type: "put", strikeMult: 0.91, exp: "near" },
@@ -300,7 +298,6 @@ export const PRESETS: PresetDef[] = [
   },
   {
     label: "Iron Butterfly",
-    description: "ATM straddle short + far OTM wings long. Narrow pin trade.",
     specs: [
       { side: "sell", type: "put", strikeMult: 1.0, exp: "near" },
       { side: "buy", type: "put", strikeMult: 0.9, exp: "near" },
@@ -310,7 +307,6 @@ export const PRESETS: PresetDef[] = [
   },
   {
     label: "Long Straddle",
-    description: "Long ATM call + long ATM put. Pre-event vol play.",
     specs: [
       { side: "buy", type: "call", strikeMult: 1.0, exp: "near" },
       { side: "buy", type: "put", strikeMult: 1.0, exp: "near" },
@@ -318,7 +314,6 @@ export const PRESETS: PresetDef[] = [
   },
   {
     label: "Short Strangle",
-    description: "Short OTM call + short OTM put. Premium-collection on range.",
     specs: [
       { side: "sell", type: "call", strikeMult: 1.03, exp: "near" },
       { side: "sell", type: "put", strikeMult: 0.97, exp: "near" },
@@ -326,7 +321,6 @@ export const PRESETS: PresetDef[] = [
   },
   {
     label: "Call Calendar",
-    description: "Short near-dated ATM call + long back-dated same strike.",
     specs: [
       { side: "sell", type: "call", strikeMult: 1.0, exp: "near" },
       { side: "buy", type: "call", strikeMult: 1.0, exp: "far" },
@@ -334,7 +328,6 @@ export const PRESETS: PresetDef[] = [
   },
   {
     label: "Put Calendar",
-    description: "Short near-dated ATM put + long back-dated same strike.",
     specs: [
       { side: "sell", type: "put", strikeMult: 1.0, exp: "near" },
       { side: "buy", type: "put", strikeMult: 1.0, exp: "far" },
@@ -342,7 +335,6 @@ export const PRESETS: PresetDef[] = [
   },
   {
     label: "Diagonal (PMCC)",
-    description: "Long deep-ITM back-month call + short OTM front-month call.",
     specs: [
       { side: "buy", type: "call", strikeMult: 0.85, exp: "far" },
       { side: "sell", type: "call", strikeMult: 1.05, exp: "near" },
