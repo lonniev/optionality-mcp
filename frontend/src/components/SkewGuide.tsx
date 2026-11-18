@@ -581,7 +581,6 @@ export default function SkewGuide({ ticker, name, spot, iv30d, ivRank, iv25dPut,
         }
         .sg-close:hover { color: var(--amber-bright); border-color: var(--amber); }
         .sg-body {
-          max-width: 900px;
           margin: 0 auto;
           padding: 22px 26px 30px;
         }
