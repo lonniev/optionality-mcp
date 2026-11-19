@@ -998,7 +998,7 @@ const words: Translation = {
 
   // ─── skew.sell ───
   "skew.sell.title": "プレミアムを売るときに重要な理由",
-  "skew.sell.intro": "あなたは保険を買うのではなく、引き受けるのです。\nしかし売り手は実は<b>二つの別々の問い</b>を立てていて、<em>スキューが答えるのは二つ目だけです。</em>",
+  "skew.sell.intro": "保険を買うのではなく、引き受けるのです。\nしかし売り手は実は<b>二つの別々の問い</b>を立てていて、<em>スキューが答えるのは二つ目だけです。</em>",
 
   // ─── skew.q ───
   "skew.q.head.question": "問い",
