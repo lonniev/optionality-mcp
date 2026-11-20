@@ -5,6 +5,32 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
 
+## [0.8.1] — 2026-11-19
+
+### Added
+
+- Optionality's pages speak English, French, Spanish, Japanese, Chinese and Hindi. The first language is the reader's saved choice, else their country's, else English. A row of languages under the sign-in card and a Language section on Profile change it.
+- Money shows in the reader's number format and stays in US dollars. The options glossary under underlined terms is translated too.
+- The Firm's scenarios, clues and reviews stay in English, as do ticker and option symbols, structure names and the Greeks.
+
+### Changed
+
+- The top-up sheet's "Open in wallet" opens your own Lightning wallet on the invoice, it says when it is watching for your payment, and its button reads "Check now". Runs on tollbooth-dpyc 0.106.0 and @tollbooth-dpyc/web 2.6.0.
+
+- Hindi addresses the reader informally (तुम), like French, Spanish and Chinese already did; quotations keep their own words.
+
+- Each page loads the first time it opens, so the first visit downloads less than half as much.
+
+- The MCP Registry listing carries a title (Optionality) and a link to https://optionality.tollbooth-dpyc.com.
+
+- `/llms.txt` is built by the shared `@tollbooth-dpyc/web/agent-guide` plugin from this service's own sections, so its connecting, payments, license and links sections match the rest of the fleet.
+
+- The wallet is now the shared one from tollbooth-web 3.0.0, with a QR code on an open invoice and amounts of 100 to 25,000 plus Custom. The top-up sheet holds it, and the whole wallet is on your Profile.
+
+### Fixed
+
+- Text uses the width the screen gives it: pages and their text blocks no longer stop partway across a wide screen.
+
 ## [0.8.0] — 2026-10-21
 
 ### Added

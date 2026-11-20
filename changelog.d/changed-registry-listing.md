@@ -1,1 +1,0 @@
-- The MCP Registry listing carries a title (Optionality) and a link to https://optionality.tollbooth-dpyc.com.
