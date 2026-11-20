@@ -1,10 +1,10 @@
 // Profile page — the package's AccountPage in Optionality's panels.
 //
-// AccountPage (@tollbooth-dpyc/web) owns the order every DPYC site shares:
-// the patron's Nostr kind-0 (the single, self-sovereign source of identity),
-// the session key (renders nothing unless this browser holds one), time
-// zone, theme, coupons and build. Optionality's own panel — the Game Persona
-// Key (nsec escrow) — sits after the theme, where Preferences used to end.
+// AccountPage (@tollbooth-dpyc/web) owns the folding groups every DPYC site
+// shares. You: the patron's Nostr kind-0 (the single, self-sovereign source
+// of identity), theme, time zone, the session key (renders nothing unless
+// this browser holds one), then the identity intro and language. Money: the
+// wallet. This site: the Game Persona Key (nsec escrow). About: the build.
 // Usage has its own tab here, so the page's usage section is off.
 //
 // On publish, the name, avatar and bio are mirrored into Optionality's store so
@@ -56,13 +56,6 @@ export default function ProfileTab({ npub }: { npub: string }) {
     <AccountPage
       npub={npub}
       heading={null}
-      before={
-        <div className="panel account-identity">
-          <span className="panel-label">{t("profile.label")}</span>
-          <h2 className="serif">{t("profile.title")}</h2>
-          <p className="account-intro">{t("profile.intro")}</p>
-        </div>
-      }
       profile={{ onPublished: mirrorToLeaderboard }}
       usage={false}
       timezone={{
@@ -77,20 +70,25 @@ export default function ProfileTab({ npub }: { npub: string }) {
         labels: { dark: t("profile.theme.dark"), light: t("profile.theme.light") },
         classNames: { root: "theme-toggle", chip: "theme-chip", active: "active" },
       }}
-      between={{
-        theme: (
+      panels={{
+        you: (
           <>
+            <div className="panel account-identity">
+              <span className="panel-label">{t("profile.label")}</span>
+              <h2 className="serif">{t("profile.title")}</h2>
+              <p className="account-intro">{t("profile.intro")}</p>
+            </div>
             <div className="panel tb-host">
               <span className="panel-label">{t("profile.language.label")}</span>
               <h2 className="serif">{t("profile.language.title")}</h2>
               <p className="account-intro">{t("profile.language.intro")}</p>
               <LanguageChooser classNames={{ root: "theme-toggle", chip: "theme-chip", active: "active" }} />
             </div>
-            <GamePersonaKeyPanel escrowed={escrowed} onChange={setEscrowed} />
           </>
         ),
+        money: <Wallet />,
+        site: <GamePersonaKeyPanel escrowed={escrowed} onChange={setEscrowed} />,
       }}
-      after={<Wallet />}
       build={{
         heading: (
           <>
@@ -119,6 +117,9 @@ export default function ProfileTab({ npub }: { npub: string }) {
       }}
       classNames={{
         root: "tb-host account-page",
+        group: "account-group",
+        groupSummary: "account-group-title",
+        groupBody: "account-grid",
         section: "panel",
         sectionHeading: "serif",
         sectionIntro: "account-intro",
@@ -216,7 +217,7 @@ function GamePersonaKeyPanel({
   }
 
   return (
-    <div className="panel" style={{ marginTop: 20 }}>
+    <div className="panel">
       <span className="panel-label">{t("profile.key.label")}</span>
       <h2 className="serif">{t("profile.key.title")}</h2>
       <p style={{ color: "var(--ink-soft)", fontSize: 12, marginTop: 6, marginBottom: 16, lineHeight: 1.6 }}>
