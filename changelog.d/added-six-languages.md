@@ -1,3 +1,0 @@
-- Optionality's pages speak English, French, Spanish, Japanese, Chinese and Hindi. The first language is the reader's saved choice, else their country's, else English. A row of languages under the sign-in card and a Language section on Profile change it.
-- Money shows in the reader's number format and stays in US dollars. The options glossary under underlined terms is translated too.
-- The Firm's scenarios, clues and reviews stay in English, as do ticker and option symbols, structure names and the Greeks.
