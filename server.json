@@ -2,9 +2,9 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.lonniev/optionality-mcp",
   "title": "Optionality",
-  "description": "Optionality \u2014 AI-judged options trading drill, Tollbooth-monetized MCP server",
+  "description": "Optionality — AI-judged options trading drill, Tollbooth-monetized MCP server",
   "websiteUrl": "https://optionality.tollbooth-dpyc.com",
-  "version": "0.8.2",
+  "version": "0.8.3",
   "repository": {
     "url": "https://github.com/lonniev/optionality-mcp",
     "source": "github"
