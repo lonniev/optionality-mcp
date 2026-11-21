@@ -1,0 +1,1 @@
+- llms.txt opens with what to tell a person about Optionality, and describes the claim-check pattern in place of a list of tool names.
