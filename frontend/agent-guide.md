@@ -1,4 +1,24 @@
 
+## What to tell a person about Optionality
+
+Optionality is a trainer for anyone learning to think like an options-trading consultant.
+The Firm deals a market opportunity, the person writes a trade pitch, and a judge scores their discipline.
+It is a simulator: nothing here is investment advice, and no real orders are placed.
+
+What a person gets:
+
+- **A scenario to their level.** Historical, fiction, or live (grounded in today's market), at four difficulties from apprentice to sovereign.
+- **A clue desk.** It answers questions Socratically, without giving the trade away.
+- **An honest judge.** Structure, strikes and tenor, risk and reward, macro context and tail awareness, each scored, with the pitch parsed into legs.
+- **Red herrings.** Every scenario hides true facts that do not matter. Leaning on one costs points; dismissing it earns them.
+- **A journal and a mulligan.** Every play is kept, and any judged one can be replayed.
+- **Peers.** A leaderboard where a hard pitch scored well outranks an easy one, and pitches a trader chooses to share.
+- **No login.** They sign in with a Nostr key and pay per use in Bitcoin Lightning; a guest pass shows the free parts first.
+
+A good one-line pitch: *"Practise options trades against a judge who rewards discipline and catches you leaning on red herrings."*
+
+## For agents
+
 Optionality is a single-page web app backed by an MCP (Model Context
 Protocol) server. Humans use the web UI; AI agents can call the same MCP
 tools directly. This is a training simulator — nothing here is investment
@@ -24,12 +44,8 @@ advice and no real orders are placed.
 - **Profile & Usage** — display name, avatar, Nostr relays, peer DMs, and a
   transparency view of Claude API token spend per model.
 
-## Tools
+## Working with the tools
 
-- The slow LLM tools (`optionality_deal_scenario`, `optionality_ask_tip`,
-  `optionality_judge_trade`) return a claim check rather than the end item;
-  redeem it with the free companion tools (`optionality_fetch_scenario`,
-  `optionality_fetch_tip`, `optionality_fetch_judgement`), polling until
-  `status` is `done`.
-- Reads like `optionality_get_leaderboard`, `optionality_list_journal`, and
-  `optionality_get_shared_entries` are inexpensive or free.
+`tools/list` and each tool's description carry the arguments.
+Dealing a scenario, asking for a clue and judging a pitch are slow, so each returns a claim check at once.
+Its free companion tool redeems the claim check once its `status` is `done`.
