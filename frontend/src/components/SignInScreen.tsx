@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { serviceStatus } from "@tollbooth-dpyc/web";
-import { LanguageChooser, NpubGate, Tx } from "@tollbooth-dpyc/web/react";
+import { LanguageChooser, NpubGate, Tx, useTour } from "@tollbooth-dpyc/web/react";
 import { useT, WORDS } from "../i18n";
 
 /**
@@ -22,6 +22,7 @@ export default function SignInScreen({
   notice?: string;
 }) {
   const t = useT();
+  useTour("signin");
   // The operator's fingerprint, so the patron can check who sent the DM.
   // Non-fatal: without it the gate simply omits the hint.
   const [operatorHash, setOperatorHash] = useState<string>("");

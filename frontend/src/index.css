@@ -10,6 +10,7 @@
 @import "tailwindcss/utilities.css" layer(utilities) source(none);
 @import "@tollbooth-dpyc/web/theme.css";
 @import "@tollbooth-dpyc/web/wallet.css";
+@import "@tollbooth-dpyc/web/tour.css";
 @source "../node_modules/@tollbooth-dpyc/web/dist";
 
 :root {
