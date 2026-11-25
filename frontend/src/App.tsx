@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import {
   canSign,
   debugPush,
@@ -7,12 +7,13 @@ import {
   logOut,
   onProofExpired,
 } from "@tollbooth-dpyc/web";
-import { DebugPanel } from "@tollbooth-dpyc/web/react";
+import { DebugPanel, TourProvider } from "@tollbooth-dpyc/web/react";
 
 import SignInScreen from "./components/SignInScreen";
 import { isGuestMode, setGuestMode } from "./lib/guest";
 import { escrowNsec } from "./lib/mcp";
 import { useT } from "./i18n";
+import { tours } from "./lib/tours";
 
 // The game is its own chunk, fetched once the patron is past the sign-in gate.
 const Optionality = lazy(() => import("./components/Optionality"));
@@ -21,6 +22,7 @@ export default function App() {
   const t = useT();
   const [authed, setAuthed] = useState<boolean>(() => isGuestMode() || isLoggedIn());
   const [notice, setNotice] = useState("");
+  const shown = useMemo(() => tours(t), [t]);
 
   // A sign-in with an nsec (pasted or generated at the gate) also escrows it
   // with the operator, as the sign-in screen says, so the operator can sign
@@ -65,7 +67,7 @@ export default function App() {
   // Mounted last so its spacer is the last thing in the page's flow. The
   // .tb-host wrapper gives its buttons the site's reset.
   return (
-    <>
+    <TourProvider tours={shown}>
       {authed ? (
         <Suspense fallback={<div className="loading" style={{ display: "block", padding: "20px 0" }}>{t("game.openingFloor")}</div>}>
           <Optionality onSignOut={handleSignOut} />
@@ -76,6 +78,6 @@ export default function App() {
       <div className="tb-host">
         <DebugPanel />
       </div>
-    </>
+    </TourProvider>
   );
 }

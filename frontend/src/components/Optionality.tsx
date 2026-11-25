@@ -198,7 +198,7 @@ import DifficultyAvatar from "./DifficultyAvatar";
 import FactsLedger from "./FactsLedger";
 import TopUpModal from "./TopUpModal";
 import { shortNpub } from "@tollbooth-dpyc/web";
-import { Avatar, PageControls, SortHeader } from "@tollbooth-dpyc/web/react";
+import { Avatar, PageControls, SortHeader, tourTarget, useTour } from "@tollbooth-dpyc/web/react";
 import DMComposeModal from "./DMComposeModal";
 import DealAnimation from "./DealAnimation";
 import JudgeAnimation from "./JudgeAnimation";
@@ -882,6 +882,12 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
   const [answer, setAnswer] = useState<string>("");
   const [evaluation, setEvaluation] = useState<Evaluation | null>(null);
   const [loading, setLoading] = useState<boolean>(false);
+  // Each tab offers its own tour; the Pit has two, the choosing and the dealt scenario.
+  useTour(
+    tab === "play" ? (scenario && !evaluation ? "scenario" : "pit")
+      : tab === "profile" ? "account" : tab,
+    { ready: !loading },
+  );
   const [loadingMsg, setLoadingMsg] = useState<string>("");
   // The queue of scenarios the Firm is still composing — a patron can fire
   // several at once and wander off. Each is polled by a background poller
@@ -2188,7 +2194,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 <p className="briefing-coda">{t("game.briefing.coda")}</p>
 
                 <div style={{ fontSize: 10, color: "var(--ivory)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 20, marginBottom: 8, fontStyle: "italic" }}>{t("game.chooser.historicity")}</div>
-                <div className="difficulty-grid">
+                <div className="difficulty-grid" {...tourTarget("pit.historicity")}>
                   {MODES.map((m) => (
                     <button
                       key={m.id}
@@ -2205,7 +2211,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 </div>
 
                 <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>{t("game.chooser.persona")}</div>
-                <div className="difficulty-grid">
+                <div className="difficulty-grid" {...tourTarget("pit.persona")}>
                   {DIFFICULTIES.map((d) => (
                     <button
                       key={d.id}
@@ -2222,7 +2228,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 </div>
 
                 <div style={{ fontSize: 10, color: "var(--rust)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>{t("game.chooser.risk")}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }} {...tourTarget("pit.risk")}>
                   <label style={{ fontSize: 12, color: "var(--ink-soft)" }}>{t("game.chooser.maxLoss")}</label>
                   <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
                     <span style={{ color: "var(--ink-faint)", fontFamily: "'JetBrains Mono', monospace", fontSize: 13 }}>$</span>
@@ -2290,7 +2296,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                 </div>
 
                 <div style={{ fontSize: 10, color: "var(--rust)", letterSpacing: "0.3em", textTransform: "uppercase", marginTop: 22, marginBottom: 8 }}>{t("game.chooser.sector")}</div>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }} {...tourTarget("pit.sector")}>
                   {SECTORS.map((s) => {
                     const active = (sector || "") === s.id;
                     return (
@@ -2367,13 +2373,14 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       className="btn btn-ghost"
                       onClick={() => setTopUpOpen(true)}
                       style={{ marginRight: "auto" }}
+                      {...tourTarget("pit.topUp")}
                       title={t("game.topUp.title")}
                     >
                       {t("game.topUp.label")}
                     </button>
                   )}
                   {dealPrice !== null && dealPrice > 0 && (
-                    <div style={{
+                    <div {...tourTarget("pit.toll")} style={{
                       fontSize: 12,
                       color: "var(--ink-soft)",
                       letterSpacing: "0.1em",
@@ -2410,7 +2417,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                       {t("game.signInToPlay")}
                     </button>
                   ) : (
-                    <button className="btn" onClick={onBeChallenged}>
+                    <button className="btn" onClick={onBeChallenged} {...tourTarget("pit.deal")}>
                       {preparing.length > 0 ? t("game.deal.another") : t("game.deal.challenge")}
                     </button>
                   )}
@@ -2504,7 +2511,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
 
                 <div className="scenario-grid">
                   {/* LEFT — the facts */}
-                  <div>
+                  <div {...tourTarget("pit.facts")}>
                     <div className="scenario-meta">
                       <span aria-hidden="true" style={{ marginRight: 6 }}>📅</span>
                       {scenario.date_context}
@@ -2648,6 +2655,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                     )}
                     <div
                       className="question"
+                      {...tourTarget("pit.question")}
                       style={zoomableStyle}
                       title={zoomableTitle}
                       onClick={() => openZoom(t("game.card.question"), scenario.the_question)}
@@ -2659,7 +2667,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                             button at bottom-right (same affordance as the
                             clue panel's send icon). Discard and Save Draft
                             stay below as ancillary actions. */}
-                        <div style={{ position: "relative" }}>
+                        <div style={{ position: "relative" }} {...tourTarget("pit.pitch")}>
                           <textarea
                             ref={answerRef}
                             value={answer}
@@ -2699,7 +2707,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
                         {error && <div className="error" style={{ marginTop: 14 }}>{error}</div>}
 
                         {/* Ask-a-Clue — inline Q&A on the scenario card. */}
-                        <div style={{ marginTop: 22, borderTop: "1px solid var(--panel-edge)", paddingTop: 14 }}>
+                        <div style={{ marginTop: 22, borderTop: "1px solid var(--panel-edge)", paddingTop: 14 }} {...tourTarget("pit.clue")}>
                           <div style={{ fontSize: 10, color: "var(--amber)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6 }}>
                             {t("game.clue.heading")}
                           </div>
@@ -3092,7 +3100,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
               {t("game.lb.intro")}
             </p>
 
-            <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+            <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }} {...tourTarget("lb.sort")}>
               {(["weighted_avg", "weighted_best", "avg", "best", "streak", "played"] as const).map((s) => {
                 const label = t(`game.lb.sort.${s}` as MessageKey);
                 return (
@@ -3136,7 +3144,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             )}
 
             {leaderboard !== null && Array.isArray(leaderboard.rows) && leaderboard.rows.length > 0 && (
-              <div>
+              <div {...tourTarget("lb.table")}>
                 <div className="history-row lb-row lb-head" style={{ color: "var(--ink-faint)", fontSize: 10, letterSpacing: "0.15em", textTransform: "uppercase" }}>
                   <div>#</div>
                   <div></div>
@@ -3421,7 +3429,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             {/* Narrow screens hide the column headers (the rows become
                 cards), so the same sort is picked here instead. */}
             {journalEntries.length > 0 && (
-              <div className="journal-sort-picker">
+              <div className="journal-sort-picker" {...tourTarget("journal.sort")}>
                 <label htmlFor="journal-sort" style={{ fontSize: 11, color: "var(--ink-faint)", letterSpacing: "0.1em", textTransform: "uppercase" }}>{t("game.journal.sortBy")}</label>
                 <select
                   id="journal-sort"
@@ -3448,7 +3456,7 @@ export default function Optionality({ onSignOut }: OptionalityProps = {}) {
             )}
 
             {journalEntries.length > 0 && (
-              <div className="journal-scroll">
+              <div className="journal-scroll" {...tourTarget("journal.table")}>
                 <div className="journal-table">
                   <div
                     className="history-row journal-row journal-head"

@@ -21,6 +21,8 @@ import {
 } from "../lib/mcp";
 import type { Kind0 } from "@tollbooth-dpyc/web";
 import { AccountPage, LanguageChooser, Tx, Wallet } from "@tollbooth-dpyc/web/react";
+import { decorateTile } from "../lib/tiles";
+import TutorialSwitch from "./TutorialSwitch";
 import { useT, WORDS } from "../i18n";
 
 /// A panel heading in the site's shape: the small amber tab on the border,
@@ -84,9 +86,10 @@ export default function ProfileTab({ npub }: { npub: string }) {
               <p className="account-intro">{t("profile.language.intro")}</p>
               <LanguageChooser classNames={{ root: "theme-toggle", chip: "theme-chip", active: "active" }} />
             </div>
+            <TutorialSwitch />
           </>
         ),
-        money: <Wallet />,
+        money: <Wallet decorateTile={decorateTile} />,
         site: <GamePersonaKeyPanel escrowed={escrowed} onChange={setEscrowed} />,
       }}
       build={{
