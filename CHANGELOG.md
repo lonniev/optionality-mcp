@@ -5,6 +5,13 @@ Format: [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 Changes not yet released live in `changelog.d/`, one file per change — see the README there for why, and `scripts/changelog.py` for what folds them in at release time.
 
+## [0.9.0] — 2026-11-24
+
+### Added
+
+- A live tutorial: each tab (the Pit's chooser and its dealt scenario, Journal, Leaderboard, Profile, the wallet and sign-in) offers a short guided tour the first time it sits quiet, in all six languages. A Profile switch turns every tour on again or off.
+- The top-up amounts carry a trader's names and marks: Odd lot, One contract, Vertical spread, Iron condor, Market maker.
+
 ## [0.8.4] — 2026-11-22
 
 ### Changed

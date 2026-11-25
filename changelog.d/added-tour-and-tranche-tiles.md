@@ -1,2 +1,0 @@
-- A live tutorial: each tab (the Pit's chooser and its dealt scenario, Journal, Leaderboard, Profile, the wallet and sign-in) offers a short guided tour the first time it sits quiet, in all six languages. A Profile switch turns every tour on again or off.
-- The top-up amounts carry a trader's names and marks: Odd lot, One contract, Vertical spread, Iron condor, Market maker.
