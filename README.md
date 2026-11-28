@@ -94,6 +94,13 @@ Heavy LLM tools (deal, judge, clue desk) use a claim-check async pattern: the ca
 | [tollbooth-oauth2-collector](https://github.com/lonniev/tollbooth-oauth2-collector) | OAuth2 callback handler (advocate service) |
 | [tollbooth-shortlinks](https://github.com/lonniev/tollbooth-shortlinks) | URL shortener utility |
 
+<!-- dpyc-family -->
+## Part of Tollbooth DPYC™
+
+This service is one of the Tollbooth DPYC™ family of MCP servers.
+Browse them all in the [MCP catalog](https://cafe.tollbooth-dpyc.com/collections/mcps).
+The [DPYC Oracle](https://dpyc-oracle.fastmcp.app/mcp) lists the live network with its free `list_services` tool.
+
 ## License
 
 Apache 2.0 &mdash; see [LICENSE](LICENSE) and [NOTICE](NOTICE).
